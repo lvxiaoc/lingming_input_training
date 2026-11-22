@@ -1,0 +1,371 @@
+import React, { useEffect, useState } from 'react';
+import { ShapeCodeScheme } from '../data/schemes';
+import { useUiText } from '../data/uiScript';
+import { ActiveTargetSnapshot } from '../engine/GameCanvas';
+import { SchemeMasteryStore } from '../engine/mastery';
+
+interface BlurredKeyboardBackdropProps {
+  scheme: ShapeCodeScheme;
+  target: ActiveTargetSnapshot | null;
+  mastery: SchemeMasteryStore;
+}
+
+// Alice-style ergonomic split keyboard halves — opens a clean central sanctuary for the target glyph & Stroke Cloud!
+const ALICE_LEFT_ROWS: string[][] = [
+  ['q', 'w', 'e', 'r', 't'],
+  ['a', 's', 'd', 'f', 'g'],
+  ['z', 'x', 'c', 'v', 'b'],
+];
+
+const ALICE_RIGHT_ROWS: string[][] = [
+  ['y', 'u', 'i', 'o', 'p'],
+  ['h', 'j', 'k', 'l'],
+  ['n', 'm'],
+];
+
+interface StrikeFlash {
+  key: string;
+  correct: boolean;
+  tick: number;
+}
+
+/**
+ * Layer 0 — Alice 分離式人體工學遠景鍵盤（Cool Indigo-Slate Depth Plane）
+ * - Splits into angled left & right wings, leaving a generous open central valley for the target glyph & Stroke Cloud.
+ * - NEVER pre-highlights the upcoming answer key!
+ * - Purely reactive background stimulus: highlights ONLY the key you actually press,
+ *   flashing Emerald-Jade (#34D399) on correct hit and Cinnabar-Crimson (#F04E3E) on wrong hit.
+ * - Pressing Tab (emergency peek) briefly shows a gentle amber outline on the expected key.
+ */
+export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = ({
+  scheme,
+  target,
+  mastery,
+}) => {
+  const t = useUiText();
+  const [pressedKey, setPressedKey] = useState<string | null>(null);
+  const [strikeFlash, setStrikeFlash] = useState<StrikeFlash | null>(null);
+
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (/^[a-z]$/.test(k)) setPressedKey(k);
+    };
+    const onUp = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      setPressedKey((prev) => (prev === k ? null : prev));
+    };
+    const onBlur = () => setPressedKey(null);
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!target?.lastStrikeKey || !target.lastStrikeTick) return;
+    setStrikeFlash({
+      key: target.lastStrikeKey,
+      correct: target.lastStrikeCorrect,
+      tick: target.lastStrikeTick,
+    });
+    const duration = target.lastStrikeCorrect ? 360 : 460;
+    const id = window.setTimeout(() => {
+      setStrikeFlash((prev) =>
+        prev && prev.tick === target.lastStrikeTick ? null : prev
+      );
+    }, duration);
+    return () => window.clearTimeout(id);
+  }, [target?.lastStrikeKey, target?.lastStrikeCorrect, target?.lastStrikeTick]);
+
+  const scaffoldLevel = target?.scaffoldLevel ?? 0;
+  const tabHintKey = target?.tabHintActive ? target.nextKey : '';
+
+  // Calm recessed depth blur for idle keys (no spoilers ahead of time!)
+  const baseBlurPx =
+    scaffoldLevel === 0 ? 1.5 : scaffoldLevel === 1 ? 2.4 : scaffoldLevel === 2 ? 3.5 : 4.6;
+  const baseLayerOpacity =
+    scaffoldLevel === 0 ? 0.52 : scaffoldLevel === 1 ? 0.38 : scaffoldLevel === 2 ? 0.24 : 0.14;
+
+  const isLeftStrike =
+    strikeFlash && ALICE_LEFT_ROWS.some((row) => row.includes(strikeFlash.key));
+  const isRightStrike =
+    strikeFlash && ALICE_RIGHT_ROWS.some((row) => row.includes(strikeFlash.key));
+
+  const renderKeycap = (k: string) => {
+    const def = scheme.keyMap[k];
+    const isDisabled = Boolean(def?.isDisabled);
+    const isVowel = Boolean(def?.isVowel);
+    const isPressed = pressedKey === k;
+    const isHitCorrect = Boolean(strikeFlash && strikeFlash.key === k && strikeFlash.correct);
+    const isHitWrong = Boolean(strikeFlash && strikeFlash.key === k && !strikeFlash.correct);
+    const isTabHint = !isDisabled && tabHintKey === k;
+    const isHome = k === 'f' || k === 'j';
+
+    const stat = mastery.keys[k];
+    const masteryPct =
+      stat && stat.attempts > 0
+        ? Math.max(
+            12,
+            Math.min(
+              100,
+              Math.round(((900 - Math.min(900, stat.emaLatencyMs)) / 620) * 100)
+            )
+          )
+        : 0;
+
+    // ONLY reactively sharpen the struck key (or explicit Tab emergency peek)
+    const isLit = isHitCorrect || isHitWrong || isTabHint || isPressed;
+    const keyFilter = isLit ? 'blur(0px)' : `blur(${baseBlurPx}px)`;
+    const keyOpacity = isDisabled
+      ? 0.14
+      : isHitCorrect || isHitWrong
+        ? 1
+        : isTabHint
+          ? 0.92
+          : isPressed
+            ? 0.78
+            : baseLayerOpacity;
+
+    const bgStyle = isHitWrong
+      ? 'rgba(240, 78, 62, 0.36)'
+      : isHitCorrect
+        ? 'rgba(52, 211, 153, 0.34)'
+        : isTabHint
+          ? 'rgba(232, 179, 86, 0.24)'
+          : isPressed
+            ? 'rgba(118, 152, 206, 0.26)'
+            : isVowel
+              ? 'rgba(184, 136, 58, 0.11)'
+              : 'rgba(38, 52, 78, 0.36)';
+
+    const borderStyle = isHitWrong
+      ? '#F04E3E'
+      : isHitCorrect
+        ? '#34D399'
+        : isTabHint
+          ? '#E8B356'
+          : isVowel
+            ? 'rgba(216, 155, 60, 0.26)'
+            : 'rgba(118, 148, 196, 0.22)';
+
+    const glowShadow = isHitWrong
+      ? '0 0 34px rgba(240, 78, 62, 0.55), inset 0 0 12px rgba(240, 78, 62, 0.24)'
+      : isHitCorrect
+        ? '0 0 34px rgba(52, 211, 153, 0.52), inset 0 0 12px rgba(52, 211, 153, 0.22)'
+        : isTabHint
+          ? '0 0 22px rgba(232, 179, 86, 0.32)'
+          : 'none';
+
+    const scaleTransform = isHitWrong
+      ? 'scale(0.95) translateX(2px)'
+      : isHitCorrect
+        ? 'scale(1.10)'
+        : isPressed
+          ? 'scale(0.95)'
+          : 'scale(1)';
+
+    return (
+      <div
+        key={k}
+        data-alice-key={k}
+        className="relative flex flex-col justify-between items-center rounded-xl border px-1.5 py-1.5"
+        style={{
+          width: 'clamp(46px, 5.2vw, 72px)',
+          height: 'clamp(52px, 9.2vh, 78px)',
+          filter: keyFilter,
+          opacity: keyOpacity,
+          backgroundColor: bgStyle,
+          borderColor: borderStyle,
+          transform: scaleTransform,
+          boxShadow: glowShadow,
+          transition:
+            'transform 120ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease, filter 140ms ease, border-color 120ms ease, box-shadow 140ms ease',
+        }}
+      >
+        <span
+          className={`self-start font-mono-tabular text-[11px] font-bold leading-none ${
+            isHitCorrect
+              ? 'text-[#A7F3D0]'
+              : isHitWrong
+                ? 'text-[#FCA5A5]'
+                : isTabHint
+                  ? 'text-[#FCE2A6]'
+                  : isVowel
+                    ? 'text-[#D89B3C]'
+                    : 'text-[#89A5D1]'
+          }`}
+        >
+          {k.toUpperCase()}
+        </span>
+
+        <span
+          className={`font-display font-bold leading-none ${
+            isVowel || isDisabled ? 'text-xs sm:text-sm' : 'text-lg sm:text-xl'
+          } ${
+            isHitCorrect || isHitWrong || isTabHint
+              ? 'text-white'
+              : isVowel
+                ? 'text-[#E3BC73]'
+                : 'text-[#A8C0E4]'
+          }`}
+        >
+          {def?.primary === '𠂇' ? (
+            <svg
+              viewBox="0 0 24 24"
+              className="inline-block align-middle"
+              style={{ width: '1em', height: '1em' }}
+              aria-label="𠂇"
+            >
+              <path
+                fill="currentColor"
+                d="M2.5 7.6 L18.8 7.0 Q20.1 6.9 21.1 7.9 Q21.3 8.4 20.6 8.7 L3.2 9.0 Q2.4 8.8 2.5 7.6 Z"
+              />
+              <path
+                fill="currentColor"
+                d="M12.3 2.8 Q13.7 3.2 14.1 4.2 C13.0 8.9 11.1 14.0 8.3 17.8 C6.4 20.3 4.1 21.8 2.5 22.4 C2.2 22.1 2.4 21.7 2.8 21.3 C5.4 19.2 8.2 15.3 10.0 10.7 C11.1 7.8 11.7 5.1 11.8 3.3 Q11.9 2.7 12.3 2.8 Z"
+              />
+            </svg>
+          ) : (
+            def?.primary || k.toUpperCase()
+          )}
+        </span>
+
+        <div className="w-full flex flex-col items-center gap-0.5">
+          {isHome && (
+            <span className="block w-3.5 h-[2px] rounded-full bg-[#D89B3C]/65" />
+          )}
+          <div className="w-full h-[2px] rounded-full bg-white/8 overflow-hidden">
+            {masteryPct > 0 && !isDisabled && (
+              <div
+                className="h-full"
+                style={{
+                  width: `${masteryPct}%`,
+                  backgroundColor:
+                    masteryPct >= 70
+                      ? '#38A885'
+                      : masteryPct >= 40
+                        ? '#D89B3C'
+                        : '#D9604C',
+                }}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const leftRowStagger = ['pr-0', 'pr-2 sm:pr-4', 'pr-4 sm:pr-7'];
+  const rightRowStagger = ['pl-0', 'pl-2 sm:pl-4', 'pl-5 sm:pl-9'];
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center overflow-hidden select-none px-3 sm:px-6"
+      aria-hidden="true"
+    >
+      {/* Subtle reactive peripheral wing aura on hit (Emerald for correct, Cinnabar for error) */}
+      <div
+        className="absolute inset-0 transition-opacity duration-200"
+        style={{
+          opacity: strikeFlash ? 1 : 0,
+          background: strikeFlash
+            ? strikeFlash.correct
+              ? isLeftStrike
+                ? 'radial-gradient(circle at 22% 50%, rgba(52, 211, 153, 0.14), transparent 46%)'
+                : isRightStrike
+                  ? 'radial-gradient(circle at 78% 50%, rgba(52, 211, 153, 0.14), transparent 46%)'
+                  : 'none'
+              : isLeftStrike
+                ? 'radial-gradient(circle at 22% 50%, rgba(240, 78, 62, 0.18), transparent 46%)'
+                : isRightStrike
+                  ? 'radial-gradient(circle at 78% 50%, rgba(240, 78, 62, 0.18), transparent 46%)'
+                  : 'none'
+            : 'none',
+        }}
+      />
+
+      {/* Alice Split Keyboard Geometry: Angled Left Wing + Open Central Sanctuary + Angled Right Wing */}
+      <div className="relative w-full max-w-[1280px] flex items-center justify-center">
+        {/* LEFT WING (Q-T / A-G / Z-B) angled ergonomically inward */}
+        <div
+          className="flex flex-col items-end gap-2 sm:gap-2.5 shrink-0"
+          style={{
+            transform: 'perspective(1100px) rotateX(6deg) rotateZ(7deg)',
+            transformOrigin: 'right center',
+          }}
+        >
+          {ALICE_LEFT_ROWS.map((row, rIdx) => (
+            <div
+              key={rIdx}
+              className={`flex items-center justify-end gap-1.5 sm:gap-2 ${leftRowStagger[rIdx]}`}
+            >
+              {row.map(renderKeycap)}
+            </div>
+          ))}
+        </div>
+
+        {/* CENTRAL OPEN SANCTUARY — completely clear of keycaps so target glyph & Stroke Cloud have zero overlap! */}
+        <div
+          className="shrink-0"
+          style={{ width: 'clamp(210px, 26vw, 370px)' }}
+        />
+
+        {/* RIGHT WING (Y-P / H-L / N-M) symmetrically angled inward */}
+        <div
+          className="flex flex-col items-start gap-2 sm:gap-2.5 shrink-0"
+          style={{
+            transform: 'perspective(1100px) rotateX(6deg) rotateZ(-7deg)',
+            transformOrigin: 'left center',
+          }}
+        >
+          {ALICE_RIGHT_ROWS.map((row, rIdx) => (
+            <div
+              key={rIdx}
+              className={`flex items-center justify-start gap-1.5 sm:gap-2 ${rightRowStagger[rIdx]}`}
+            >
+              {row.map(renderKeycap)}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Subtle bottom status line showing reactive hit color legend (zero pre-spoilers!) */}
+      <div className="absolute bottom-3.5 inset-x-0 flex items-center justify-center px-6">
+        <div className="flex items-center gap-2.5 text-xs text-[#8995A8]">
+          {strikeFlash ? (
+            <span
+              className={`font-medium ${
+                strikeFlash.correct ? 'text-[#5EEAD4]' : 'text-[#F87171]'
+              }`}
+            >
+              {strikeFlash.correct
+                ? t(`擊鍵正確 · ${strikeFlash.key.toUpperCase()}`)
+                : t(`擊鍵錯誤 · 誤按 ${strikeFlash.key.toUpperCase()}（請輸入正確鍵位）`)}
+            </span>
+          ) : (
+            <>
+              <span>{t('Alice 分離鍵盤')}</span>
+              <span aria-hidden="true" className="text-[#495366]">·</span>
+              <span className="inline-flex items-center gap-1 text-[#7CD6B4]">
+                <span className="w-2 h-2 rounded-full bg-[#34D399]" />
+                {t('正確翠綠')}
+              </span>
+              <span className="inline-flex items-center gap-1 text-[#F0887C]">
+                <span className="w-2 h-2 rounded-full bg-[#F04E3E]" />
+                {t('錯誤硃砂')}
+              </span>
+              <span aria-hidden="true" className="hidden sm:inline text-[#495366]">·</span>
+              <span className="hidden sm:inline text-[#7D889B]">{t('按 Tab 緊急拉焦提示')}</span>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
