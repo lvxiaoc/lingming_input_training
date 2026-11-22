@@ -12,6 +12,14 @@
 <br />
 
 <a href="https://lvxiaoc.github.io/lingming_input_training/">
+  <img src="./docs/dojo-reflex-demo.gif" alt="墨鍵道場 · Alice 分離式鍵盤三景深記憶宮殿反射動態示範" width="100%" />
+</a>
+
+*▲ 三景深零掃視實戰動態示範：遠景虛化 Alice 分離鍵盤（按 Tab 琥珀拉焦／擊中翠綠回響）＋ 中景記憶宮殿雲圖 ＋ 前景打字焦點*
+
+<br />
+
+<a href="https://lvxiaoc.github.io/lingming_input_training/">
   <img src="./docs/preview-home.png" alt="墨鍵道場主畫面：五重道場闖關、自由鍛煉、極限苦練室" width="100%" />
 </a>
 
