@@ -974,30 +974,34 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                             key={idx}
                             className={`relative w-11 h-12 rounded-lg border flex items-center justify-center font-mono-tabular text-xl font-bold uppercase transition-all ${
                               isFilled
-                                ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)] text-[var(--dojo-pine-text)] wash:shadow-[0_0_14px_rgba(20,20,18,0.20)]'
+                                ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)] wash:border-[#181817]/40 text-[var(--dojo-pine-text)] wash:shadow-[0_0_16px_rgba(20,20,18,0.16)]'
                                 : isNext && errorCue
-                                  ? 'bg-[var(--dojo-crimson-wash)] border-[var(--dojo-crimson)] wash:border-dashed text-[var(--dojo-crimson-text)] wash:shadow-[0_0_14px_rgba(20,20,18,0.24)]'
+                                  ? 'bg-[var(--dojo-crimson-wash)] wash:bg-[rgba(20,20,18,0.22)] border-[var(--dojo-crimson)] wash:border-[#141413]/55 text-[var(--dojo-crimson-text)] wash:shadow-[0_0_20px_rgba(20,20,18,0.24)]'
                                   : isNext
                                     ? 'bg-[var(--dojo-surface-2)] border-[var(--dojo-border-strong)] text-[var(--dojo-text-bright)]'
                                     : 'bg-[var(--dojo-surface)] border-[var(--dojo-border)] text-[var(--dojo-text-muted)]'
                             }`}
                           >
-                            {isWash && isFilled && (
+                            {isWash && (isFilled || (isNext && errorCue)) && (
                               <>
                                 <span
                                   aria-hidden="true"
-                                  className="pointer-events-none absolute -inset-3 rounded-full blur-[6px] ink-aura-slow"
+                                  className="pointer-events-none absolute -inset-4 rounded-full blur-[7px] ink-aura-slow"
                                   style={{
                                     background:
-                                      'radial-gradient(circle, rgba(20, 20, 18, 0.18) 0%, rgba(56, 56, 52, 0.07) 52%, transparent 78%)',
+                                      isNext && errorCue
+                                        ? 'radial-gradient(circle, rgba(16, 16, 15, 0.24) 0%, rgba(44, 44, 40, 0.09) 50%, transparent 78%)'
+                                        : 'radial-gradient(circle, rgba(20, 20, 18, 0.16) 0%, rgba(56, 56, 52, 0.06) 52%, transparent 78%)',
                                   }}
                                 />
                                 <span
                                   aria-hidden="true"
-                                  className="pointer-events-none absolute -inset-2 rounded-full blur-[3px] ink-aura-fade"
+                                  className="pointer-events-none absolute -inset-2 rounded-full blur-[4px] ink-aura-fade"
                                   style={{
                                     background:
-                                      'radial-gradient(circle, rgba(20, 20, 18, 0.24) 0%, transparent 74%)',
+                                      isNext && errorCue
+                                        ? 'radial-gradient(circle, rgba(16, 16, 15, 0.30) 0%, transparent 74%)'
+                                        : 'radial-gradient(circle, rgba(20, 20, 18, 0.22) 0%, transparent 74%)',
                                   }}
                                 />
                               </>

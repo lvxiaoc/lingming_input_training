@@ -179,14 +179,14 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
 
     const borderStyle = isWash
       ? isHitWrong
-        ? '#141413'
+        ? 'rgba(20, 20, 18, 0.52)'
         : isHitCorrect
-          ? '#181817'
+          ? 'rgba(20, 20, 18, 0.36)'
           : isTabHint
-            ? '#383834'
+            ? 'rgba(38, 38, 36, 0.34)'
             : isVowel
-              ? 'rgba(20, 20, 18, 0.26)'
-              : 'rgba(20, 20, 18, 0.15)'
+              ? 'rgba(20, 20, 18, 0.22)'
+              : 'rgba(20, 20, 18, 0.14)'
       : isHitWrong
         ? '#F04E3E'
         : isHitCorrect
@@ -469,8 +469,8 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
             <span
               className={`font-medium ${
                 strikeFlash.correct
-                  ? isWash ? 'text-[#141413]' : 'text-[#5EEAD4]'
-                  : isWash ? 'text-[#141413] underline decoration-dashed underline-offset-4' : 'text-[#F87171]'
+                  ? isWash ? 'text-[#2B2B28]' : 'text-[#5EEAD4]'
+                  : isWash ? 'text-[#141413] font-semibold' : 'text-[#F87171]'
               }`}
             >
               {strikeFlash.correct

@@ -183,8 +183,8 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
               <span
                 className={
                   strikeFlash.correct
-                    ? isWash ? 'text-[#141413] font-medium' : 'text-[#34D399]'
-                    : isWash ? 'text-[#141413] font-medium underline decoration-dashed underline-offset-4' : 'text-[#F06454]'
+                    ? isWash ? 'text-[#2B2B28] font-medium' : 'text-[#34D399]'
+                    : isWash ? 'text-[#141413] font-semibold' : 'text-[#F06454]'
                 }
               >
                 {strikeFlash.correct
@@ -303,14 +303,14 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                         : 'none',
                       borderColor: isWash
                         ? isError
-                          ? '#141413'
+                          ? 'rgba(20, 20, 18, 0.52)'
                           : isHitCorrect
-                            ? '#181817'
+                            ? 'rgba(20, 20, 18, 0.36)'
                             : isTabTarget
-                              ? '#383834'
+                              ? 'rgba(40, 40, 38, 0.34)'
                               : isVowel
-                                ? 'rgba(20, 20, 18, 0.28)'
-                                : 'rgba(20, 20, 18, 0.16)'
+                                ? 'rgba(20, 20, 18, 0.24)'
+                                : 'rgba(20, 20, 18, 0.15)'
                         : isError
                           ? '#F04E3E'
                           : isHitCorrect

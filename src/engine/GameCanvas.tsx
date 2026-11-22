@@ -397,21 +397,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     for (let i = 0; i < plumes.length && spawned < plumeCount; i++) {
       const pl = plumes[i];
       if (!pl.active) {
-        const theta = (Math.PI * 2 * spawned) / Math.max(1, plumeCount) + (Math.random() - 0.5) * 0.9;
-        const offsetR = spawned === 0 ? 0 : 8 + Math.random() * 18;
-        const driftSpeed = spawned === 0 ? 2 : 6 + Math.random() * 14;
+        const theta = (Math.PI * 2 * spawned) / Math.max(1, plumeCount) + (Math.random() - 0.5) * 1.1;
+        const offsetR = spawned === 0 ? 0 : 6 + Math.random() * 20;
+        const driftSpeed = spawned === 0 ? 1.5 : 5 + Math.random() * 14;
         pl.active = true;
         pl.x = x + Math.cos(theta) * offsetR;
-        pl.y = y + Math.sin(theta) * offsetR * 0.72;
+        pl.y = y + Math.sin(theta) * offsetR * 0.78;
         pl.vx = Math.cos(theta) * driftSpeed;
-        pl.vy = Math.sin(theta) * driftSpeed - (spawned === 0 ? 0 : 4);
-        pl.rStart = spawned === 0 ? baseRadius * 0.26 : baseRadius * (0.18 + Math.random() * 0.12);
-        pl.rMax = spawned === 0 ? baseRadius * 1.18 : baseRadius * (0.68 + Math.random() * 0.48);
-        pl.aspect = 0.74 + Math.random() * 0.42;
+        pl.vy = Math.sin(theta) * driftSpeed - (spawned === 0 ? 0 : 3);
+        pl.rStart = spawned === 0 ? baseRadius * 0.22 : baseRadius * (0.14 + Math.random() * 0.12);
+        pl.rMax = spawned === 0 ? baseRadius * 1.38 : baseRadius * (0.82 + Math.random() * 0.56);
+        pl.aspect = 0.72 + Math.random() * 0.44;
         pl.angle = Math.random() * Math.PI;
         pl.age = 0;
-        pl.duration = (isError ? 0.54 : 0.74) + Math.random() * 0.24;
-        pl.peakAlpha = spawned === 0 ? peakAlpha : peakAlpha * (0.62 + Math.random() * 0.28);
+        pl.duration = (isError ? 0.62 : 0.86) + Math.random() * 0.28;
+        pl.peakAlpha = spawned === 0 ? peakAlpha : peakAlpha * (0.58 + Math.random() * 0.30);
         pl.isError = isError;
         spawned++;
       }
@@ -480,8 +480,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     baseMaxR = 78,
     dashed = false
   ) => {
-    const { ripples } = simRef.current;
     const isWash = propsRef.current.themeMode === 'wash';
+    if (isWash) {
+      // Pure ink-in-water tonal diffusion — never draw concentric circle lines or hollow rings in wash mode
+      emitInkPlumes(
+        x,
+        y,
+        Math.min(3, Math.max(1, ringCount)),
+        baseMaxR * 1.08,
+        dashed ? 0.16 : 0.13,
+        dashed
+      );
+      return;
+    }
+    const { ripples } = simRef.current;
     let spawned = 0;
     for (let i = 0; i < ripples.length && spawned < ringCount; i++) {
       const rp = ripples[i];
@@ -489,15 +501,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         rp.active = true;
         rp.x = x;
         rp.y = y;
-        rp.r = isWash ? 16 + spawned * 10 : 12 + spawned * 8;
-        rp.maxR = baseMaxR + spawned * (isWash ? 34 : 24);
-        rp.maxAlpha = isWash ? 0.36 - spawned * 0.10 : 0.32 - spawned * 0.1;
-        rp.alpha = isWash ? 0 : rp.maxAlpha;
+        rp.r = 12 + spawned * 8;
+        rp.maxR = baseMaxR + spawned * 24;
+        rp.maxAlpha = 0.32 - spawned * 0.1;
+        rp.alpha = rp.maxAlpha;
         rp.age = 0;
-        rp.duration = isWash ? 0.78 + spawned * 0.14 : 0.6;
-        rp.decay = isWash ? 1.35 - spawned * 0.18 : 1.7;
-        rp.color = isWash ? (spawned > 0 ? '#565650' : '#181817') : color;
-        rp.lineWidth = isWash ? 2.2 - spawned * 0.6 : 1.5;
+        rp.duration = 0.6;
+        rp.decay = 1.7;
+        rp.color = color;
+        rp.lineWidth = 1.5;
         rp.dashed = dashed;
         spawned++;
       }
@@ -1594,19 +1606,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             const dangerY = s.height - 34;
             const grad = ctx.createLinearGradient(0, dangerY, s.width, dangerY);
             const dangerRgb = isWash ? '20, 20, 18' : '217, 74, 56';
-            grad.addColorStop(0, `rgba(${dangerRgb}, 0.08)`);
-            grad.addColorStop(0.5, `rgba(${dangerRgb}, 0.65)`);
-            grad.addColorStop(1, `rgba(${dangerRgb}, 0.08)`);
+            grad.addColorStop(0, `rgba(${dangerRgb}, 0.04)`);
+            grad.addColorStop(0.5, isWash ? 'rgba(20, 20, 18, 0.34)' : `rgba(${dangerRgb}, 0.65)`);
+            grad.addColorStop(1, `rgba(${dangerRgb}, 0.04)`);
             ctx.strokeStyle = grad;
-            ctx.lineWidth = 1.5;
-            if (isWash) ctx.setLineDash([8, 4]);
+            ctx.lineWidth = isWash ? 1.2 : 1.5;
             ctx.beginPath();
             ctx.moveTo(24, dangerY);
             ctx.lineTo(s.width - 24, dangerY);
             ctx.stroke();
-            if (isWash) ctx.setLineDash([]);
 
-            ctx.fillStyle = `rgba(${dangerRgb}, 0.72)`;
+            ctx.fillStyle = `rgba(${dangerRgb}, ${isWash ? 0.58 : 0.72})`;
             ctx.font = '500 11px "Plus Jakarta Sans", sans-serif';
             ctx.textAlign = 'right';
             ctx.fillText(uiText('防線', propsRef.current.uiScript), s.width - 28, dangerY - 6);
@@ -1638,21 +1648,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Active guide beam only in split mode (in depth mode the keyboard is right behind!)
           if (curLayout === 'split') {
             const activeTile = getActiveTile();
-            if (activeTile) {
+            if (activeTile && (!isWash || curMode === 'arcade')) {
               const ax = activeTile.x * s.width;
               const ay = activeTile.y + (curMode === 'arcade' ? 48 : 86);
               const beamGrad = ctx.createLinearGradient(ax, ay, ax, s.height);
-              const beamRgb = isWash ? '20, 20, 18' : '216, 155, 60';
-              beamGrad.addColorStop(0, `rgba(${beamRgb}, 0.26)`);
-              beamGrad.addColorStop(1, `rgba(${beamRgb}, 0.0)`);
-              ctx.strokeStyle = beamGrad;
-              ctx.lineWidth = 1.5;
-              ctx.setLineDash([4, 5]);
-              ctx.beginPath();
-              ctx.moveTo(ax, ay);
-              ctx.lineTo(ax, s.height);
-              ctx.stroke();
-              ctx.setLineDash([]);
+              if (isWash) {
+                beamGrad.addColorStop(0, 'rgba(20, 20, 18, 0.14)');
+                beamGrad.addColorStop(1, 'rgba(20, 20, 18, 0.0)');
+                ctx.strokeStyle = beamGrad;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(ax, ay);
+                ctx.lineTo(ax, s.height);
+                ctx.stroke();
+              } else {
+                beamGrad.addColorStop(0, 'rgba(216, 155, 60, 0.26)');
+                beamGrad.addColorStop(1, 'rgba(216, 155, 60, 0.0)');
+                ctx.strokeStyle = beamGrad;
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 5]);
+                ctx.beginPath();
+                ctx.moveTo(ax, ay);
+                ctx.lineTo(ax, s.height);
+                ctx.stroke();
+                ctx.setLineDash([]);
+              }
             }
           }
 
@@ -2186,28 +2206,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
 
-          // Organic sumi ink-wash diffusion plumes in wash mode (水墨暈入淡出)
+          // Organic sumi ink-in-water diffusion plumes in wash mode (水墨滴入水中濃淡暈散)
           if (isWash) {
             for (const pl of s.plumes) {
               if (!pl.active) continue;
               const tNorm = Math.min(1, pl.age / pl.duration);
-              const easeOut = 1 - Math.pow(1 - tNorm, 2.2);
+              const easeOut = 1 - Math.pow(1 - tNorm, 2.35);
               const r = pl.rStart + (pl.rMax - pl.rStart) * easeOut;
               const envAlpha =
-                tNorm < 0.22
-                  ? pl.peakAlpha * (tNorm / 0.22)
-                  : pl.peakAlpha * Math.pow(1 - (tNorm - 0.22) / 0.78, 1.45);
-              if (envAlpha <= 0.004) continue;
+                tNorm < 0.2
+                  ? pl.peakAlpha * (tNorm / 0.2)
+                  : pl.peakAlpha * Math.pow(1 - (tNorm - 0.2) / 0.8, 1.55);
+              if (envAlpha <= 0.003) continue;
 
               ctx.save();
               ctx.translate(pl.x, pl.y);
               ctx.rotate(pl.angle);
               ctx.scale(1, pl.aspect);
-              const grad = ctx.createRadialGradient(0, 0, Math.max(1, r * 0.06), 0, 0, r);
-              const baseDark = pl.isError ? '16, 16, 15' : '22, 22, 20';
-              grad.addColorStop(0, `rgba(${baseDark}, ${(envAlpha * 0.92).toFixed(3)})`);
-              grad.addColorStop(0.42, `rgba(52, 52, 48, ${(envAlpha * 0.48).toFixed(3)})`);
-              grad.addColorStop(0.76, `rgba(92, 92, 86, ${(envAlpha * 0.16).toFixed(3)})`);
+              const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+              const baseDark = pl.isError ? '14, 14, 13' : '22, 22, 20';
+              grad.addColorStop(0, `rgba(${baseDark}, ${(envAlpha * 0.96).toFixed(3)})`);
+              grad.addColorStop(0.28, `rgba(38, 38, 35, ${(envAlpha * 0.62).toFixed(3)})`);
+              grad.addColorStop(0.62, `rgba(74, 74, 69, ${(envAlpha * 0.22).toFixed(3)})`);
+              grad.addColorStop(0.86, `rgba(112, 112, 106, ${(envAlpha * 0.05).toFixed(3)})`);
               grad.addColorStop(1, 'rgba(243, 241, 236, 0)');
               ctx.fillStyle = grad;
               ctx.beginPath();
@@ -2217,34 +2238,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
 
-          // Liquid ink-in-water diffusion waves in wash mode / crisp rings in night mode (zero line strokes in wash!)
-          for (const rp of s.ripples) {
-            if (!rp.active) continue;
-            ctx.save();
-            const alpha = Math.max(0, rp.alpha);
-            if (isWash) {
-              const outerR = rp.r * 1.18;
-              const innerR = Math.max(2, rp.r * 0.28);
-              const haloGrad = ctx.createRadialGradient(rp.x, rp.y, innerR, rp.x, rp.y, outerR);
-              const toneRgb = rp.dashed ? '14, 14, 13' : '24, 24, 22';
-              haloGrad.addColorStop(0, 'rgba(243, 241, 236, 0)');
-              haloGrad.addColorStop(0.42, `rgba(${toneRgb}, ${(alpha * 0.22).toFixed(3)})`);
-              haloGrad.addColorStop(0.68, `rgba(${toneRgb}, ${(alpha * 0.36).toFixed(3)})`);
-              haloGrad.addColorStop(0.86, `rgba(68, 68, 62, ${(alpha * 0.14).toFixed(3)})`);
-              haloGrad.addColorStop(1, 'rgba(243, 241, 236, 0)');
-              ctx.fillStyle = haloGrad;
-              ctx.beginPath();
-              ctx.arc(rp.x, rp.y, outerR, 0, Math.PI * 2);
-              ctx.fill();
-            } else {
-              ctx.globalAlpha = alpha;
+          // Crisp geometric ripples in night mode only (wash mode uses purely borderless ink-in-water plumes above)
+          if (!isWash) {
+            for (const rp of s.ripples) {
+              if (!rp.active) continue;
+              ctx.save();
+              ctx.globalAlpha = Math.max(0, rp.alpha);
               ctx.strokeStyle = rp.color;
               ctx.lineWidth = rp.lineWidth;
               ctx.beginPath();
               ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
               ctx.stroke();
+              ctx.restore();
             }
-            ctx.restore();
           }
 
           // Particles (night ink sparks only; wash mode uses organic plumes above!)
