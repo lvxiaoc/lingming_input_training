@@ -187,10 +187,10 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
   const isLeft = activeChamber.handGroup.startsWith('left');
   const chamberColor = isLeft
     ? isWash
-      ? '#1F6E52'
+      ? '#181817'
       : '#38A885'
     : isWash
-      ? '#275D96'
+      ? '#4E4E4A'
       : '#4F86C6';
   const allChamberRadicals = activeChamber.clusters.flatMap((c) => c.radicals);
   const totalRadicals = allChamberRadicals.length;
@@ -346,11 +346,11 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2 text-xs text-[var(--dojo-text-sub)]">
             <div className="flex flex-wrap items-center gap-4">
               <span className="inline-flex items-center gap-1.5">
-                <span className={`w-2.5 h-1 rounded-sm ${isWash ? 'bg-[#1F6E52]' : 'bg-[#38A885]'}`} />
+                <span className={`w-2.5 h-1 rounded-sm ${isWash ? 'bg-[#181817]' : 'bg-[#38A885]'}`} />
                 <span>{t('A區左手大碼')}</span>
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className={`w-2.5 h-1 rounded-sm ${isWash ? 'bg-[#275D96]' : 'bg-[#4F86C6]'}`} />
+                <span className={`w-2.5 h-1 rounded-sm ${isWash ? 'bg-[#5A5A56]' : 'bg-[#4F86C6]'}`} />
                 <span>{t('A區右手大碼')}</span>
               </span>
               <span className="inline-flex items-center gap-1.5">
@@ -433,10 +433,10 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                   const leftSide = chamber?.handGroup.startsWith('left');
                   const accent = leftSide
                     ? isWash
-                      ? '#1F6E52'
+                      ? '#181817'
                       : '#38A885'
                     : isWash
-                      ? '#275D96'
+                      ? '#4E4E4A'
                       : '#4F86C6';
                   const chamberPass = chamberPasses?.[k];
                   const isChamberCleared = (chamberPass?.clears ?? 0) > 0;
@@ -465,34 +465,34 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                         backgroundColor: isSelected
                           ? isWash
                             ? leftSide
-                              ? 'rgba(31, 110, 82, 0.14)'
-                              : 'rgba(39, 93, 150, 0.14)'
+                              ? 'rgba(20, 20, 18, 0.14)'
+                              : 'rgba(48, 48, 44, 0.12)'
                             : leftSide
                               ? 'rgba(56, 168, 133, 0.22)'
                               : 'rgba(79, 134, 198, 0.22)'
                           : isWash
-                            ? '#F7F3EA'
+                            ? '#F8F7F3'
                             : '#161C27',
                         backgroundImage: isWash
                           ? isSelected
                             ? leftSide
-                              ? 'radial-gradient(circle at 50% 45%, rgba(31, 110, 82, 0.26) 0%, rgba(31, 110, 82, 0.08) 70%, transparent 100%)'
-                              : 'radial-gradient(circle at 50% 45%, rgba(39, 93, 150, 0.24) 0%, rgba(39, 93, 150, 0.08) 70%, transparent 100%)'
-                            : 'linear-gradient(180deg, #FAF6EE 0%, #EFE8D8 100%)'
+                              ? 'radial-gradient(circle at 50% 45%, rgba(20, 20, 18, 0.24) 0%, rgba(20, 20, 18, 0.08) 70%, transparent 100%)'
+                              : 'radial-gradient(circle at 50% 45%, rgba(48, 48, 44, 0.22) 0%, rgba(48, 48, 44, 0.07) 70%, transparent 100%)'
+                            : 'linear-gradient(180deg, #FAF9F6 0%, #EFECE5 100%)'
                           : 'none',
                         borderColor: isSelected
                           ? accent
                           : isChamberCleared
                             ? isWash
-                              ? 'rgba(31, 110, 82, 0.45)'
+                              ? 'rgba(20, 20, 18, 0.42)'
                               : 'rgba(46, 168, 126, 0.45)'
                             : isWash
-                              ? 'rgba(28, 26, 23, 0.16)'
+                              ? 'rgba(20, 20, 18, 0.16)'
                               : 'rgba(242, 238, 230, 0.11)',
                         boxShadow: isSelected
-                          ? `0 0 0 1px ${accent}, 0 4px 16px ${isWash ? 'rgba(28, 26, 23, 0.15)' : 'rgba(0,0,0,0.4)'}`
+                          ? `0 0 0 1px ${accent}, 0 4px 16px ${isWash ? 'rgba(20, 20, 18, 0.14)' : 'rgba(0,0,0,0.4)'}`
                           : isWash
-                            ? '0 2px 0 #C7BEB0, inset 0 1px 0 rgba(255, 253, 248, 0.65)'
+                            ? '0 2px 0 #C4C2BA, inset 0 1px 0 rgba(255, 255, 252, 0.65)'
                             : '0 2px 0 #090C11',
                       }}
                     >
@@ -568,9 +568,9 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
         </section>
 
         {/* Section 2: Frequency-Ordered Stroke-Aligned Mural Palace */}
-        <section className="flex-1 min-h-[300px] grid grid-cols-1 lg:grid-cols-12 gap-4 bg-[var(--dojo-surface)] wash:bg-[#ECE4D4]/86 wash:backdrop-blur-xs border border-[var(--dojo-border)] rounded-xl p-4 sm:p-5">
+        <section className="flex-1 min-h-[300px] grid grid-cols-1 lg:grid-cols-12 gap-4 bg-[var(--dojo-surface)] wash:bg-[#EAE7DF]/88 wash:backdrop-blur-xs border border-[var(--dojo-border)] rounded-xl p-4 sm:p-5">
           {/* Left: Giant #1 主根 Silhouette + Frequency-Ordered Stroke Cloud (1:1 PDF + Interactive Editor) */}
-          <div className="lg:col-span-5 flex flex-col justify-between bg-[var(--dojo-surface-inset)] wash:bg-[#F7F3EA]/88 wash:shadow-[inset_0_0_28px_rgba(28,26,23,0.05)] rounded-xl border border-[var(--dojo-border)] p-4">
+          <div className="lg:col-span-5 flex flex-col justify-between bg-[var(--dojo-surface-inset)] wash:bg-[#F8F7F3]/90 wash:shadow-[inset_0_0_28px_rgba(20,20,18,0.05)] rounded-xl border border-[var(--dojo-border)] p-4">
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-2 min-w-0">

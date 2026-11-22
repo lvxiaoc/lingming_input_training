@@ -93,32 +93,32 @@ const ECHO_PDF_TIER_COLORS: Record<PdfStrokeTier, string> = {
   rest: '#A1525D',
 };
 
-// 宣紙水墨 (Xuan Paper Ink-Wash) high-contrast ink tones
+// 宣紙水墨 (Pure Monochromatic Five-Tone Sumi Ink: 焦 · 濃 · 重 · 淡 · 清)
 export const WASH_FREQUENCY_TIER_COLORS: Record<FrequencyTier, string> = {
-  primary: '#1E211D',
-  rank2_5: '#146B7A',
-  rank6_9: '#88306A',
-  rest: '#B83B2A',
+  primary: '#111110',
+  rank2_5: '#353532',
+  rank6_9: '#61615B',
+  rest: '#8D8C85',
 };
 
 export const WASH_PDF_TIER_COLORS: Record<PdfStrokeTier, string> = {
-  primary: '#1E211D',
-  var_primary: '#4A6E24',
-  rank2_5: '#146B7A',
-  var_2_5: '#1C6E50',
-  rank6_9: '#88306A',
-  var_6_9: '#553B9A',
-  rest: '#B83B2A',
+  primary: '#111110',
+  var_primary: '#2A2A27',
+  rank2_5: '#383835',
+  var_2_5: '#4E4E4A',
+  rank6_9: '#64645E',
+  var_6_9: '#7A7A73',
+  rest: '#908F88',
 };
 
 const WASH_ECHO_PDF_TIER_COLORS: Record<PdfStrokeTier, string> = {
-  primary: '#4E5750',
-  var_primary: '#5E7245',
-  rank2_5: '#446E78',
-  var_2_5: '#436E5E',
-  rank6_9: '#754C68',
-  var_6_9: '#5D527D',
-  rest: '#8A4E48',
+  primary: '#363633',
+  var_primary: '#4A4A46',
+  rank2_5: '#5A5A55',
+  var_2_5: '#6C6C66',
+  rank6_9: '#7C7C75',
+  var_6_9: '#8C8B84',
+  rest: '#9C9B94',
 };
 
 function buildNodeTransform(
@@ -331,13 +331,13 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
   const monumentColor = isWash
     ? isEcho
       ? isMonumentActive
-        ? '#1F6E52'
-        : '#5A615B'
+        ? '#141413'
+        : '#54544F'
       : !isMidground && isMonumentSelected
-        ? '#9C6414'
+        ? '#141413'
         : isMidground
-          ? '#3F6E5D'
-          : '#1C1A17'
+          ? '#383834'
+          : '#161615'
     : isEcho
       ? isMonumentActive
         ? '#8DF5D0'
@@ -441,29 +441,29 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
               offset="0%"
               stopColor={
                 isWash
-                  ? isEcho && isMonumentActive ? '#1F6E52' : '#3C372F'
+                  ? isEcho && isMonumentActive ? '#141413' : '#2E2E2B'
                   : isEcho && isMonumentActive ? '#34D399' : '#3E9C8A'
               }
               stopOpacity={
                 isWash
-                  ? isEcho ? (isMonumentActive ? '0.13' : '0.075') : '0.095'
+                  ? isEcho ? (isMonumentActive ? '0.14' : '0.08') : '0.10'
                   : isEcho ? (isMonumentActive ? '0.14' : '0.09') : isMidground ? '0.12' : '0.14'
               }
             />
             <stop
               offset="52%"
-              stopColor={isWash ? '#8D8372' : '#1D3E3D'}
+              stopColor={isWash ? '#7A7A73' : '#1D3E3D'}
               stopOpacity={isWash ? (isEcho ? '0.045' : '0.055') : (isEcho ? '0.025' : '0.04')}
             />
-            <stop offset="100%" stopColor={isWash ? '#F2EDE2' : '#0B0F17'} stopOpacity="0" />
+            <stop offset="100%" stopColor={isWash ? '#F3F1EC' : '#0B0F17'} stopOpacity="0" />
           </radialGradient>
 
           {isWash && (
             <>
               <radialGradient id={`palaceMistCloud_${chamberKey}_${variant}`} cx="38%" cy="40%" r="52%">
-                <stop offset="0%" stopColor="#1C1A17" stopOpacity={isEcho ? '0.055' : '0.07'} />
-                <stop offset="60%" stopColor="#5E5649" stopOpacity={isEcho ? '0.025' : '0.032'} />
-                <stop offset="100%" stopColor="#F2EDE2" stopOpacity="0" />
+                <stop offset="0%" stopColor="#141413" stopOpacity={isEcho ? '0.06' : '0.075'} />
+                <stop offset="60%" stopColor="#565650" stopOpacity={isEcho ? '0.025' : '0.032'} />
+                <stop offset="100%" stopColor="#F3F1EC" stopOpacity="0" />
               </radialGradient>
 
               <filter id={`washInkBleed_${chamberKey}_${variant}`} x="-12%" y="-12%" width="124%" height="124%">
@@ -511,7 +511,7 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
               cy="50"
               r="45.5"
               fill="none"
-              stroke="rgba(28, 26, 23, 0.065)"
+              stroke="rgba(20, 20, 18, 0.075)"
               strokeWidth="0.42"
               strokeDasharray="24 7 6 10"
             />
@@ -520,7 +520,7 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
               cy="49.5"
               r="44.2"
               fill="none"
-              stroke="rgba(31, 110, 82, 0.045)"
+              stroke="rgba(48, 48, 44, 0.052)"
               strokeWidth="0.28"
               strokeDasharray="16 14"
             />
@@ -535,7 +535,7 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
             height="100"
             rx="4"
             fill="none"
-            stroke="rgba(216, 155, 60, 0.25)"
+            stroke={isWash ? 'rgba(20, 20, 18, 0.25)' : 'rgba(216, 155, 60, 0.25)'}
             strokeWidth="0.45"
             strokeDasharray="1.8 1.4"
           />
@@ -564,8 +564,8 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
                   cx={monument.cx}
                   cy={monument.cy}
                   r={7.8}
-                  fill="rgba(31, 110, 82, 0.06)"
-                  stroke="rgba(31, 110, 82, 0.22)"
+                  fill="rgba(20, 20, 18, 0.055)"
+                  stroke="rgba(20, 20, 18, 0.24)"
                   strokeWidth="0.22"
                   strokeDasharray="2.2 1.4"
                 />
@@ -574,8 +574,8 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
                 cx={monument.cx}
                 cy={monument.cy}
                 r={5.8}
-                fill={isWash ? 'rgba(31, 110, 82, 0.11)' : 'rgba(52, 211, 153, 0.07)'}
-                stroke={isWash ? 'rgba(31, 110, 82, 0.55)' : 'rgba(141, 245, 208, 0.45)'}
+                fill={isWash ? 'rgba(20, 20, 18, 0.10)' : 'rgba(52, 211, 153, 0.07)'}
+                stroke={isWash ? 'rgba(20, 20, 18, 0.55)' : 'rgba(141, 245, 208, 0.45)'}
                 strokeWidth="0.28"
               />
             </>
@@ -586,7 +586,7 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
               cy={monument.cy}
               r={Math.min(46, monument.r * 0.96)}
               fill="none"
-              stroke="rgba(247, 210, 134, 0.45)"
+              stroke={isWash ? 'rgba(20, 20, 18, 0.45)' : 'rgba(247, 210, 134, 0.45)'}
               strokeWidth="0.55"
               strokeDasharray="1.8 1.5"
             />
@@ -632,14 +632,14 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
           const fillColor = isWash
             ? isEcho
               ? isCurrent
-                ? '#1F6E52'
+                ? '#111110'
                 : baseColor
               : isCurrent
-                ? '#141210'
+                ? '#0D0D0C'
                 : isDone
-                  ? '#1F6E52'
+                  ? '#242422'
                   : isSelected
-                    ? '#9C6414'
+                    ? '#141413'
                     : baseColor
             : isEcho
               ? isCurrent
@@ -714,8 +714,8 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
                       cx={effCx}
                       cy={effCy}
                       r={haloRadius * 1.32}
-                      fill={isEcho ? 'rgba(31, 110, 82, 0.055)' : 'rgba(156, 100, 20, 0.06)'}
-                      stroke={isEcho ? 'rgba(31, 110, 82, 0.25)' : 'rgba(156, 100, 20, 0.30)'}
+                      fill={isEcho ? 'rgba(20, 20, 18, 0.055)' : 'rgba(20, 20, 18, 0.065)'}
+                      stroke={isEcho ? 'rgba(20, 20, 18, 0.25)' : 'rgba(20, 20, 18, 0.30)'}
                       strokeWidth="0.22"
                       strokeDasharray="2.1 1.3"
                     />
@@ -727,10 +727,10 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
                     fill={
                       isWash
                         ? isEcho
-                          ? 'rgba(31, 110, 82, 0.10)'
+                          ? 'rgba(20, 20, 18, 0.095)'
                           : isCurrent
-                            ? 'rgba(156, 100, 20, 0.15)'
-                            : 'rgba(156, 100, 20, 0.12)'
+                            ? 'rgba(20, 20, 18, 0.13)'
+                            : 'rgba(20, 20, 18, 0.10)'
                         : isEcho
                           ? 'rgba(52, 211, 153, 0.07)'
                           : isCurrent
@@ -740,8 +740,8 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
                     stroke={
                       isWash
                         ? isEcho
-                          ? 'rgba(31, 110, 82, 0.55)'
-                          : '#9C6414'
+                          ? 'rgba(20, 20, 18, 0.55)'
+                          : '#181817'
                         : isEcho
                           ? 'rgba(141, 245, 208, 0.45)'
                           : isCurrent

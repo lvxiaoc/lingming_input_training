@@ -96,11 +96,32 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
 
   const rowOffsets = ['pl-0', 'pl-4 sm:pl-6', 'pl-9 sm:pl-14'];
 
+  const getWashZoneColor = (zoneId?: string, fallback?: string): string => {
+    switch (zoneId) {
+      case 'left-con':
+      case 'phil':
+        return '#181817';
+      case 'right-con':
+      case 'stroke':
+        return '#5A5A56';
+      case 'vowel':
+      case 'shape':
+        return '#85847D';
+      case 'body':
+        return '#40403C';
+      case 'unused':
+      case 'aux':
+        return '#AEACA5';
+      default:
+        return fallback ? '#4A4A46' : '#5A5A56';
+    }
+  };
+
   return (
     <div
       className={`w-full border-t px-3 sm:px-6 py-3 select-none ${
         isWash
-          ? 'bg-gradient-to-b from-[#ECE4D4]/92 to-[#E2D8C4]/95 border-[#1C1A17]/14 backdrop-blur-sm'
+          ? 'bg-gradient-to-b from-[#EDEAE2]/92 to-[#E2DFD6]/95 border-[#141413]/14 backdrop-blur-sm'
           : 'bg-[#0D1017] border-[#F2EEE6]/8'
       }`}
     >
@@ -109,14 +130,16 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
         <div className="flex items-center justify-between gap-4 text-xs min-h-[20px]">
           <div
             className={`flex items-center gap-3 overflow-hidden ${
-              isWash ? 'text-[#555046]' : 'text-[#9BA3B2]'
+              isWash ? 'text-[#52524E]' : 'text-[#9BA3B2]'
             }`}
           >
             {scheme.zones.map((z) => (
               <span key={z.id} className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0">
                 <span
-                  className="inline-block w-2 h-0.5 rounded-sm"
-                  style={{ backgroundColor: z.color }}
+                  className="inline-block w-2.5 h-0.5 rounded-sm"
+                  style={{
+                    backgroundColor: isWash ? getWashZoneColor(z.id, z.color) : z.color,
+                  }}
                 />
                 <span>{t(z.label)}</span>
               </span>
@@ -125,26 +148,30 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
 
           <div
             className={`flex items-center gap-2 whitespace-nowrap shrink-0 ${
-              isWash ? 'text-[#2D2A24]' : 'text-[#D8D3C8]'
+              isWash ? 'text-[#2B2B28]' : 'text-[#D8D3C8]'
             }`}
           >
             {target && nextKey && tabHintActive ? (
               <>
                 {target.nextRole && (
                   <>
-                    <span className={isWash ? 'text-[#555046]' : 'text-[#9BA3B2]'}>
+                    <span className={isWash ? 'text-[#52524E]' : 'text-[#9BA3B2]'}>
                       {t(ROLE_LABELS[target.nextRole])}
                     </span>
-                    <span aria-hidden="true" className={isWash ? 'text-[#9B9386]' : 'text-[#565E6E]'}>·</span>
+                    <span aria-hidden="true" className={isWash ? 'text-[#8C8B84]' : 'text-[#565E6E]'}>·</span>
                   </>
                 )}
-                <span className={`font-medium ${isWash ? 'text-[#1C1A17]' : 'text-[#F2EEE6]'}`}>
+                <span className={`font-medium ${isWash ? 'text-[#141413]' : 'text-[#F2EEE6]'}`}>
                   {nextFingerId ? t(FINGER_LABELS[nextFingerId]) : ''}
                 </span>
-                <span aria-hidden="true" className={isWash ? 'text-[#9B9386]' : 'text-[#565E6E]'}>·</span>
+                <span aria-hidden="true" className={isWash ? 'text-[#8C8B84]' : 'text-[#565E6E]'}>·</span>
                 <span
                   className="font-mono-tabular font-semibold"
-                  style={{ color: nextZone?.color || (isWash ? '#9C6414' : '#D89B3C') }}
+                  style={{
+                    color: isWash
+                      ? '#141413'
+                      : nextZone?.color || '#D89B3C',
+                  }}
                 >
                   {target.nextRole === 'da' || !target.nextRole
                     ? nextKey.toUpperCase()
@@ -156,8 +183,8 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
               <span
                 className={
                   strikeFlash.correct
-                    ? isWash ? 'text-[#185B43]' : 'text-[#34D399]'
-                    : isWash ? 'text-[#A53020]' : 'text-[#F06454]'
+                    ? isWash ? 'text-[#141413] font-medium' : 'text-[#34D399]'
+                    : isWash ? 'text-[#141413] font-medium underline decoration-dashed underline-offset-4' : 'text-[#F06454]'
                 }
               >
                 {strikeFlash.correct
@@ -165,7 +192,7 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                   : t(`誤按 ${strikeFlash.key.toUpperCase()} · 請輸入正確鍵位`)}
               </span>
             ) : (
-              <span className={isWash ? 'text-[#6A6357]' : 'text-[#9BA3B2]'}>
+              <span className={isWash ? 'text-[#64645E]' : 'text-[#9BA3B2]'}>
                 {t('無預高亮 · 擊鍵即時反饋（按 Tab 提示）')}
               </span>
             )}
@@ -182,7 +209,9 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
               {row.map((k) => {
                 const def = scheme.keyMap[k];
                 const zone = def ? scheme.zones.find((z) => z.id === def.zoneId) : null;
-                const zoneColor = zone?.color || '#64748B';
+                const zoneColor = isWash
+                  ? getWashZoneColor(def?.zoneId, zone?.color)
+                  : zone?.color || '#64748B';
                 const isDisabled = Boolean(def?.isDisabled);
                 const isVowel = Boolean(def?.isVowel);
                 const isTabTarget = !isDisabled && tabHintActive && nextKey === k;
@@ -222,7 +251,11 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                     onMouseUp={() => setPressedKey(null)}
                     onMouseLeave={() => setPressedKey((p) => (p === k ? null : p))}
                     aria-label={`${k.toUpperCase()} ${def?.primary || ''}`}
-                    className={`keycap-surface relative flex flex-col justify-between items-center rounded-lg border text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D89B3C] ${
+                    className={`keycap-surface relative flex flex-col justify-between items-center rounded-lg border text-left focus-visible:outline-none focus-visible:ring-2 ${
+                      isWash
+                        ? 'focus-visible:ring-[#181817]'
+                        : 'focus-visible:ring-[#D89B3C]'
+                    } ${
                       isDisabled
                         ? 'opacity-45 cursor-not-allowed'
                         : 'cursor-pointer'
@@ -232,16 +265,16 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                       height: 'clamp(48px, 6.6vh, 62px)',
                       backgroundColor: isWash
                         ? isError
-                          ? 'rgba(184, 59, 42, 0.14)'
+                          ? 'rgba(20, 20, 18, 0.14)'
                           : isHitCorrect
-                            ? 'rgba(31, 110, 82, 0.14)'
+                            ? 'rgba(20, 20, 18, 0.12)'
                             : isTabTarget
-                              ? 'rgba(156, 100, 20, 0.14)'
+                              ? 'rgba(40, 40, 38, 0.11)'
                               : isVowel
-                                ? '#EBE1CF'
+                                ? '#E7E4DC'
                                 : isDisabled
-                                  ? '#E2DACB'
-                                  : '#F7F3EA'
+                                  ? '#DFDDD5'
+                                  : '#F8F7F3'
                         : isError
                           ? 'rgba(240, 78, 62, 0.34)'
                           : isHitCorrect
@@ -255,29 +288,29 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                                   : '#171C26',
                       backgroundImage: isWash
                         ? isError
-                          ? 'radial-gradient(circle at 50% 48%, rgba(184, 59, 42, 0.28) 0%, rgba(184, 59, 42, 0.10) 65%, transparent 100%)'
+                          ? 'radial-gradient(circle at 50% 48%, rgba(20, 20, 18, 0.30) 0%, rgba(20, 20, 18, 0.10) 65%, transparent 100%)'
                           : isHitCorrect
-                            ? 'radial-gradient(circle at 50% 48%, rgba(31, 110, 82, 0.26) 0%, rgba(31, 110, 82, 0.10) 65%, transparent 100%)'
+                            ? 'radial-gradient(circle at 50% 48%, rgba(20, 20, 18, 0.25) 0%, rgba(20, 20, 18, 0.08) 65%, transparent 100%)'
                             : isTabTarget
-                              ? 'radial-gradient(circle at 50% 48%, rgba(156, 100, 20, 0.24) 0%, rgba(156, 100, 20, 0.08) 70%, transparent 100%)'
+                              ? 'radial-gradient(circle at 50% 48%, rgba(40, 40, 38, 0.20) 0%, rgba(40, 40, 38, 0.06) 70%, transparent 100%)'
                               : isPressed
-                                ? 'radial-gradient(circle at 50% 48%, rgba(28, 26, 23, 0.16) 0%, rgba(28, 26, 23, 0.05) 75%, transparent 100%)'
+                                ? 'radial-gradient(circle at 50% 48%, rgba(20, 20, 18, 0.16) 0%, rgba(20, 20, 18, 0.05) 75%, transparent 100%)'
                                 : isDisabled
                                   ? 'none'
                                   : isVowel
-                                    ? 'linear-gradient(180deg, #F0E6D4 0%, #E5D9C2 100%)'
-                                    : 'linear-gradient(180deg, #FAF6EE 0%, #EFE8D8 100%)'
+                                    ? 'linear-gradient(180deg, #EBE9E2 0%, #DFDCD3 100%)'
+                                    : 'linear-gradient(180deg, #FAF9F6 0%, #EFECE5 100%)'
                         : 'none',
                       borderColor: isWash
                         ? isError
-                          ? '#B83B2A'
+                          ? '#141413'
                           : isHitCorrect
-                            ? '#1F6E52'
+                            ? '#181817'
                             : isTabTarget
-                              ? '#9C6414'
+                              ? '#383834'
                               : isVowel
-                                ? 'rgba(156, 100, 20, 0.34)'
-                                : 'rgba(28, 26, 23, 0.16)'
+                                ? 'rgba(20, 20, 18, 0.28)'
+                                : 'rgba(20, 20, 18, 0.16)'
                         : isError
                           ? '#F04E3E'
                           : isHitCorrect
@@ -287,14 +320,15 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                               : isVowel
                                 ? 'rgba(216, 155, 60, 0.26)'
                                 : 'rgba(242, 238, 230, 0.1)',
+                      borderStyle: isWash && isError ? 'dashed' : 'solid',
                       boxShadow: isWash
                         ? isPressed || isDisabled
-                          ? '0 1px 0 #C7BEB0, inset 0 0 8px rgba(28, 26, 23, 0.08)'
+                          ? '0 1px 0 #C4C2BA, inset 0 0 8px rgba(20, 20, 18, 0.08)'
                           : isHitCorrect
-                            ? '0 3px 0 #C7BEB0, 0 0 20px rgba(31, 110, 82, 0.28), inset 0 0 10px rgba(31, 110, 82, 0.14)'
+                            ? '0 3px 0 #C4C2BA, 0 0 20px rgba(20, 20, 18, 0.24), inset 0 0 10px rgba(20, 20, 18, 0.13)'
                             : isError
-                              ? '0 3px 0 #C7BEB0, 0 0 20px rgba(184, 59, 42, 0.30), inset 0 0 10px rgba(184, 59, 42, 0.15)'
-                              : '0 3px 0 #C7BEB0, inset 0 1px 0 rgba(255, 253, 248, 0.65)'
+                              ? '0 3px 0 #C4C2BA, 0 0 22px rgba(20, 20, 18, 0.28), inset 0 0 12px rgba(20, 20, 18, 0.16)'
+                              : '0 3px 0 #C4C2BA, inset 0 1px 0 rgba(255, 255, 252, 0.65)'
                         : isPressed || isDisabled
                           ? '0 1px 0 #080A0E'
                           : isHitCorrect
@@ -305,14 +339,30 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                     }}
                   >
                     {isWash && (isHitCorrect || isError) && strikeFlash && (
-                      <span
-                        key={`tactile_ripple_${strikeFlash.tick}`}
-                        aria-hidden="true"
-                        className="pointer-events-none absolute -inset-1 rounded-xl border-2 ink-bloom-ring"
-                        style={{
-                          borderColor: isError ? 'rgba(184, 59, 42, 0.65)' : 'rgba(31, 110, 82, 0.65)',
-                        }}
-                      />
+                      <>
+                        <span
+                          key={`tactile_aura_${strikeFlash.tick}`}
+                          aria-hidden="true"
+                          className="pointer-events-none absolute -inset-3 rounded-full blur-[5px] ink-aura-fade"
+                          style={{
+                            background: isError
+                              ? 'radial-gradient(circle, rgba(20, 20, 18, 0.26) 0%, rgba(44, 44, 40, 0.10) 50%, transparent 78%)'
+                              : 'radial-gradient(circle, rgba(20, 20, 18, 0.20) 0%, rgba(56, 56, 52, 0.08) 52%, transparent 78%)',
+                          }}
+                        />
+                        <span
+                          key={`tactile_ripple_${strikeFlash.tick}`}
+                          aria-hidden="true"
+                          className="pointer-events-none absolute -inset-1 rounded-xl border ink-bloom-ring"
+                          style={{
+                            borderColor: isError ? 'rgba(20, 20, 18, 0.50)' : 'rgba(20, 20, 18, 0.36)',
+                            borderStyle: isError ? 'dashed' : 'solid',
+                            background: isError
+                              ? 'radial-gradient(circle, rgba(20, 20, 18, 0.16) 0%, transparent 72%)'
+                              : 'radial-gradient(circle, rgba(20, 20, 18, 0.12) 0%, transparent 72%)',
+                          }}
+                        />
+                      </>
                     )}
                     {/* Top zone accent hairline */}
                     <span
@@ -334,10 +384,10 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                       className={`absolute top-1 left-1.5 font-mono-tabular text-[10px] font-semibold leading-none ${
                         isWash
                           ? isTarget
-                            ? 'text-[#141210]'
+                            ? 'text-[#0E0E0D]'
                             : isVowel
-                              ? 'text-[#9C6414]'
-                              : 'text-[#70695D]'
+                              ? 'text-[#484844]'
+                              : 'text-[#6A6A64]'
                           : isTarget
                             ? 'text-[#FFFFFF]'
                             : isVowel
@@ -355,12 +405,12 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                       } ${
                         isWash
                           ? isTarget
-                            ? 'text-[#141210] opacity-100'
+                            ? 'text-[#0D0D0C] opacity-100'
                             : isVowel
-                              ? `text-[#87520A] ${legendOpacityClass}`
+                              ? `text-[#3E3E3A] ${legendOpacityClass}`
                               : isDisabled
-                                ? 'text-[#8C8476]'
-                                : `text-[#1C1A17] ${legendOpacityClass}`
+                                ? 'text-[#84837C]'
+                                : `text-[#1B1B19] ${legendOpacityClass}`
                           : isTarget
                             ? 'text-[#FFFFFF] opacity-100'
                             : isVowel
@@ -396,7 +446,7 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                       {def?.sub && !isVowel && !isDisabled && scaffoldLevel <= 1 && (
                         <span
                           className={`text-[9px] truncate max-w-full leading-none hidden sm:block ${
-                            isWash ? 'text-[#6A6357]' : 'text-[#838C9D]'
+                            isWash ? 'text-[#64645E]' : 'text-[#838C9D]'
                           }`}
                         >
                           {def.sub}
@@ -405,13 +455,13 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                       {isHomeKey && (
                         <span
                           className={`block w-3 h-[1.5px] rounded-full ${
-                            isWash ? 'bg-[#9C6414]/65' : 'bg-[#D89B3C]/65'
+                            isWash ? 'bg-[#4A4A46]/65' : 'bg-[#D89B3C]/65'
                           }`}
                         />
                       )}
                       <div
                         className={`w-full h-[2px] rounded-full overflow-hidden ${
-                          isWash ? 'bg-[#1C1A17]/10' : 'bg-[#F2EEE6]/6'
+                          isWash ? 'bg-[#141413]/10' : 'bg-[#F2EEE6]/6'
                         }`}
                       >
                         {masteryPct > 0 && !isDisabled && (
@@ -421,10 +471,10 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                               width: `${masteryPct}%`,
                               backgroundColor:
                                 masteryPct >= 70
-                                  ? isWash ? '#1F6E52' : '#2EA87E'
+                                  ? isWash ? '#181817' : '#2EA87E'
                                   : masteryPct >= 40
-                                    ? isWash ? '#9C6414' : '#D89B3C'
-                                    : isWash ? '#B83B2A' : '#D9604C',
+                                    ? isWash ? '#5E5E59' : '#D89B3C'
+                                    : isWash ? '#9E9D96' : '#D9604C',
                             }}
                           />
                         )}

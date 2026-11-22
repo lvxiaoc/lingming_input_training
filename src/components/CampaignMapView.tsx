@@ -303,7 +303,7 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
           {/* Selected Chapter Editorial Header & Cognitive Breakdown */}
           <section
             key={selectedChapterId}
-            className="wash-enter-soft bg-[var(--dojo-surface)] wash:bg-[#ECE4D4]/86 wash:backdrop-blur-xs border border-[var(--dojo-border)] rounded-xl p-5 sm:p-6"
+            className="wash-enter-soft bg-[var(--dojo-surface)] wash:bg-[#EAE7DF]/88 wash:backdrop-blur-xs border border-[var(--dojo-border)] rounded-xl p-5 sm:p-6"
           >
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 pb-5 border-b border-[var(--dojo-border)]">
               <div className="max-w-3xl">

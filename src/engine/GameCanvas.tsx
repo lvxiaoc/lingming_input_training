@@ -112,9 +112,40 @@ interface InkRipple {
   r: number;
   maxR: number;
   alpha: number;
+  maxAlpha: number;
+  age: number;
+  duration: number;
   decay: number;
   color: string;
   lineWidth: number;
+  dashed: boolean;
+}
+
+interface InkPlume {
+  active: boolean;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rStart: number;
+  rMax: number;
+  aspect: number;
+  angle: number;
+  age: number;
+  duration: number;
+  peakAlpha: number;
+  isError: boolean;
+}
+
+interface InkDissolveGlyph {
+  active: boolean;
+  char: string;
+  x: number;
+  y: number;
+  glyphSize: number;
+  glyphY: number;
+  age: number;
+  duration: number;
 }
 
 interface FloatText {
@@ -125,6 +156,8 @@ interface FloatText {
   text: string;
   subText: string;
   alpha: number;
+  age: number;
+  duration: number;
   color: string;
 }
 
@@ -157,6 +190,8 @@ const ARENA_BG_URL = `${import.meta.env.BASE_URL}src/assets/images/arena_ink_tex
 
 const MAX_PARTICLES = 120;
 const MAX_RIPPLES = 24;
+const MAX_PLUMES = 42;
+const MAX_DISSOLVES = 8;
 const MAX_FLOATS = 24;
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -259,9 +294,38 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       r: 8,
       maxR: 72,
       alpha: 0,
+      maxAlpha: 0.35,
+      age: 0,
+      duration: 0.72,
       decay: 1.6,
-      color: '#1F6E52',
+      color: '#2EA87E',
       lineWidth: 2,
+      dashed: false,
+    })),
+    plumes: Array.from({ length: MAX_PLUMES }, (): InkPlume => ({
+      active: false,
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      rStart: 12,
+      rMax: 68,
+      aspect: 1,
+      angle: 0,
+      age: 0,
+      duration: 0.78,
+      peakAlpha: 0.24,
+      isError: false,
+    })),
+    dissolves: Array.from({ length: MAX_DISSOLVES }, (): InkDissolveGlyph => ({
+      active: false,
+      char: '',
+      x: 0,
+      y: 0,
+      glyphSize: 64,
+      glyphY: 0,
+      age: 0,
+      duration: 0.56,
     })),
     floats: Array.from({ length: MAX_FLOATS }, (): FloatText => ({
       active: false,
@@ -271,6 +335,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       text: '',
       subText: '',
       alpha: 0,
+      age: 0,
+      duration: 0.9,
       color: '#F2EEE6',
     })),
     score: 0,
@@ -318,9 +384,74 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
   }, []);
 
+  const emitInkPlumes = (
+    x: number,
+    y: number,
+    plumeCount = 4,
+    baseRadius = 64,
+    peakAlpha = 0.22,
+    isError = false
+  ) => {
+    const { plumes } = simRef.current;
+    let spawned = 0;
+    for (let i = 0; i < plumes.length && spawned < plumeCount; i++) {
+      const pl = plumes[i];
+      if (!pl.active) {
+        const theta = (Math.PI * 2 * spawned) / Math.max(1, plumeCount) + (Math.random() - 0.5) * 0.9;
+        const offsetR = spawned === 0 ? 0 : 8 + Math.random() * 18;
+        const driftSpeed = spawned === 0 ? 2 : 6 + Math.random() * 14;
+        pl.active = true;
+        pl.x = x + Math.cos(theta) * offsetR;
+        pl.y = y + Math.sin(theta) * offsetR * 0.72;
+        pl.vx = Math.cos(theta) * driftSpeed;
+        pl.vy = Math.sin(theta) * driftSpeed - (spawned === 0 ? 0 : 4);
+        pl.rStart = spawned === 0 ? baseRadius * 0.26 : baseRadius * (0.18 + Math.random() * 0.12);
+        pl.rMax = spawned === 0 ? baseRadius * 1.18 : baseRadius * (0.68 + Math.random() * 0.48);
+        pl.aspect = 0.74 + Math.random() * 0.42;
+        pl.angle = Math.random() * Math.PI;
+        pl.age = 0;
+        pl.duration = (isError ? 0.54 : 0.74) + Math.random() * 0.24;
+        pl.peakAlpha = spawned === 0 ? peakAlpha : peakAlpha * (0.62 + Math.random() * 0.28);
+        pl.isError = isError;
+        spawned++;
+      }
+    }
+  };
+
+  const emitDissolveGlyph = (
+    char: string,
+    x: number,
+    y: number,
+    glyphSize: number,
+    glyphY: number
+  ) => {
+    const { dissolves } = simRef.current;
+    for (let i = 0; i < dissolves.length; i++) {
+      const d = dissolves[i];
+      if (!d.active) {
+        d.active = true;
+        d.char = char;
+        d.x = x;
+        d.y = y;
+        d.glyphSize = glyphSize;
+        d.glyphY = glyphY;
+        d.age = 0;
+        d.duration = 0.58;
+        return;
+      }
+    }
+  };
+
   const emitParticles = (x: number, y: number, color: string, count = 24) => {
+    if (propsRef.current.themeMode === 'wash') {
+      // In sumi-ink mode, never launch jumping dots — emit organic soaking ink-wash plumes instead
+      const plumeCount = count >= 30 ? 6 : count >= 18 ? 4 : 3;
+      const baseR = count >= 30 ? 96 : count >= 18 ? 74 : 52;
+      const peakA = count >= 30 ? 0.25 : count >= 18 ? 0.21 : 0.15;
+      emitInkPlumes(x, y, plumeCount, baseR, peakA, false);
+      return;
+    }
     const { particles } = simRef.current;
-    const isWash = propsRef.current.themeMode === 'wash';
     let spawned = 0;
     for (let i = 0; i < particles.length && spawned < count; i++) {
       const p = particles[i];
@@ -332,17 +463,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         p.y = y;
         p.vx = Math.cos(angle) * speed;
         p.vy = Math.sin(angle) * speed - 35;
-        p.size = isWash ? 2.0 + Math.random() * 4.4 : 2.2 + Math.random() * 3.6;
+        p.size = 2.2 + Math.random() * 3.6;
         p.alpha = 1;
         p.decay = 1.35 + Math.random() * 0.9;
-        p.color =
-          spawned % 3 === 0
-            ? isWash
-              ? '#1C1A17'
-              : '#F2EEE6'
-            : isWash && spawned % 5 === 0
-              ? '#5A5347'
-              : color;
+        p.color = spawned % 3 === 0 ? '#F2EEE6' : color;
         spawned++;
       }
     }
@@ -353,7 +477,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     y: number,
     color: string,
     ringCount = 2,
-    baseMaxR = 78
+    baseMaxR = 78,
+    dashed = false
   ) => {
     const { ripples } = simRef.current;
     const isWash = propsRef.current.themeMode === 'wash';
@@ -364,12 +489,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         rp.active = true;
         rp.x = x;
         rp.y = y;
-        rp.r = 12 + spawned * 8;
+        rp.r = isWash ? 16 + spawned * 10 : 12 + spawned * 8;
         rp.maxR = baseMaxR + spawned * (isWash ? 34 : 24);
-        rp.alpha = isWash ? 0.55 - spawned * 0.14 : 0.32 - spawned * 0.1;
-        rp.decay = isWash ? 1.45 - spawned * 0.2 : 1.7;
-        rp.color = isWash && spawned > 0 ? '#1C1A17' : color;
-        rp.lineWidth = isWash ? 2.6 - spawned * 0.8 : 1.5;
+        rp.maxAlpha = isWash ? 0.36 - spawned * 0.10 : 0.32 - spawned * 0.1;
+        rp.alpha = isWash ? 0 : rp.maxAlpha;
+        rp.age = 0;
+        rp.duration = isWash ? 0.78 + spawned * 0.14 : 0.6;
+        rp.decay = isWash ? 1.35 - spawned * 0.18 : 1.7;
+        rp.color = isWash ? (spawned > 0 ? '#565650' : '#181817') : color;
+        rp.lineWidth = isWash ? 2.2 - spawned * 0.6 : 1.5;
+        rp.dashed = dashed;
         spawned++;
       }
     }
@@ -377,16 +506,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   const emitFloat = (x: number, y: number, text: string, subText: string, color: string) => {
     const { floats } = simRef.current;
+    const isWash = propsRef.current.themeMode === 'wash';
     for (let i = 0; i < floats.length; i++) {
       const f = floats[i];
       if (!f.active) {
         f.active = true;
         f.x = x;
         f.y = y;
-        f.vy = -48;
+        f.vy = isWash ? -20 : -48;
         f.text = text;
         f.subText = subText;
-        f.alpha = 1;
+        f.alpha = isWash ? 0 : 1;
+        f.age = 0;
+        f.duration = isWash ? 0.96 : 0.87;
         f.color = color;
         return;
       }
@@ -532,6 +664,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const entry = s.queue.shift();
     if (!entry) return;
 
+    const isWash = propsRef.current.themeMode === 'wash';
     const tile: FallingTile = {
       uid: s.uidSeq++,
       entry,
@@ -543,12 +676,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       consecutiveErrors: 0,
       spawnedAt: nowMs,
       lastKeyAt: nowMs,
-      scale: entry.xray?.completedIndices && entry.xray.completedIndices.length > 0 ? 1 : 0.86,
+      scale:
+        entry.xray?.completedIndices && entry.xray.completedIndices.length > 0
+          ? 1
+          : isWash
+            ? 1.035
+            : 0.86,
       flash: 0.45,
       shake: 0,
     };
     s.tiles = [tile];
     s.activeUid = tile.uid;
+    if (isWash) {
+      const depthMetrics = getDepthFocusMetrics(s.width, s.height, propsRef.current.hideCodeHints);
+      const ey = propsRef.current.layoutMode === 'depth' ? s.height * depthMetrics.centerYRatio : tile.y;
+      emitInkPlumes(s.width * 0.5, ey, 2, 72, 0.14, false);
+    }
 
     const nextUsed = new Set<string>([tile.entry.id, ...s.queue.map((e) => e.id)]);
     while (s.queue.length < 3 && (s.chamberDeck.length > 0 || !isFixedDeck)) {
@@ -647,6 +790,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     s.ended = false;
     s.particles.forEach((p) => (p.active = false));
     s.ripples.forEach((rp) => (rp.active = false));
+    s.plumes.forEach((pl) => (pl.active = false));
+    s.dissolves.forEach((d) => (d.active = false));
     s.floats.forEach((f) => (f.active = false));
 
     // Priority 1: Explicit campaign or weak-spot deck
@@ -736,7 +881,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           active.y + 42,
           uiText('已清空重輸', propsRef.current.uiScript),
           '',
-          propsRef.current.themeMode === 'wash' ? '#5E574C' : '#8FA0B8'
+          propsRef.current.themeMode === 'wash' ? '#4C4C48' : '#8FA0B8'
         );
         syncTarget(nowMs);
       }
@@ -770,10 +915,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       s.correctKeys++;
       s.keyLatencySum += Math.min(2200, keyLatency);
       s.keyLatencyCount++;
+      const isWashInput = propsRef.current.themeMode === 'wash';
       active.typed += key;
       active.consecutiveErrors = 0;
       active.lastKeyAt = nowMs;
-      active.scale = 1.14;
+      active.scale = isWashInput ? 1.02 : 1.14;
       active.flash = 0.85;
       s.lastErrorKey = null;
       s.lastStrikeKey = key;
@@ -837,19 +983,48 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           propsRef.current.scheme.zones.find((z) => z.id === zoneId)?.color || '#D89B3C';
 
         const px = active.x * s.width;
-        const py = active.y;
+        const depthMetricsNow = getDepthFocusMetrics(
+          s.width,
+          s.height,
+          propsRef.current.hideCodeHints
+        );
+        const py =
+          propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
+            ? s.height * depthMetricsNow.centerYRatio
+            : active.y;
         const isWash = propsRef.current.themeMode === 'wash';
-        emitParticles(px, py, isWash ? '#1F6E52' : zoneColor, s.combo % 10 === 0 ? 38 : 22);
-        emitInkRipples(px, py, isWash ? '#1F6E52' : zoneColor, s.combo % 10 === 0 ? 3 : 2, isWash ? 92 : 68);
+        if (isWash) {
+          const dissolveSize =
+            propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
+              ? propsRef.current.scheme.isLingming
+                ? depthMetricsNow.glyphSize
+                : Math.max(48, Math.round(depthMetricsNow.glyphSize * 1.35))
+              : propsRef.current.mode !== 'arcade'
+                ? 72
+                : 40;
+          const dissolveYOff =
+            propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
+              ? depthMetricsNow.glyphYOffset
+              : propsRef.current.mode !== 'arcade'
+                ? -16
+                : -15;
+          emitDissolveGlyph(active.entry.char, px, py, dissolveSize, dissolveYOff);
+        }
+        emitParticles(px, py, isWash ? '#141413' : zoneColor, s.combo % 10 === 0 ? 38 : 22);
+        emitInkRipples(px, py, isWash ? '#141413' : zoneColor, s.combo % 10 === 0 ? 3 : 2, isWash ? 96 : 68, false);
 
+        const floatStartY =
+          propsRef.current.mode !== 'arcade'
+            ? py - (isWash ? 104 : 88)
+            : py - 24;
         if (propsRef.current.isBossTrial && s.combo > 0 && s.combo % 12 === 0 && s.lives < s.maxLives) {
           s.lives = Math.min(s.maxLives, s.lives + 1);
           emitFloat(
             px,
-            py - 48,
+            floatStartY - 30,
             uiText('墨印回復 +1', propsRef.current.uiScript),
             uiText(`${s.combo} 連擊`, propsRef.current.uiScript),
-            propsRef.current.themeMode === 'wash' ? '#1F6E52' : '#38A885'
+            propsRef.current.themeMode === 'wash' ? '#141413' : '#38A885'
           );
         }
 
@@ -861,15 +1036,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               : `${Math.round(totalMs)}ms`;
         emitFloat(
           px,
-          py - 24,
+          floatStartY,
           `+${pts}`,
           speedTag,
           promoted
             ? propsRef.current.themeMode === 'wash'
-              ? '#1F6E52'
+              ? '#141413'
               : '#2EA87E'
             : propsRef.current.themeMode === 'wash'
-              ? '#1C1A17'
+              ? '#242422'
               : '#F2EEE6'
         );
 
@@ -918,7 +1093,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               s.height * 0.25,
               uiText(`第 ${s.wave} 陣`, propsRef.current.uiScript),
               uiText('進階詞根解鎖', propsRef.current.uiScript),
-              propsRef.current.themeMode === 'wash' ? '#9C6414' : '#D89B3C'
+              propsRef.current.themeMode === 'wash' ? '#2B2B28' : '#D89B3C'
             );
           }
           if (s.tiles.length === 0) {
@@ -952,8 +1127,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       } else {
         synth.playKeyHit(s.combo, false);
         const isWash = propsRef.current.themeMode === 'wash';
-        emitParticles(active.x * s.width, active.y + 18, isWash ? '#9C6414' : '#D89B3C', 7);
-        emitInkRipples(active.x * s.width, active.y, isWash ? '#1F6E52' : '#D89B3C', 1, 56);
+        const dm = getDepthFocusMetrics(s.width, s.height, propsRef.current.hideCodeHints);
+        const hitY =
+          propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
+            ? s.height * dm.centerYRatio
+            : active.y;
+        emitParticles(active.x * s.width, hitY + (isWash ? 0 : 18), isWash ? '#484844' : '#D89B3C', 7);
+        emitInkRipples(active.x * s.width, hitY, isWash ? '#181817' : '#D89B3C', 1, isWash ? 66 : 56, false);
         propsRef.current.onMasteryChange(masteryRef.current);
       }
     } else {
@@ -963,16 +1143,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       active.hadError = true;
       active.consecutiveErrors += 1;
       active.shake = 12;
-      s.camShake = 4.6;
+      s.camShake = propsRef.current.themeMode === 'wash' ? 2.4 : 4.6;
       s.lastErrorKey = key;
       s.lastErrorTick = nowMs;
       s.lastStrikeKey = key;
       s.lastStrikeCorrect = false;
       s.lastStrikeTick = nowMs;
       const isWash = propsRef.current.themeMode === 'wash';
-      emitInkRipples(active.x * s.width, active.y, isWash ? '#B83B2A' : '#F04E3E', isWash ? 2 : 1, 66);
+      const dm = getDepthFocusMetrics(s.width, s.height, propsRef.current.hideCodeHints);
+      const errY =
+        propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
+          ? s.height * dm.centerYRatio
+          : active.y;
+      emitInkRipples(active.x * s.width, errY, isWash ? '#141413' : '#F04E3E', isWash ? 2 : 1, 72, isWash);
       if (isWash) {
-        emitParticles(active.x * s.width, active.y, '#B83B2A', 9);
+        emitInkPlumes(active.x * s.width, errY, 3, 62, 0.22, true);
       }
       if (active.consecutiveErrors >= 2) {
         s.forcedHintUntil = nowMs + 4500;
@@ -1003,7 +1188,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           active.y - 42,
           uiText('墨印受損 -1', propsRef.current.uiScript),
           uiText(`餘 ${s.lives} 印`, propsRef.current.uiScript),
-          propsRef.current.themeMode === 'wash' ? '#B83B2A' : '#D94A38'
+          propsRef.current.themeMode === 'wash' ? '#141413' : '#D94A38'
         );
         if (s.lives <= 0) {
           s.ended = true;
@@ -1192,7 +1377,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 emitParticles(
                   tile.x * s.width,
                   dangerLineY,
-                  propsRef.current.themeMode === 'wash' ? '#B83B2A' : '#D94A38',
+                  propsRef.current.themeMode === 'wash' ? '#141413' : '#D94A38',
                   24
                 );
                 emitFloat(
@@ -1200,7 +1385,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   dangerLineY - 24,
                   uiText('漏字', propsRef.current.uiScript),
                   tile.entry.char + ' · ' + tile.entry.code.toUpperCase(),
-                  propsRef.current.themeMode === 'wash' ? '#B83B2A' : '#D94A38'
+                  propsRef.current.themeMode === 'wash' ? '#141413' : '#D94A38'
                 );
                 synth.playLifeLost();
                 if (s.activeUid === tile.uid) s.activeUid = null;
@@ -1256,18 +1441,62 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             if (p.alpha <= 0) p.active = false;
           }
 
+          for (const pl of s.plumes) {
+            if (!pl.active) continue;
+            pl.age += dt;
+            const drag = Math.exp(-3.4 * dt);
+            pl.vx *= drag;
+            pl.vy *= drag;
+            pl.x += pl.vx * dt;
+            pl.y += pl.vy * dt;
+            if (pl.age >= pl.duration) pl.active = false;
+          }
+
+          for (const d of s.dissolves) {
+            if (!d.active) continue;
+            d.age += dt;
+            if (d.age >= d.duration) d.active = false;
+          }
+
+          const isWashTick = propsRef.current.themeMode === 'wash';
           for (const rp of s.ripples) {
             if (!rp.active) continue;
-            rp.r += (rp.maxR - rp.r) * Math.min(1, dt * 6.5);
-            rp.alpha -= rp.decay * dt;
-            if (rp.alpha <= 0) rp.active = false;
+            rp.age += dt;
+            if (isWashTick) {
+              const tNorm = Math.min(1, rp.age / rp.duration);
+              const easeOut = 1 - Math.pow(1 - tNorm, 2.3);
+              rp.r = 14 + (rp.maxR - 14) * easeOut;
+              rp.alpha =
+                tNorm < 0.2
+                  ? rp.maxAlpha * (tNorm / 0.2)
+                  : rp.maxAlpha * Math.pow(1 - (tNorm - 0.2) / 0.8, 1.35);
+              if (tNorm >= 1) rp.active = false;
+            } else {
+              rp.r += (rp.maxR - rp.r) * Math.min(1, dt * 6.5);
+              rp.alpha -= rp.decay * dt;
+              if (rp.alpha <= 0) rp.active = false;
+            }
           }
 
           for (const f of s.floats) {
             if (!f.active) continue;
-            f.y += f.vy * dt;
-            f.alpha -= dt * 1.15;
-            if (f.alpha <= 0) f.active = false;
+            f.age += dt;
+            if (isWashTick) {
+              const tNorm = Math.min(1, f.age / f.duration);
+              f.vy *= Math.exp(-2.1 * dt);
+              f.y += f.vy * dt;
+              f.alpha =
+                tNorm < 0.18
+                  ? tNorm / 0.18
+                  : tNorm < 0.42
+                    ? 1
+                    : Math.max(0, 1 - (tNorm - 0.42) / 0.58);
+              if (tNorm >= 1) f.active = false;
+            } else {
+              f.y += f.vy * dt;
+              f.alpha -= dt * 1.15;
+              if (f.alpha <= 0) f.active = false;
+            }
           }
 
           if (nowMs - s.lastTargetSync > 240) {
@@ -1296,9 +1525,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           if (curLayout === 'split') {
             if (isWash) {
               const paperGrad = ctx.createLinearGradient(0, 0, s.width, s.height);
-              paperGrad.addColorStop(0, 'rgba(242, 237, 226, 0.86)');
-              paperGrad.addColorStop(0.55, 'rgba(238, 231, 217, 0.84)');
-              paperGrad.addColorStop(1, 'rgba(230, 221, 203, 0.88)');
+              paperGrad.addColorStop(0, 'rgba(243, 241, 236, 0.86)');
+              paperGrad.addColorStop(0.55, 'rgba(238, 236, 229, 0.84)');
+              paperGrad.addColorStop(1, 'rgba(229, 226, 218, 0.88)');
               ctx.fillStyle = paperGrad;
               ctx.fillRect(0, 0, s.width, s.height);
 
@@ -1311,9 +1540,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 s.height * 0.15,
                 Math.max(220, s.width * 0.34)
               );
-              tlMist.addColorStop(0, 'rgba(28, 26, 23, 0.065)');
-              tlMist.addColorStop(0.55, 'rgba(79, 73, 63, 0.025)');
-              tlMist.addColorStop(1, 'rgba(242, 237, 226, 0)');
+              tlMist.addColorStop(0, 'rgba(20, 20, 18, 0.068)');
+              tlMist.addColorStop(0.55, 'rgba(64, 64, 60, 0.025)');
+              tlMist.addColorStop(1, 'rgba(243, 241, 236, 0)');
               ctx.fillStyle = tlMist;
               ctx.fillRect(0, 0, s.width, s.height);
 
@@ -1325,9 +1554,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 s.height * 0.85,
                 Math.max(220, s.width * 0.32)
               );
-              brMist.addColorStop(0, 'rgba(31, 110, 82, 0.055)');
-              brMist.addColorStop(0.6, 'rgba(119, 112, 100, 0.02)');
-              brMist.addColorStop(1, 'rgba(242, 237, 226, 0)');
+              brMist.addColorStop(0, 'rgba(28, 28, 26, 0.062)');
+              brMist.addColorStop(0.6, 'rgba(92, 92, 86, 0.024)');
+              brMist.addColorStop(1, 'rgba(243, 241, 236, 0)');
               ctx.fillStyle = brMist;
               ctx.fillRect(0, 0, s.width, s.height);
             } else {
@@ -1349,7 +1578,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
 
           if (curLayout === 'split') {
-            ctx.strokeStyle = isWash ? 'rgba(28, 26, 23, 0.042)' : 'rgba(242, 238, 230, 0.035)';
+            ctx.strokeStyle = isWash ? 'rgba(20, 20, 18, 0.042)' : 'rgba(242, 238, 230, 0.035)';
             ctx.lineWidth = 1;
             for (let gx = 64; gx < s.width; gx += 64) {
               ctx.beginPath();
@@ -1364,16 +1593,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           if (curMode === 'arcade') {
             const dangerY = s.height - 34;
             const grad = ctx.createLinearGradient(0, dangerY, s.width, dangerY);
-            const dangerRgb = isWash ? '184, 59, 42' : '217, 74, 56';
+            const dangerRgb = isWash ? '20, 20, 18' : '217, 74, 56';
             grad.addColorStop(0, `rgba(${dangerRgb}, 0.08)`);
             grad.addColorStop(0.5, `rgba(${dangerRgb}, 0.65)`);
             grad.addColorStop(1, `rgba(${dangerRgb}, 0.08)`);
             ctx.strokeStyle = grad;
             ctx.lineWidth = 1.5;
+            if (isWash) ctx.setLineDash([8, 4]);
             ctx.beginPath();
             ctx.moveTo(24, dangerY);
             ctx.lineTo(s.width - 24, dangerY);
             ctx.stroke();
+            if (isWash) ctx.setLineDash([]);
 
             ctx.fillStyle = `rgba(${dangerRgb}, 0.72)`;
             ctx.font = '500 11px "Plus Jakarta Sans", sans-serif';
@@ -1387,15 +1618,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               const pulseR = 112 + Math.sin(s.ringPhase) * 4;
               if (isWash) {
                 const haloGrad = ctx.createRadialGradient(cx, cy, pulseR * 0.35, cx, cy, pulseR * 1.18);
-                haloGrad.addColorStop(0, 'rgba(28, 26, 23, 0.045)');
-                haloGrad.addColorStop(0.65, 'rgba(156, 100, 20, 0.03)');
-                haloGrad.addColorStop(1, 'rgba(242, 237, 226, 0)');
+                haloGrad.addColorStop(0, 'rgba(20, 20, 18, 0.048)');
+                haloGrad.addColorStop(0.65, 'rgba(56, 56, 52, 0.025)');
+                haloGrad.addColorStop(1, 'rgba(243, 241, 236, 0)');
                 ctx.fillStyle = haloGrad;
                 ctx.beginPath();
                 ctx.arc(cx, cy, pulseR * 1.18, 0, Math.PI * 2);
                 ctx.fill();
 
-                ctx.strokeStyle = 'rgba(28, 26, 23, 0.11)';
+                ctx.strokeStyle = 'rgba(20, 20, 18, 0.12)';
                 ctx.lineWidth = 1.1;
                 ctx.setLineDash([14, 6, 4, 8]);
                 ctx.beginPath();
@@ -1403,7 +1634,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 ctx.stroke();
                 ctx.setLineDash([]);
               }
-              ctx.strokeStyle = isWash ? 'rgba(156, 100, 20, 0.24)' : 'rgba(216, 155, 60, 0.16)';
+              ctx.strokeStyle = isWash ? 'rgba(20, 20, 18, 0.22)' : 'rgba(216, 155, 60, 0.16)';
               ctx.lineWidth = 1.25;
               ctx.beginPath();
               ctx.arc(cx, cy, pulseR, 0, Math.PI * 2);
@@ -1418,8 +1649,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               const ax = activeTile.x * s.width;
               const ay = activeTile.y + (curMode === 'arcade' ? 48 : 86);
               const beamGrad = ctx.createLinearGradient(ax, ay, ax, s.height);
-              const beamRgb = isWash ? '156, 100, 20' : '216, 155, 60';
-              beamGrad.addColorStop(0, `rgba(${beamRgb}, 0.30)`);
+              const beamRgb = isWash ? '20, 20, 18' : '216, 155, 60';
+              beamGrad.addColorStop(0, `rgba(${beamRgb}, 0.26)`);
               beamGrad.addColorStop(1, `rgba(${beamRgb}, 0.0)`);
               ctx.strokeStyle = beamGrad;
               ctx.lineWidth = 1.5;
@@ -1471,41 +1702,57 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
             const nextCharKey = tile.entry.code[tile.typed.length] || tile.entry.code[0];
             const zoneId = curScheme.keyMap[nextCharKey]?.zoneId;
-            const zoneColor =
+            const rawZoneColor =
               curScheme.zones.find((z) => z.id === zoneId)?.color || '#D89B3C';
+            const zoneColor = isWash
+              ? zoneId === 'left-con' || zoneId === 'phil'
+                ? '#181817'
+                : zoneId === 'right-con' || zoneId === 'stroke'
+                  ? '#4E4E4A'
+                  : zoneId === 'vowel' || zoneId === 'shape'
+                    ? '#6A6A64'
+                    : '#3A3A36'
+              : rawZoneColor;
 
             ctx.save();
             ctx.translate(cx, cy);
             ctx.scale(tile.scale, tile.scale);
+            if (isWash) {
+              const spawnAge = Math.max(0, (nowMs - tile.spawnedAt) / 1000);
+              const enterAlpha = Math.min(1, spawnAge / 0.24);
+              ctx.globalAlpha *= enterAlpha;
+            }
 
             if (curLayout === 'depth' && isFocusMode) {
-              // Pure minimal sanctuary — subtle ink-settle bloom on spawn/strike, crisp subtle ring on miss
+              // Pure minimal sanctuary — subtle ink-settle bloom on spawn/strike, crisp dashed ring on miss
               if (isWash && tile.flash > 0.04) {
                 const haloR = Math.max(36, Math.round(glyphSize * (1.28 - tile.flash * 0.22)));
                 const washGrad = ctx.createRadialGradient(0, glyphY, 4, 0, glyphY, haloR);
-                washGrad.addColorStop(0, `rgba(28, 26, 23, ${(tile.flash * 0.12).toFixed(3)})`);
-                washGrad.addColorStop(0.65, `rgba(31, 110, 82, ${(tile.flash * 0.06).toFixed(3)})`);
-                washGrad.addColorStop(1, 'rgba(242, 237, 226, 0)');
+                washGrad.addColorStop(0, `rgba(20, 20, 18, ${(tile.flash * 0.14).toFixed(3)})`);
+                washGrad.addColorStop(0.65, `rgba(56, 56, 52, ${(tile.flash * 0.06).toFixed(3)})`);
+                washGrad.addColorStop(1, 'rgba(243, 241, 236, 0)');
                 ctx.fillStyle = washGrad;
                 ctx.beginPath();
                 ctx.arc(0, glyphY, haloR, 0, Math.PI * 2);
                 ctx.fill();
               }
               if (tile.shake > 1) {
-                ctx.strokeStyle = isWash ? 'rgba(184, 59, 42, 0.72)' : 'rgba(240, 78, 62, 0.7)';
-                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = isWash ? 'rgba(20, 20, 18, 0.78)' : 'rgba(240, 78, 62, 0.7)';
+                ctx.lineWidth = isWash ? 1.8 : 1.5;
+                if (isWash) ctx.setLineDash([6, 4]);
                 ctx.beginPath();
                 ctx.arc(0, glyphY, Math.max(30, Math.round(glyphSize * 1.05)), 0, Math.PI * 2);
                 ctx.stroke();
+                if (isWash) ctx.setLineDash([]);
               }
             } else {
               drawRoundedRect(ctx, -cardW / 2, -cardH / 2, cardW, cardH, isFocusMode ? 14 : 11);
               ctx.fillStyle = isWash
                 ? isActive
                   ? curLayout === 'depth'
-                    ? 'rgba(247, 243, 234, 0.95)'
-                    : '#F7F3EA'
-                  : 'rgba(236, 229, 214, 0.90)'
+                    ? 'rgba(248, 247, 243, 0.95)'
+                    : '#F8F7F3'
+                  : 'rgba(235, 233, 226, 0.90)'
                 : isActive
                   ? curLayout === 'depth'
                     ? 'rgba(16, 21, 30, 0.90)'
@@ -1514,21 +1761,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               ctx.fill();
 
               ctx.lineWidth = isActive ? 1.8 : 1;
+              if (isWash && tile.shake > 1) ctx.setLineDash([6, 4]);
               ctx.strokeStyle =
                 tile.shake > 1
                   ? isWash
-                    ? '#B83B2A'
+                    ? '#141413'
                     : '#D94A38'
                   : isActive
                     ? zoneColor
                     : isWash
-                      ? 'rgba(28, 26, 23, 0.16)'
+                      ? 'rgba(20, 20, 18, 0.16)'
                       : 'rgba(242, 238, 230, 0.14)';
               ctx.stroke();
+              if (isWash && tile.shake > 1) ctx.setLineDash([]);
 
               if (tile.flash > 0.02) {
                 ctx.fillStyle = isWash
-                  ? `rgba(28, 26, 23, ${tile.flash * 0.08})`
+                  ? `rgba(20, 20, 18, ${tile.flash * 0.08})`
                   : `rgba(242, 238, 230, ${tile.flash * 0.14})`;
                 ctx.fill();
               }
@@ -1542,7 +1791,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
             // Entry kind & pinyin (shown in split mode only; depth mode stays ultra-clean!)
             if (isFocusMode && curLayout === 'split' && tile.entry.kind) {
-              ctx.fillStyle = isWash ? 'rgba(28, 26, 23, 0.58)' : 'rgba(242, 238, 230, 0.56)';
+              ctx.fillStyle = isWash ? 'rgba(20, 20, 18, 0.58)' : 'rgba(242, 238, 230, 0.56)';
               ctx.font = '500 11px "Plus Jakarta Sans", sans-serif';
               ctx.textAlign = 'center';
               const kindText = uiText(
@@ -1571,7 +1820,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             // Subtle Stage 4 chain progress badge or Stage 5 word flow partner char
             if (tile.entry.xray?.totalSteps) {
               ctx.save();
-              ctx.fillStyle = isWash ? '#185B43' : '#7CE5BC';
+              ctx.fillStyle = isWash ? '#181817' : '#7CE5BC';
               ctx.font = '600 11px "Plus Jakarta Sans", sans-serif';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
@@ -1596,10 +1845,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 ctx.fillStyle =
                   tile.entry.wordCharIdx === 0
                     ? isWash
-                      ? 'rgba(28, 26, 23, 0.28)'
+                      ? 'rgba(20, 20, 18, 0.28)'
                       : 'rgba(242, 238, 230, 0.28)'
                     : isWash
-                      ? 'rgba(31, 110, 82, 0.65)'
+                      ? 'rgba(20, 20, 18, 0.62)'
                       : 'rgba(56, 168, 133, 0.56)';
                 ctx.font = `600 ${Math.round(glyphSize * 0.78)}px "Noto Serif TC", serif`;
                 ctx.textAlign = 'center';
@@ -1609,7 +1858,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               }
             }
 
-            ctx.fillStyle = isWash ? '#161411' : '#FFF9EE';
+            ctx.fillStyle = isWash ? '#141413' : '#FFF9EE';
             if (tile.entry.xray) {
               // Stage 4: MakeMeAHanzi exact vector strokes inside 1024x1024 box (translate(0, 900) scale(1, -1))
               const xr = tile.entry.xray;
@@ -1622,7 +1871,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               ctx.translate(-512, -388);
 
               // Pass 1: Faint ink base strokes
-              ctx.fillStyle = isWash ? 'rgba(28, 26, 23, 0.16)' : 'rgba(242, 238, 230, 0.16)';
+              ctx.fillStyle = isWash ? 'rgba(20, 20, 18, 0.16)' : 'rgba(242, 238, 230, 0.16)';
               for (let i = 0; i < xr.strokes.length; i++) {
                 if (activeSet.has(i) || doneSet.has(i)) continue;
                 const sp = xr.strokes[i];
@@ -1634,9 +1883,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 ctx.fill(p2d);
               }
 
-              // Pass 2: Earlier completed radical strokes in multi-step chaining (calm celadon / pine)
+              // Pass 2: Earlier completed radical strokes in multi-step chaining (medium ink)
               if (doneSet.size > 0) {
-                ctx.fillStyle = isWash ? 'rgba(31, 110, 82, 0.72)' : 'rgba(56, 168, 133, 0.65)';
+                ctx.fillStyle = isWash ? 'rgba(68, 68, 64, 0.72)' : 'rgba(56, 168, 133, 0.65)';
                 for (const i of doneSet) {
                   const sp = xr.strokes[i];
                   if (!sp) continue;
@@ -1650,7 +1899,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               }
 
               // Pass 3: Highlighted target radical strokes (deep sumi ink or crisp warm ivory)
-              ctx.fillStyle = isWash ? '#161411' : '#FFF9EE';
+              ctx.fillStyle = isWash ? '#141413' : '#FFF9EE';
               for (const i of activeSet) {
                 const sp = xr.strokes[i];
                 if (!sp) continue;
@@ -1716,10 +1965,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 ctx.fillStyle =
                   di < approxRootsDone
                     ? isWash
-                      ? 'rgba(31, 110, 82, 0.85)'
+                      ? 'rgba(20, 20, 18, 0.85)'
                       : 'rgba(56, 168, 133, 0.85)'
                     : isWash
-                      ? 'rgba(28, 26, 23, 0.22)'
+                      ? 'rgba(20, 20, 18, 0.22)'
                       : 'rgba(242, 238, 230, 0.24)';
                 ctx.fill();
               }
@@ -1734,8 +1983,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ) {
               ctx.fillStyle = isWash
                 ? scaffoldLevel === 0
-                  ? 'rgba(28, 26, 23, 0.86)'
-                  : 'rgba(28, 26, 23, 0.50)'
+                  ? 'rgba(20, 20, 18, 0.86)'
+                  : 'rgba(20, 20, 18, 0.50)'
                 : scaffoldLevel === 0
                   ? 'rgba(255, 245, 224, 0.88)'
                   : 'rgba(242, 238, 230, 0.48)';
@@ -1772,36 +2021,36 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 const isCurrent = idx === tile.typed.length && isActive;
                 const role = tile.entry.roles?.[idx];
                 const isYun = role === 'yun';
-                const slotBorderColor = isYun ? (isWash ? '#9C6414' : '#E8B356') : zoneColor;
+                const slotBorderColor = isYun ? (isWash ? '#4E4E4A' : '#E8B356') : zoneColor;
 
                 drawRoundedRect(ctx, startX, slotY, slotW, slotH, 6);
                 if (isTyped) {
-                  ctx.fillStyle = isWash ? 'rgba(31, 110, 82, 0.16)' : 'rgba(46, 168, 126, 0.30)';
+                  ctx.fillStyle = isWash ? 'rgba(20, 20, 18, 0.14)' : 'rgba(46, 168, 126, 0.30)';
                   ctx.fill();
-                  ctx.strokeStyle = isWash ? '#1F6E52' : '#38C793';
+                  ctx.strokeStyle = isWash ? '#181817' : '#38C793';
                   ctx.lineWidth = 1.3;
                   ctx.stroke();
                 } else if (isCurrent) {
                   ctx.fillStyle = isYun
                     ? isWash
-                      ? 'rgba(156, 100, 20, 0.16)'
+                      ? 'rgba(48, 48, 44, 0.12)'
                       : 'rgba(216, 155, 60, 0.24)'
                     : isWash
-                      ? 'rgba(31, 110, 82, 0.14)'
+                      ? 'rgba(20, 20, 18, 0.10)'
                       : 'rgba(56, 168, 133, 0.22)';
                   ctx.fill();
                   ctx.strokeStyle = slotBorderColor;
                   ctx.lineWidth = 1.4;
                   ctx.stroke();
                 } else {
-                  ctx.fillStyle = isWash ? 'rgba(247, 243, 234, 0.82)' : 'rgba(15, 20, 29, 0.72)';
+                  ctx.fillStyle = isWash ? 'rgba(248, 247, 243, 0.85)' : 'rgba(15, 20, 29, 0.72)';
                   ctx.fill();
                   ctx.strokeStyle = isYun
                     ? isWash
-                      ? 'rgba(156, 100, 20, 0.42)'
+                      ? 'rgba(48, 48, 44, 0.36)'
                       : 'rgba(216, 155, 60, 0.4)'
                     : isWash
-                      ? 'rgba(28, 26, 23, 0.20)'
+                      ? 'rgba(20, 20, 18, 0.20)'
                       : 'rgba(242, 238, 230, 0.16)';
                   ctx.lineWidth = 1;
                   ctx.stroke();
@@ -1815,14 +2064,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 if (letterAlpha > 0) {
                   ctx.fillStyle = isTyped
                     ? isWash
-                      ? '#185B43'
+                      ? '#111110'
                       : '#6AF0BE'
                     : isYun
                       ? isWash
-                        ? `rgba(156, 100, 20, ${letterAlpha})`
+                        ? `rgba(60, 60, 56, ${letterAlpha})`
                         : `rgba(245, 200, 110, ${letterAlpha})`
                       : isWash
-                        ? `rgba(28, 26, 23, ${letterAlpha})`
+                        ? `rgba(20, 20, 18, ${letterAlpha})`
                         : `rgba(255, 249, 238, ${letterAlpha})`;
                   ctx.font = isFocusMode
                     ? '700 15px "JetBrains Mono", monospace'
@@ -1849,10 +2098,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 ctx.fillStyle =
                   i < tile.typed.length
                     ? isWash
-                      ? 'rgba(31, 110, 82, 0.80)'
+                      ? 'rgba(20, 20, 18, 0.80)'
                       : 'rgba(52, 211, 153, 0.75)'
                     : isWash
-                      ? 'rgba(28, 26, 23, 0.18)'
+                      ? 'rgba(20, 20, 18, 0.18)'
                       : 'rgba(242, 238, 230, 0.14)';
                 ctx.beginPath();
                 ctx.arc(-totalDotW / 2 + i * dotGap, 62, 2.5, 0, Math.PI * 2);
@@ -1860,7 +2109,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               }
             }
 
-            // Explicit cinnabar error reminder & recovery hint when user strikes wrong key
+            // Explicit error reminder & recovery hint when user strikes wrong key
             if (
               isFocusMode &&
               isActive &&
@@ -1878,14 +2127,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                     : `誤按 ${s.lastErrorKey!.toUpperCase()} · 再錯將自動顯示鍵碼`;
               ctx.fillStyle = showImeHint
                 ? isWash
-                  ? '#9C6414'
+                  ? '#3E3E3A'
                   : '#F2D59B'
                 : isRescueActive
                   ? isWash
-                    ? '#9C6414'
+                    ? '#2D2D2A'
                     : '#E8B356'
                   : isWash
-                    ? '#B83B2A'
+                    ? '#141413'
                     : '#F06454';
               ctx.font = '600 11px "Plus Jakarta Sans", sans-serif';
               ctx.textAlign = 'center';
@@ -1900,62 +2149,134 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.restore();
           }
 
+          // Completed glyph ink-dissolve afterimages in wash mode (擴散淡出)
+          if (isWash) {
+            for (const d of s.dissolves) {
+              if (!d.active) continue;
+              const tNorm = Math.min(1, d.age / d.duration);
+              const ease = 1 - Math.pow(1 - tNorm, 2);
+              const scale = 1 + ease * 0.14;
+              const fade = Math.pow(1 - tNorm, 1.55);
+              ctx.save();
+              ctx.translate(d.x, d.y);
+              ctx.scale(scale, scale);
+
+              // Soft absorbing ink mist behind fading glyph
+              const haloR = d.glyphSize * (0.95 + ease * 0.55);
+              const dGrad = ctx.createRadialGradient(0, d.glyphY, 2, 0, d.glyphY, haloR);
+              dGrad.addColorStop(0, `rgba(20, 20, 18, ${(fade * 0.16).toFixed(3)})`);
+              dGrad.addColorStop(0.55, `rgba(56, 56, 52, ${(fade * 0.065).toFixed(3)})`);
+              dGrad.addColorStop(1, 'rgba(243, 241, 236, 0)');
+              ctx.fillStyle = dGrad;
+              ctx.beginPath();
+              ctx.arc(0, d.glyphY, haloR, 0, Math.PI * 2);
+              ctx.fill();
+
+              if (d.char !== '𠂇') {
+                ctx.globalAlpha = fade * 0.42;
+                ctx.fillStyle = '#141413';
+                ctx.font = `700 ${d.glyphSize}px "Noto Serif TC", serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(d.char, 0, d.glyphY);
+              }
+              ctx.restore();
+            }
+          }
+
+          // Organic sumi ink-wash diffusion plumes in wash mode (水墨暈入淡出)
+          if (isWash) {
+            for (const pl of s.plumes) {
+              if (!pl.active) continue;
+              const tNorm = Math.min(1, pl.age / pl.duration);
+              const easeOut = 1 - Math.pow(1 - tNorm, 2.2);
+              const r = pl.rStart + (pl.rMax - pl.rStart) * easeOut;
+              const envAlpha =
+                tNorm < 0.22
+                  ? pl.peakAlpha * (tNorm / 0.22)
+                  : pl.peakAlpha * Math.pow(1 - (tNorm - 0.22) / 0.78, 1.45);
+              if (envAlpha <= 0.004) continue;
+
+              ctx.save();
+              ctx.translate(pl.x, pl.y);
+              ctx.rotate(pl.angle);
+              ctx.scale(1, pl.aspect);
+              const grad = ctx.createRadialGradient(0, 0, Math.max(1, r * 0.06), 0, 0, r);
+              const baseDark = pl.isError ? '16, 16, 15' : '22, 22, 20';
+              grad.addColorStop(0, `rgba(${baseDark}, ${(envAlpha * 0.92).toFixed(3)})`);
+              grad.addColorStop(0.42, `rgba(52, 52, 48, ${(envAlpha * 0.48).toFixed(3)})`);
+              grad.addColorStop(0.76, `rgba(92, 92, 86, ${(envAlpha * 0.16).toFixed(3)})`);
+              grad.addColorStop(1, 'rgba(243, 241, 236, 0)');
+              ctx.fillStyle = grad;
+              ctx.beginPath();
+              ctx.arc(0, 0, r, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            }
+          }
+
           // Concentric ink-wash strike ripples
           for (const rp of s.ripples) {
             if (!rp.active) continue;
             ctx.save();
             const alpha = Math.max(0, rp.alpha);
             if (isWash) {
-              const haloGrad = ctx.createRadialGradient(rp.x, rp.y, Math.max(2, rp.r * 0.55), rp.x, rp.y, rp.r);
-              haloGrad.addColorStop(0, 'rgba(242, 237, 226, 0)');
-              haloGrad.addColorStop(0.7, rp.color);
-              haloGrad.addColorStop(1, 'rgba(242, 237, 226, 0)');
-              ctx.globalAlpha = alpha * 0.22;
+              const haloGrad = ctx.createRadialGradient(rp.x, rp.y, Math.max(2, rp.r * 0.52), rp.x, rp.y, rp.r * 1.06);
+              haloGrad.addColorStop(0, 'rgba(243, 241, 236, 0)');
+              haloGrad.addColorStop(0.72, rp.color);
+              haloGrad.addColorStop(1, 'rgba(243, 241, 236, 0)');
+              ctx.globalAlpha = alpha * 0.34;
               ctx.fillStyle = haloGrad;
               ctx.beginPath();
-              ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+              ctx.arc(rp.x, rp.y, rp.r * 1.06, 0, Math.PI * 2);
               ctx.fill();
+
+              ctx.globalAlpha = alpha * 0.62;
+              ctx.strokeStyle = rp.color;
+              ctx.lineWidth = rp.lineWidth;
+              if (rp.dashed) ctx.setLineDash([7, 5]);
+              ctx.beginPath();
+              ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+              ctx.stroke();
+              if (rp.dashed) ctx.setLineDash([]);
+            } else {
+              ctx.globalAlpha = alpha;
+              ctx.strokeStyle = rp.color;
+              ctx.lineWidth = rp.lineWidth;
+              ctx.beginPath();
+              ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+              ctx.stroke();
             }
-            ctx.globalAlpha = alpha;
-            ctx.strokeStyle = rp.color;
-            ctx.lineWidth = rp.lineWidth;
-            ctx.beginPath();
-            ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
-            ctx.stroke();
             ctx.restore();
           }
 
-          // Particles (ink splatters with soft wash halo in wash mode)
-          for (const p of s.particles) {
-            if (!p.active) continue;
-            ctx.save();
-            const pAlpha = Math.max(0, p.alpha);
-            if (isWash) {
-              ctx.globalAlpha = pAlpha * 0.24;
+          // Particles (night ink sparks only; wash mode uses organic plumes above!)
+          if (!isWash) {
+            for (const p of s.particles) {
+              if (!p.active) continue;
+              ctx.save();
+              ctx.globalAlpha = Math.max(0, p.alpha);
               ctx.fillStyle = p.color;
               ctx.beginPath();
-              ctx.arc(p.x, p.y, p.size * 1.9, 0, Math.PI * 2);
+              ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
               ctx.fill();
+              ctx.restore();
             }
-            ctx.globalAlpha = pAlpha;
-            ctx.fillStyle = p.color;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
           }
 
-          // Float popups
+          // Float popups (soft ink bleed-in & dissolve in wash mode)
           for (const f of s.floats) {
             if (!f.active) continue;
             ctx.save();
             ctx.globalAlpha = Math.max(0, f.alpha);
             ctx.textAlign = 'center';
             ctx.fillStyle = f.color;
-            ctx.font = '700 15px "JetBrains Mono", monospace';
+            ctx.font = isWash
+              ? '700 15px "Noto Serif TC", Georgia, serif'
+              : '700 15px "JetBrains Mono", monospace';
             ctx.fillText(f.text, f.x, f.y);
             if (f.subText) {
-              ctx.fillStyle = isWash ? 'rgba(28, 26, 23, 0.72)' : 'rgba(242, 238, 230, 0.78)';
+              ctx.fillStyle = isWash ? 'rgba(20, 20, 18, 0.72)' : 'rgba(242, 238, 230, 0.78)';
               ctx.font = '500 11px "Plus Jakarta Sans", sans-serif';
               ctx.fillText(f.subText, f.x, f.y + 16);
             }

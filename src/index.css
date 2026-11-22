@@ -32,27 +32,27 @@
   }
 
   :root[data-theme="wash"] {
-    /* 宣紙水墨 (Warm Xuan Paper & Ink-Wash Gradations) */
-    --dojo-canvas: #f2ede2;
-    --dojo-header: #eae3d5;
-    --dojo-surface: #e7dfd0;
-    --dojo-surface-2: #dcd2c0;
-    --dojo-surface-inset: #f6f2e9;
-    --dojo-text: #1c1a17;
-    --dojo-text-bright: #12110f;
-    --dojo-text-sub: #4f493f;
-    --dojo-text-muted: #777064;
-    --dojo-border: rgba(28, 26, 23, 0.13);
-    --dojo-border-strong: rgba(28, 26, 23, 0.26);
-    --dojo-pine: #1f6e52;
-    --dojo-pine-text: #185b43;
-    --dojo-pine-wash: rgba(31, 110, 82, 0.15);
-    --dojo-ochre: #9c6414;
-    --dojo-ochre-wash: rgba(156, 100, 20, 0.15);
-    --dojo-crimson: #b83b2a;
-    --dojo-crimson-hover: #c74331;
-    --dojo-crimson-text: #a53020;
-    --dojo-crimson-wash: rgba(184, 59, 42, 0.14);
+    /* 宣紙水墨 (Pure Monochromatic Xuan Paper & Sumi Ink Gradations) */
+    --dojo-canvas: #f3f1ec;
+    --dojo-header: #eceae3;
+    --dojo-surface: #e8e5dd;
+    --dojo-surface-2: #dedad0;
+    --dojo-surface-inset: #f8f7f3;
+    --dojo-text: #1c1c1a;
+    --dojo-text-bright: #0f0f0e;
+    --dojo-text-sub: #4c4c48;
+    --dojo-text-muted: #75756f;
+    --dojo-border: rgba(20, 20, 18, 0.14);
+    --dojo-border-strong: rgba(20, 20, 18, 0.30);
+    --dojo-pine: #242422;
+    --dojo-pine-text: #141413;
+    --dojo-pine-wash: rgba(20, 20, 18, 0.10);
+    --dojo-ochre: #444440;
+    --dojo-ochre-wash: rgba(20, 20, 18, 0.08);
+    --dojo-crimson: #181817;
+    --dojo-crimson-hover: #2d2d2a;
+    --dojo-crimson-text: #141413;
+    --dojo-crimson-wash: rgba(20, 20, 18, 0.12);
   }
 
   html,
@@ -93,8 +93,13 @@
 @keyframes inkWashReveal {
   0% {
     opacity: 0;
-    transform: scale(0.97);
-    filter: blur(5px);
+    transform: scale(1.035);
+    filter: blur(6px);
+  }
+  60% {
+    opacity: 0.92;
+    transform: scale(1.004);
+    filter: blur(0.8px);
   }
   100% {
     opacity: 1;
@@ -106,8 +111,8 @@
 @keyframes inkWashSlideUp {
   0% {
     opacity: 0;
-    transform: translateY(8px) scale(0.985);
-    filter: blur(4px);
+    transform: translateY(6px) scale(1.015);
+    filter: blur(5px);
   }
   100% {
     opacity: 1;
@@ -118,15 +123,34 @@
 
 @keyframes inkBloomRipple {
   0% {
-    opacity: 0.78;
-    transform: scale(0.72);
+    opacity: 0;
+    transform: scale(0.84);
+    filter: blur(3px);
   }
-  50% {
-    opacity: 0.36;
+  26% {
+    opacity: 0.68;
+    transform: scale(1.06);
+    filter: blur(1.5px);
   }
   100% {
     opacity: 0;
-    transform: scale(1.88);
+    transform: scale(1.56);
+    filter: blur(7px);
+  }
+}
+
+@keyframes inkAuraFade {
+  0% {
+    opacity: 0;
+    transform: scale(0.76);
+  }
+  28% {
+    opacity: 0.85;
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.42);
   }
 }
 
@@ -141,15 +165,15 @@
   }
 }
 
-/* Global Xuan-paper fiber grain + ambient corner ink washes (used in wash theme) */
+/* Global Xuan-paper fiber grain + ambient corner ink washes (pure monochrome sumi ink in wash theme) */
 .dojo-ink-paper-bg {
-  background-color: #f2ede2;
+  background-color: #f3f1ec;
   background-image:
-    radial-gradient(ellipse 52% 46% at 8% 12%, rgba(28, 26, 23, 0.068) 0%, rgba(79, 73, 63, 0.024) 44%, transparent 74%),
-    radial-gradient(ellipse 48% 42% at 92% 88%, rgba(31, 110, 82, 0.052) 0%, rgba(119, 112, 100, 0.028) 46%, transparent 76%),
-    radial-gradient(ellipse 38% 34% at 84% 14%, rgba(156, 100, 20, 0.042) 0%, transparent 70%),
-    radial-gradient(ellipse 42% 38% at 14% 86%, rgba(28, 26, 23, 0.048) 0%, transparent 72%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='0.038'/%3E%3C/svg%3E");
+    radial-gradient(ellipse 52% 46% at 8% 12%, rgba(20, 20, 18, 0.075) 0%, rgba(64, 64, 60, 0.028) 44%, transparent 74%),
+    radial-gradient(ellipse 48% 42% at 92% 88%, rgba(28, 28, 26, 0.062) 0%, rgba(96, 96, 90, 0.028) 46%, transparent 76%),
+    radial-gradient(ellipse 38% 34% at 84% 14%, rgba(56, 56, 52, 0.045) 0%, transparent 70%),
+    radial-gradient(ellipse 42% 38% at 14% 86%, rgba(20, 20, 18, 0.052) 0%, transparent 72%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='0.04'/%3E%3C/svg%3E");
 }
 
 .dojo-ink-mist-layer {
@@ -158,15 +182,20 @@
 }
 
 [data-theme="wash"] .wash-enter {
-  animation: inkWashReveal 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: inkWashReveal 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 [data-theme="wash"] .wash-enter-soft {
-  animation: inkWashSlideUp 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: inkWashSlideUp 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .ink-bloom-ring {
-  animation: inkBloomRipple 440ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: inkBloomRipple 560ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity, filter;
+}
+
+.ink-aura-fade {
+  animation: inkAuraFade 620ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   will-change: transform, opacity;
 }
 
@@ -177,7 +206,8 @@
   .dojo-ink-mist-layer,
   [data-theme="wash"] .wash-enter,
   [data-theme="wash"] .wash-enter-soft,
-  .ink-bloom-ring {
+  .ink-bloom-ring,
+  .ink-aura-fade {
     animation: none !important;
     transition: none !important;
   }

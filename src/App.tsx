@@ -892,19 +892,19 @@ export default function App() {
           >
             <defs>
               <radialGradient id="globalInkMistTL" cx="12%" cy="15%" r="44%">
-                <stop offset="0%" stopColor="#1C1A17" stopOpacity="0.13" />
-                <stop offset="50%" stopColor="#6E6659" stopOpacity="0.055" />
-                <stop offset="100%" stopColor="#F2EDE2" stopOpacity="0" />
+                <stop offset="0%" stopColor="#141413" stopOpacity="0.13" />
+                <stop offset="50%" stopColor="#5E5E59" stopOpacity="0.055" />
+                <stop offset="100%" stopColor="#F3F1EC" stopOpacity="0" />
               </radialGradient>
               <radialGradient id="globalInkMistBR" cx="88%" cy="86%" r="46%">
-                <stop offset="0%" stopColor="#1F6E52" stopOpacity="0.095" />
-                <stop offset="48%" stopColor="#4F493F" stopOpacity="0.05" />
-                <stop offset="100%" stopColor="#F2EDE2" stopOpacity="0" />
+                <stop offset="0%" stopColor="#262624" stopOpacity="0.10" />
+                <stop offset="48%" stopColor="#52524D" stopOpacity="0.05" />
+                <stop offset="100%" stopColor="#F3F1EC" stopOpacity="0" />
               </radialGradient>
               <radialGradient id="globalInkMistTR" cx="86%" cy="16%" r="36%">
-                <stop offset="0%" stopColor="#9C6414" stopOpacity="0.06" />
-                <stop offset="55%" stopColor="#5D5549" stopOpacity="0.028" />
-                <stop offset="100%" stopColor="#F2EDE2" stopOpacity="0" />
+                <stop offset="0%" stopColor="#3B3B38" stopOpacity="0.075" />
+                <stop offset="55%" stopColor="#6E6E68" stopOpacity="0.032" />
+                <stop offset="100%" stopColor="#F3F1EC" stopOpacity="0" />
               </radialGradient>
               <filter id="globalInkCloudBlur" x="-15%" y="-15%" width="130%" height="130%">
                 <feGaussianBlur stdDeviation="26" />
@@ -937,14 +937,14 @@ export default function App() {
             {/* Distant ink-wash mountain & valley mist ridges */}
             <path
               d="M-60 765 Q 165 620, 380 705 T 810 675 T 1260 610 L 1260 840 L -60 840 Z"
-              fill="#26221D"
-              fillOpacity="0.058"
+              fill="#222220"
+              fillOpacity="0.062"
               filter="url(#globalInkCloudBlur)"
             />
             <path
               d="M-40 805 Q 240 695, 510 755 T 1010 700 T 1260 665 L 1260 840 L -40 840 Z"
-              fill="#1C1A17"
-              fillOpacity="0.042"
+              fill="#141413"
+              fillOpacity="0.045"
               filter="url(#globalInkCloudBlur)"
             />
           </svg>
@@ -961,14 +961,14 @@ export default function App() {
               referrerPolicy="no-referrer"
               onError={() => setHeroImgFailed(true)}
               className={`absolute inset-0 w-full h-full object-cover object-center transition-all duration-300 ${
-                isWash ? 'opacity-20 mix-blend-multiply saturate-40 contrast-95' : ''
+                isWash ? 'opacity-22 grayscale contrast-95 mix-blend-multiply' : ''
               }`}
             />
           ) : (
             <div
               className={`absolute inset-0 bg-gradient-to-br ${
                 isWash
-                  ? 'from-[#F2EDE2]/60 via-[#EBE3D3]/60 to-[#DFD5C0]/60'
+                  ? 'from-[#F3F1EC]/60 via-[#EAE8E1]/60 to-[#DFDDD5]/60'
                   : 'from-[#121722] via-[#171D29] to-[#0E1218]'
               }`}
             />
@@ -978,7 +978,7 @@ export default function App() {
             className="absolute inset-0 transition-opacity duration-300"
             style={{
               background: isWash
-                ? 'linear-gradient(90deg, rgba(242,237,226,0.92) 0%, rgba(242,237,226,0.80) 46%, rgba(242,237,226,0.34) 78%, rgba(242,237,226,0.14) 100%)'
+                ? 'linear-gradient(90deg, rgba(243,241,236,0.92) 0%, rgba(243,241,236,0.80) 46%, rgba(243,241,236,0.34) 78%, rgba(243,241,236,0.14) 100%)'
                 : 'linear-gradient(90deg, rgba(11,14,20,0.95) 0%, rgba(11,14,20,0.82) 44%, rgba(11,14,20,0.22) 76%, rgba(11,14,20,0.14) 100%)',
             }}
           />
@@ -1027,7 +1027,7 @@ export default function App() {
                         className={`w-2 h-2 rounded-full border ${
                           opt.id === 'night'
                             ? 'bg-[#121722] border-[#6E788A]'
-                            : 'bg-[#F2EDE2] border-[#9C6414]/65'
+                            : 'bg-[#F3F1EC] border-[#242422]/75'
                         }`}
                       />
                       <span className="hidden sm:inline">{t(opt.label)}</span>
@@ -1075,8 +1075,8 @@ export default function App() {
                 width="54"
                 height="54"
                 rx="6"
-                fill={isWash ? '#B83B2A' : '#C93E2D'}
-                stroke={isWash ? '#8F291C' : '#E8715F'}
+                fill={isWash ? '#181817' : '#C93E2D'}
+                stroke={isWash ? '#383834' : '#E8715F'}
                 strokeWidth="1.5"
               />
               <rect
@@ -1086,7 +1086,7 @@ export default function App() {
                 height="44"
                 rx="3"
                 fill="none"
-                stroke="#F5EFE6"
+                stroke={isWash ? '#F3F1EC' : '#F5EFE6'}
                 strokeOpacity="0.65"
                 strokeWidth="1"
               />
@@ -1094,7 +1094,7 @@ export default function App() {
                 x="29"
                 y="48"
                 textAnchor="middle"
-                fill="#F7F3EC"
+                fill={isWash ? '#F8F7F3' : '#F7F3EC'}
                 fontSize="26"
                 fontWeight="700"
                 fontFamily="'Noto Serif TC', serif"
@@ -1105,7 +1105,7 @@ export default function App() {
               <text
                 x="74"
                 y="50"
-                fill={isWash ? '#1C1A17' : '#F6F2EA'}
+                fill={isWash ? '#141413' : '#F6F2EA'}
                 fontSize="44"
                 fontWeight="700"
                 letterSpacing="4"
@@ -1119,13 +1119,13 @@ export default function App() {
                 y1="66"
                 x2="128"
                 y2="66"
-                stroke={isWash ? '#9C6414' : '#D89B3C'}
+                stroke={isWash ? '#444440' : '#D89B3C'}
                 strokeWidth="1.5"
               />
               <text
                 x="138"
                 y="70"
-                fill={isWash ? '#5A5347' : '#B8B0A0'}
+                fill={isWash ? '#52524E' : '#B8B0A0'}
                 fontSize="13"
                 letterSpacing="1.8"
                 fontFamily="'Plus Jakarta Sans', sans-serif"
@@ -1158,7 +1158,7 @@ export default function App() {
                 onClick={() => startPlay(mode)}
                 className={`flex flex-col items-start justify-center gap-1 px-5 py-4 active:scale-[0.99] border rounded-xl transition-all cursor-pointer text-left ${
                   isWash
-                    ? 'bg-[#FAF6EE]/95 hover:bg-[#FFFDF8] border-[#1C1A17]/16 text-[#1C1A17] shadow-sm'
+                    ? 'bg-[#F9F8F5]/95 hover:bg-[#FFFFFF] border-[#141413]/18 text-[#141413] shadow-sm'
                     : 'bg-[#161D2A]/92 hover:bg-[#1E2738] border-[#F2EEE6]/16 text-[#F2EEE6]'
                 }`}
               >
@@ -1179,7 +1179,7 @@ export default function App() {
                 }}
                 className={`flex flex-col items-start justify-center gap-1 px-5 py-4 active:scale-[0.99] border rounded-xl transition-all cursor-pointer text-left ${
                   isWash
-                    ? 'bg-[#FAF6EE]/95 hover:bg-[#FFFDF8] border-[#9C6414]/32 text-[#1C1A17] shadow-sm'
+                    ? 'bg-[#F9F8F5]/95 hover:bg-[#FFFFFF] border-[#141413]/28 text-[#141413] shadow-sm'
                     : 'bg-[#161D2A]/92 hover:bg-[#1E2738] border-[#D89B3C]/35 text-[#F2EEE6]'
                 }`}
               >
@@ -1405,7 +1405,7 @@ export default function App() {
                 title={t('即時對比「疊層景深零掃視」與「上下分區」')}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[var(--dojo-text)] bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border-strong)] rounded-md transition-colors whitespace-nowrap cursor-pointer"
               >
-                <Layers className="w-3.5 h-3.5 text-[#3B7CC4] wash:text-[#1F6E52]" />
+                <Layers className="w-3.5 h-3.5 text-[#3B7CC4] wash:text-[#181817]" />
                 <span className="hidden lg:inline">
                   {t(layoutMode === 'depth' ? 'Alice 景深' : '上下分區')}
                 </span>
@@ -1646,13 +1646,13 @@ export default function App() {
       {gameState === 'PAUSED' && (
         <div
           className={`fixed inset-0 z-40 flex items-center justify-center p-4 ${
-            isWash ? 'bg-[#1C1A17]/35 backdrop-blur-[2px]' : 'bg-black/72'
+            isWash ? 'bg-[#141413]/35 backdrop-blur-[2px]' : 'bg-black/72'
           }`}
           role="dialog"
           aria-modal="true"
           aria-label={t('遊戲暫停')}
         >
-          <div className="wash-enter w-full max-w-md max-h-[90vh] overflow-y-auto bg-[var(--dojo-surface)] wash:bg-[#F3EEE3]/96 border border-[var(--dojo-border)] rounded-xl p-6 shadow-2xl wash:shadow-[0_18px_50px_rgba(28,26,23,0.18)]">
+          <div className="wash-enter w-full max-w-md max-h-[90vh] overflow-y-auto bg-[var(--dojo-surface)] wash:bg-[#F5F3EE]/96 border border-[var(--dojo-border)] rounded-xl p-6 shadow-2xl wash:shadow-[0_18px_50px_rgba(20,20,18,0.18)]">
             <h2 className="font-display text-2xl font-bold text-[var(--dojo-text-bright)]">{t('暫停鍛煉')}</h2>
             <p className="text-xs text-[var(--dojo-text-sub)] mt-1">
               {activeStage
@@ -1696,7 +1696,7 @@ export default function App() {
                       className={`w-2 h-2 rounded-full border ${
                         opt.id === 'night'
                           ? 'bg-[#121722] border-[#6E788A]'
-                          : 'bg-[#F2EDE2] border-[#9C6414]/70'
+                          : 'bg-[#F3F1EC] border-[#242422]/75'
                       }`}
                     />
                     <span>{t(opt.label)}</span>
@@ -1866,13 +1866,13 @@ export default function App() {
       {(gameState === 'ROUND_SUMMARY' || gameState === 'GAME_OVER') && roundResult && (
         <div
           className={`fixed inset-0 z-40 flex items-center justify-center p-4 ${
-            isWash ? 'bg-[#1C1A17]/35 backdrop-blur-[2px]' : 'bg-black/78'
+            isWash ? 'bg-[#141413]/35 backdrop-blur-[2px]' : 'bg-black/78'
           }`}
           role="dialog"
           aria-modal="true"
           aria-label={t('回合結算')}
         >
-          <div className="wash-enter w-full max-w-lg bg-[var(--dojo-surface)] wash:bg-[#F3EEE3]/96 border border-[var(--dojo-border)] rounded-xl p-6 sm:p-7 shadow-2xl wash:shadow-[0_18px_50px_rgba(28,26,23,0.18)]">
+          <div className="wash-enter w-full max-w-lg bg-[var(--dojo-surface)] wash:bg-[#F5F3EE]/96 border border-[var(--dojo-border)] rounded-xl p-6 sm:p-7 shadow-2xl wash:shadow-[0_18px_50px_rgba(20,20,18,0.18)]">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="font-display text-2xl font-bold text-[var(--dojo-text-bright)]">

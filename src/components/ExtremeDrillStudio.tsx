@@ -62,7 +62,7 @@ interface CompletedMarker {
 const THRESHOLD_OPTIONS = [1000, 1500, 2000] as const;
 
 const NIGHT_ROOT_COLORS = ['#2EA87E', '#D89B3C', '#9B75C2', '#D94A38'];
-const WASH_ROOT_COLORS = ['#1F6E52', '#9C6414', '#6D4396', '#B83B2A'];
+const WASH_ROOT_COLORS = ['#141413', '#444440', '#6E6E68', '#96958E'];
 
 export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
   mastery,
@@ -877,8 +877,8 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                       done.status === 'clean'
                         ? 'text-[var(--dojo-pine)] opacity-85'
                         : done.status === 'slow'
-                          ? 'text-[var(--dojo-ochre)]'
-                          : 'text-[var(--dojo-crimson)]';
+                          ? 'text-[var(--dojo-ochre)] wash:text-[#6E6E68]'
+                          : 'text-[var(--dojo-crimson)] wash:underline wash:decoration-dotted wash:underline-offset-4';
                   } else if (isCurrent) {
                     colorCls = 'text-[var(--dojo-text-bright)] font-bold border-b-2 border-[var(--dojo-crimson)] pb-0.5';
                   }
@@ -939,15 +939,25 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                       }`}
                     >
                       {isWash && (
-                        <span
-                          aria-hidden="true"
-                          className="pointer-events-none absolute -inset-6 rounded-full -z-10"
-                          style={{
-                            background: errorCue
-                              ? 'radial-gradient(circle, rgba(184, 59, 42, 0.14) 0%, transparent 70%)'
-                              : 'radial-gradient(circle, rgba(28, 26, 23, 0.06) 0%, rgba(31, 110, 82, 0.03) 45%, transparent 72%)',
-                          }}
-                        />
+                        <>
+                          <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute -inset-6 rounded-full -z-10"
+                            style={{
+                              background: errorCue
+                                ? 'radial-gradient(circle, rgba(20, 20, 18, 0.14) 0%, transparent 70%)'
+                                : 'radial-gradient(circle, rgba(20, 20, 18, 0.075) 0%, rgba(48, 48, 44, 0.035) 45%, transparent 72%)',
+                            }}
+                          />
+                          <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute -inset-8 rounded-full -z-10 blur-[6px] ink-aura-fade"
+                            style={{
+                              background:
+                                'radial-gradient(circle, rgba(20, 20, 18, 0.15) 0%, rgba(56, 56, 52, 0.05) 50%, transparent 76%)',
+                            }}
+                          />
+                        </>
                       )}
                       {activeEntry.char}
                     </div>
@@ -964,19 +974,33 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                             key={idx}
                             className={`relative w-11 h-12 rounded-lg border flex items-center justify-center font-mono-tabular text-xl font-bold uppercase transition-all ${
                               isFilled
-                                ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)] text-[var(--dojo-pine-text)] wash:shadow-[0_0_14px_rgba(31,110,82,0.22)]'
+                                ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)] text-[var(--dojo-pine-text)] wash:shadow-[0_0_14px_rgba(20,20,18,0.20)]'
                                 : isNext && errorCue
-                                  ? 'bg-[var(--dojo-crimson-wash)] border-[var(--dojo-crimson)] text-[var(--dojo-crimson-text)] wash:shadow-[0_0_14px_rgba(184,59,42,0.22)]'
+                                  ? 'bg-[var(--dojo-crimson-wash)] border-[var(--dojo-crimson)] wash:border-dashed text-[var(--dojo-crimson-text)] wash:shadow-[0_0_14px_rgba(20,20,18,0.24)]'
                                   : isNext
                                     ? 'bg-[var(--dojo-surface-2)] border-[var(--dojo-border-strong)] text-[var(--dojo-text-bright)]'
                                     : 'bg-[var(--dojo-surface)] border-[var(--dojo-border)] text-[var(--dojo-text-muted)]'
                             }`}
                           >
                             {isWash && isFilled && (
-                              <span
-                                aria-hidden="true"
-                                className="pointer-events-none absolute -inset-1 rounded-xl border border-[#1F6E52]/55 ink-bloom-ring"
-                              />
+                              <>
+                                <span
+                                  aria-hidden="true"
+                                  className="pointer-events-none absolute -inset-2.5 rounded-full blur-[4px] ink-aura-fade"
+                                  style={{
+                                    background:
+                                      'radial-gradient(circle, rgba(20, 20, 18, 0.22) 0%, transparent 74%)',
+                                  }}
+                                />
+                                <span
+                                  aria-hidden="true"
+                                  className="pointer-events-none absolute -inset-1 rounded-xl border border-[#181817]/40 ink-bloom-ring"
+                                  style={{
+                                    background:
+                                      'radial-gradient(circle, rgba(20, 20, 18, 0.12) 0%, transparent 72%)',
+                                  }}
+                                />
+                              </>
                             )}
                             {isFilled ? typedChar : revealLetter ? targetChar : '·'}
                           </div>
@@ -1027,7 +1051,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                                 targetIdx >= 0
                                   ? rootColors[Math.min(targetIdx, rootColors.length - 1)]
                                   : isWash
-                                    ? '#8F8778'
+                                    ? '#A4A39B'
                                     : '#4E5768';
                               return (
                                 <path
@@ -1155,7 +1179,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
         </main>
 
         {/* RIGHT 32% SLOW POOL & BOTTLENECK CHAMBER DECK (Single-Level Surface) */}
-        <aside className="lg:w-[32%] lg:min-w-[320px] shrink-0 bg-[var(--dojo-surface)] wash:bg-[#ECE4D4]/84 wash:backdrop-blur-xs border-t lg:border-t-0 lg:border-l border-[var(--dojo-border)] flex flex-col min-h-0 overflow-y-auto">
+        <aside className="lg:w-[32%] lg:min-w-[320px] shrink-0 bg-[var(--dojo-surface)] wash:bg-[#EAE7DF]/86 wash:backdrop-blur-xs border-t lg:border-t-0 lg:border-l border-[var(--dojo-border)] flex flex-col min-h-0 overflow-y-auto">
           {/* Upper Section: Slow & Error Pool */}
           <section className="p-5 border-b border-[var(--dojo-border)] flex-1 min-h-[240px] flex flex-col">
             <div className="flex items-baseline justify-between mb-1">
