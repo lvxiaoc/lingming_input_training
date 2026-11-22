@@ -1,7 +1,21 @@
+<div align="center">
+
 # 墨鍵道場（InkKey Dojo）
 
-專為**形碼輸入法學習者（以靈明輸入法為核心）**打造的節奏型肌肉記憶道場與極限苦練系統。  
-本專案結合「**五重道場漸進闖關**」、「**記憶宮殿筆畫雲圖**」、「**自由鍛煉**」與「**極限苦練室**」，協助學習者跨過形碼入門最困難的鍵位記憶、拆字猶豫與部件變形障礙，建立無須思考的條件反射盲打手感。
+**專為形碼輸入法（靈明輸入法）打造的節奏型肌肉記憶道場與極限苦練系統**
+
+[![立即開始線上練習](https://img.shields.io/badge/%E2%96%B6_%E7%AB%8B%E5%8D%B3%E9%96%8B%E5%A7%8B%E7%B7%9A%E4%B8%8A%E7%B7%B4%E7%BF%92-Launch_InkKey_Dojo-D94A38?style=for-the-badge)](https://lvxiaoc.github.io/lingming_input_training/)
+
+### 🌐 線上練習入口（點擊即用，免安裝）  
+**👉 [https://lvxiaoc.github.io/lingming_input_training/](https://lvxiaoc.github.io/lingming_input_training/) 👈**
+
+<br />
+
+<a href="https://lvxiaoc.github.io/lingming_input_training/">
+  <img src="./docs/preview-home.png" alt="墨鍵道場主畫面：五重道場闖關、自由鍛煉、極限苦練室" width="100%" />
+</a>
+
+</div>
 
 ---
 
@@ -44,6 +58,9 @@
 
 ### 3. 極限苦練室（Extreme Drill Studio）
 與全域熟練度完全互通的高強度純盲打沙盒，不依賴系統輸入法選字框：
+
+<img src="./docs/preview-drill.png" alt="極限苦練室畫面：高頻實戰文、猶豫計時與待消滅慢字錯字池" width="100%" />
+
 - **高頻實戰文 ＆ 自訂文段盲打**：內建 4 篇繁簡全收錄實戰短文（共 680 字訓練詞庫），並支援「貼入自訂文段」，自動過濾標點與未收錄字進行連續視線預讀跟打。
 - **難拆結構專攻**：專練多部件複雜結構，支援三檔猶豫閾值（`1.0s` / `1.5s` / `2.0s`；專攻模式預設 `0.95s`），超時、連錯 2 鍵或按 `Tab` 時，舞台旁**原地閃視**彩繪筆畫切分與字根拆碼，不中斷輸入節奏。
 - **慢字回爐地獄**：所有超時或錯鍵漢字自動進入「待消滅慢字／錯字池」，必須**連續 3 次在目標閾值內無誤直出**才會畢業移出。
@@ -77,38 +94,28 @@ npm run build
 
 ### 步驟 1：在 GitHub 建立新的 Repository
 1. 登入 GitHub，點擊右上角 `+` → **New repository**。
-2. 輸入倉庫名稱（例如 `inkkey-dojo`），選擇 **Public**（公開倉庫可免費使用 GitHub Pages）。
+2. 輸入純英文倉庫名稱（例如 `inkkey-dojo`），選擇 **Public**（公開倉庫可免費使用 GitHub Pages）。
 3. 保持預設空白（不要勾選自動建立 README 或 `.gitignore`），點擊 **Create repository**。
 
 ### 步驟 2：將專案程式碼推送到 GitHub
 在你的本機專案根目錄開啟終端機，依序執行：
 
 ```bash
-# 初始化 Git 並提交所有檔案
 git init
 git add .
 git commit -m "feat: 初始化墨鍵道場專案"
-
-# 設定預設分支為 main 並綁定遠端倉庫（請替換為你的帳號與倉庫名）
 git branch -M main
 git remote add origin https://github.com/<你的GitHub帳號>/<倉庫名稱>.git
-
-# 推送程式碼
 git push -u origin main
 ```
 
 ### 步驟 3：在倉庫設定啟用 GitHub Pages
-1. 進入你剛建立的 GitHub Repository 頁面，點擊上方分頁列中的 **Settings**。
-2. 在左側選單找到 **Code and automation** 區塊，點擊 **Pages**。
-3. 在 **Build and deployment** 下方的 **Source** 下拉選單，將選項切換為 **GitHub Actions**。
+1. 進入 GitHub Repository 頁面 → **Settings** → 左側 **Pages**。
+2. 在 **Build and deployment** 下方的 **Source** 下拉選單選擇 **GitHub Actions**。
 
 ### 步驟 4：確認自動編譯與取得分享網址
-1. 點擊倉庫上方的 **Actions** 分頁，你會看到名為 **Deploy to GitHub Pages** 的工作流程正在自動執行（包含 `npm install`、`npm run lint`、`npm run build` 與發佈）。
-2. 等待圖示轉為綠色打勾（約 1 分鐘），點擊該工作流程中的 **deploy** 節點，或回到 **Settings → Pages** 即可看到專屬網址：
-   ```text
-   https://<你的GitHub帳號>.github.io/<倉庫名稱>/
-   ```
-3. 日後只要有修改並再次 `git push` 至 `main` 或 `master` 分支，網站便會自動重建並覆蓋更新；亦可於 **Actions** 頁面點擊 **Run workflow** 手動觸發部署。
+1. 點擊倉庫上方的 **Actions** 分頁，等待 **Deploy to GitHub Pages** 顯示綠色打勾完成。
+2. 即可透過 `https://<你的GitHub帳號>.github.io/<倉庫名稱>/` 直接開啟與分享。
 
 ---
 
