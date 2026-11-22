@@ -37,7 +37,7 @@ export interface DrillPassage {
   simpText: string;
 }
 
-// 擴充苦練專用高頻漢字＋易猶豫難拆字（每一個字根皆嚴格對應 LINGMING_ROOT_MAP 官方 269 根）
+// 擴充實戰專練高頻漢字＋易猶豫難拆字（每一個字根皆嚴格對應 LINGMING_ROOT_MAP 官方 269 根）
 const EXTRA_DRILL_SPLITS: Array<{
   char: string;
   roots: string[];

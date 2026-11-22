@@ -37,6 +37,7 @@ import {
   SlowGlyphRecord,
 } from '../engine/mastery';
 import { synth } from '../audio/synth';
+import { THEME_OPTIONS, ThemeMode } from '../data/theme';
 
 type DrillTab = 'passage' | 'hardsplit' | 'slowhell' | 'bottleneck';
 
@@ -45,6 +46,8 @@ interface ExtremeDrillStudioProps {
   onMasteryChange: (next: SchemeMasteryStore) => void;
   scriptMode: ScriptMode;
   onChangeScriptMode: (next: ScriptMode) => void;
+  themeMode: ThemeMode;
+  onChangeThemeMode: (next: ThemeMode) => void;
   muted: boolean;
   onToggleMute: () => void;
   onBack: () => void;
@@ -58,18 +61,23 @@ interface CompletedMarker {
 
 const THRESHOLD_OPTIONS = [1000, 1500, 2000] as const;
 
-const ROOT_COLORS = ['#2EA87E', '#D89B3C', '#9B75C2', '#D94A38'];
+const NIGHT_ROOT_COLORS = ['#2EA87E', '#D89B3C', '#9B75C2', '#D94A38'];
+const WASH_ROOT_COLORS = ['#1F6E52', '#9C6414', '#6D4396', '#B83B2A'];
 
 export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
   mastery,
   onMasteryChange,
   scriptMode,
   onChangeScriptMode,
+  themeMode,
+  onChangeThemeMode,
   muted,
   onToggleMute,
   onBack,
 }) => {
   const t = useUiText();
+  const isWash = themeMode === 'wash';
+  const rootColors = isWash ? WASH_ROOT_COLORS : NIGHT_ROOT_COLORS;
 
   const [tab, setTab] = useState<DrillTab>('passage');
   const [thresholdMs, setThresholdMs] = useState<number>(1500);
@@ -460,9 +468,9 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
   };
 
   return (
-    <div className="w-screen h-screen bg-[#0B0F17] text-[#F2EEE6] flex flex-col overflow-hidden">
+    <div className="relative z-10 w-screen h-screen bg-[var(--dojo-canvas)] wash:bg-transparent text-[var(--dojo-text)] flex flex-col overflow-hidden wash-enter">
       {/* ==================== STRICT 3-ZONE TOP BAR ==================== */}
-      <header className="shrink-0 h-14 px-5 sm:px-7 bg-[#0D1119] border-b border-[#F2EEE6]/10 flex items-center justify-between gap-6 z-30">
+      <header className="shrink-0 h-14 px-5 sm:px-7 bg-[var(--dojo-header)] wash:bg-[var(--dojo-header)]/88 wash:backdrop-blur-sm border-b border-[var(--dojo-border)] flex items-center justify-between gap-6 z-30">
         {/* Zone 1: Single-line brand / back */}
         <div className="flex items-center gap-3 whitespace-nowrap shrink-0">
           <button
@@ -471,20 +479,20 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
               synth.playClick();
               onBack();
             }}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-[#A8B0BE] hover:text-[#F2EEE6] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>{t('返回大廳')}</span>
           </button>
-          <span aria-hidden="true" className="text-[#4A5262]">·</span>
-          <span className="font-display text-sm font-bold tracking-wide text-[#F5F1E8] whitespace-nowrap shrink-0">
-            {t('極限苦練室')}
+          <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
+          <span className="font-display text-sm font-bold tracking-wide text-[var(--dojo-text-bright)] whitespace-nowrap shrink-0">
+            {t('文心實戰室')}
           </span>
         </div>
 
-        {/* Zone 2: Segmented mode switch + threshold + script selector */}
-        <nav className="hidden lg:flex items-center gap-4 shrink-0">
-          <div className="flex items-center gap-1 p-1 bg-[#121722] rounded-lg border border-[#F2EEE6]/8">
+        {/* Zone 2: Segmented mode switch + threshold + script + theme selector */}
+        <nav className="hidden lg:flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-1 p-1 bg-[var(--dojo-surface)] rounded-lg border border-[var(--dojo-border)]">
             <button
               type="button"
               onClick={() => {
@@ -494,8 +502,8 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
               }}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 tab === 'passage'
-                  ? 'bg-[#1F2736] text-[#F5F1E8]'
-                  : 'text-[#8D96A6] hover:text-[#E5E0D5]'
+                  ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)]'
+                  : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
               }`}
             >
               {t('高頻實戰文')}
@@ -509,8 +517,8 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
               }}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 tab === 'hardsplit'
-                  ? 'bg-[#1F2736] text-[#F5F1E8]'
-                  : 'text-[#8D96A6] hover:text-[#E5E0D5]'
+                  ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)]'
+                  : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
               }`}
             >
               {t('難拆結構專攻')}
@@ -520,16 +528,16 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
               onClick={handleLaunchSlowHell}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 tab === 'slowhell'
-                  ? 'bg-[#1F2736] text-[#F5F1E8]'
-                  : 'text-[#8D96A6] hover:text-[#E5E0D5]'
+                  ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)]'
+                  : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
               }`}
             >
-              {t('慢字回爐地獄')}
+              {t('慢字回爐精修')}
             </button>
           </div>
 
-          <div className="flex items-center gap-1 p-1 bg-[#121722] rounded-lg border border-[#F2EEE6]/8">
-            <span className="px-2 text-[11px] text-[#7D8696] whitespace-nowrap">{t('猶豫閾值')}</span>
+          <div className="flex items-center gap-1 p-1 bg-[var(--dojo-surface)] rounded-lg border border-[var(--dojo-border)]">
+            <span className="px-2 text-[11px] text-[var(--dojo-text-muted)] whitespace-nowrap">{t('猶豫閾值')}</span>
             {THRESHOLD_OPTIONS.map((ms) => (
               <button
                 key={ms}
@@ -537,8 +545,8 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                 onClick={() => setThresholdMs(ms)}
                 className={`px-2 py-1 text-[11px] font-mono-tabular rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   thresholdMs === ms
-                    ? 'bg-[#2EA87E]/20 text-[#7CE5BC]'
-                    : 'text-[#8D96A6] hover:text-[#E5E0D5]'
+                    ? 'bg-[var(--dojo-pine-wash)] text-[var(--dojo-pine-text)] font-semibold'
+                    : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
                 }`}
               >
                 {(ms / 1000).toFixed(1)}s
@@ -546,7 +554,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
             ))}
           </div>
 
-          <div className="flex items-center gap-1 p-1 bg-[#121722] rounded-lg border border-[#F2EEE6]/8">
+          <div className="flex items-center gap-1 p-1 bg-[var(--dojo-surface)] rounded-lg border border-[var(--dojo-border)]">
             {SCRIPT_MODE_OPTIONS.map((opt) => (
               <button
                 key={opt.id}
@@ -554,8 +562,31 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                 onClick={() => onChangeScriptMode(opt.id)}
                 className={`px-2 py-1 text-[11px] rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   scriptMode === opt.id
-                    ? 'bg-[#1F2736] text-[#F5F1E8]'
-                    : 'text-[#8D96A6] hover:text-[#E5E0D5]'
+                    ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)] font-medium'
+                    : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
+                }`}
+              >
+                {t(opt.short)}
+              </button>
+            ))}
+          </div>
+
+          <div
+            className="flex items-center gap-1 p-1 bg-[var(--dojo-surface)] rounded-lg border border-[var(--dojo-border)]"
+            title={t('切換視覺色調（玄墨夜練 / 宣紙水墨）')}
+          >
+            {THEME_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => {
+                  synth.playClick();
+                  onChangeThemeMode(opt.id);
+                }}
+                className={`px-2 py-1 text-[11px] rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  themeMode === opt.id
+                    ? 'bg-[var(--dojo-ochre-wash)] text-[var(--dojo-ochre)] font-semibold'
+                    : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
                 }`}
               >
                 {t(opt.short)}
@@ -570,7 +601,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
             type="button"
             onClick={onToggleMute}
             aria-label={t(muted ? '開啟按鍵音效' : '關閉按鍵音效')}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8D96A6] hover:text-[#F2EEE6] hover:bg-[#171D29] transition-colors cursor-pointer"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] hover:bg-[var(--dojo-surface-2)] transition-colors cursor-pointer"
           >
             {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
@@ -579,7 +610,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
             <button
               type="button"
               onClick={handleLaunchSlowHell}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#D94A38] hover:bg-[#E45643] text-white rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Flame className="w-3.5 h-3.5 shrink-0" />
               <span className="font-mono-tabular">
@@ -594,7 +625,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                 setPasteDraft(customText);
                 setPasteOpen(true);
               }}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#1B2332] hover:bg-[#242F42] border border-[#F2EEE6]/14 text-[#F2EEE6] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border-strong)] text-[var(--dojo-text)] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
               <ClipboardPaste className="w-3.5 h-3.5 shrink-0" />
               <span>{t('貼入自訂文段')}</span>
@@ -606,10 +637,10 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
       {/* ==================== TWO-ZONE SANDBOX BODY (68% / 32%) ==================== */}
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
         {/* LEFT 68% INTERACTIVE STAGE */}
-        <main className="flex-1 lg:w-[68%] min-h-0 flex flex-col justify-between px-6 sm:px-10 py-5 bg-[#0B0F17] relative overflow-y-auto">
+        <main className="flex-1 lg:w-[68%] min-h-0 flex flex-col justify-between px-6 sm:px-10 py-5 bg-[var(--dojo-canvas)] wash:bg-transparent relative overflow-y-auto">
           {/* Mobile / Tablet compact controls (visible below lg) */}
-          <div className="flex lg:hidden flex-wrap items-center gap-2 pb-3 mb-3 border-b border-[#F2EEE6]/8">
-            <div className="flex items-center gap-1 p-1 bg-[#121722] rounded-lg border border-[#F2EEE6]/8">
+          <div className="flex lg:hidden flex-wrap items-center gap-2 pb-3 mb-3 border-b border-[var(--dojo-border)]">
+            <div className="flex items-center gap-1 p-1 bg-[var(--dojo-surface)] rounded-lg border border-[var(--dojo-border)]">
               <button
                 type="button"
                 onClick={() => {
@@ -617,7 +648,9 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                   setTab('passage');
                 }}
                 className={`px-2.5 py-1 text-xs rounded whitespace-nowrap cursor-pointer ${
-                  tab === 'passage' ? 'bg-[#1F2736] text-[#F5F1E8]' : 'text-[#8D96A6]'
+                  tab === 'passage'
+                    ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)]'
+                    : 'text-[var(--dojo-text-sub)]'
                 }`}
               >
                 {t('高頻實戰文')}
@@ -629,7 +662,9 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                   setTab('hardsplit');
                 }}
                 className={`px-2.5 py-1 text-xs rounded whitespace-nowrap cursor-pointer ${
-                  tab === 'hardsplit' ? 'bg-[#1F2736] text-[#F5F1E8]' : 'text-[#8D96A6]'
+                  tab === 'hardsplit'
+                    ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)]'
+                    : 'text-[var(--dojo-text-sub)]'
                 }`}
               >
                 {t('難拆結構專攻')}
@@ -638,34 +673,59 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                 type="button"
                 onClick={handleLaunchSlowHell}
                 className={`px-2.5 py-1 text-xs rounded whitespace-nowrap cursor-pointer ${
-                  tab === 'slowhell' ? 'bg-[#1F2736] text-[#F5F1E8]' : 'text-[#8D96A6]'
+                  tab === 'slowhell'
+                    ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)]'
+                    : 'text-[var(--dojo-text-sub)]'
                 }`}
               >
-                {t('慢字回爐地獄')}
+                {t('慢字回爐精修')}
               </button>
             </div>
-            <div className="flex items-center gap-1 p-1 bg-[#121722] rounded-lg border border-[#F2EEE6]/8">
+            <div className="flex items-center gap-1 p-1 bg-[var(--dojo-surface)] rounded-lg border border-[var(--dojo-border)]">
               {THRESHOLD_OPTIONS.map((ms) => (
                 <button
                   key={ms}
                   type="button"
                   onClick={() => setThresholdMs(ms)}
                   className={`px-2 py-1 text-[11px] font-mono-tabular rounded whitespace-nowrap cursor-pointer ${
-                    thresholdMs === ms ? 'bg-[#2EA87E]/20 text-[#7CE5BC]' : 'text-[#8D96A6]'
+                    thresholdMs === ms
+                      ? 'bg-[var(--dojo-pine-wash)] text-[var(--dojo-pine-text)] font-semibold'
+                      : 'text-[var(--dojo-text-sub)]'
                   }`}
                 >
                   {(ms / 1000).toFixed(1)}s
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-1 p-1 bg-[#121722] rounded-lg border border-[#F2EEE6]/8">
+            <div className="flex items-center gap-1 p-1 bg-[var(--dojo-surface)] rounded-lg border border-[var(--dojo-border)]">
               {SCRIPT_MODE_OPTIONS.map((opt) => (
                 <button
                   key={opt.id}
                   type="button"
                   onClick={() => onChangeScriptMode(opt.id)}
                   className={`px-2 py-1 text-[11px] rounded whitespace-nowrap cursor-pointer ${
-                    scriptMode === opt.id ? 'bg-[#1F2736] text-[#F5F1E8]' : 'text-[#8D96A6]'
+                    scriptMode === opt.id
+                      ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)]'
+                      : 'text-[var(--dojo-text-sub)]'
+                  }`}
+                >
+                  {t(opt.short)}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1 p-1 bg-[var(--dojo-surface)] rounded-lg border border-[var(--dojo-border)]">
+              {THEME_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    synth.playClick();
+                    onChangeThemeMode(opt.id);
+                  }}
+                  className={`px-2 py-1 text-[11px] rounded whitespace-nowrap cursor-pointer ${
+                    themeMode === opt.id
+                      ? 'bg-[var(--dojo-ochre-wash)] text-[var(--dojo-ochre)] font-semibold'
+                      : 'text-[var(--dojo-text-sub)]'
                   }`}
                 >
                   {t(opt.short)}
@@ -675,27 +735,27 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
           </div>
 
           {/* Quiet Stage Sub-Bar: Unboxed Tabular Stats + Passage Switcher */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#F2EEE6]/8">
-            <div className="flex items-center gap-2.5 text-xs text-[#9AA3B2] font-mono-tabular">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[var(--dojo-border)]">
+            <div className="flex items-center gap-2.5 text-xs text-[var(--dojo-text-sub)] font-mono-tabular">
               <span>
-                {t('直出率')} <strong className="text-[#2EA87E] font-semibold">{cleanRate}%</strong>
+                {t('直出率')} <strong className="text-[var(--dojo-pine)] font-semibold">{cleanRate}%</strong>
               </span>
-              <span aria-hidden="true" className="text-[#4A5262]">·</span>
+              <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
               <span>
-                {t('均速')} <strong className="text-[#F2EEE6] font-semibold">{avgCharMs > 0 ? `${avgCharMs}ms` : '--'}</strong>
+                {t('均速')} <strong className="text-[var(--dojo-text)] font-semibold">{avgCharMs > 0 ? `${avgCharMs}ms` : '--'}</strong>
               </span>
-              <span aria-hidden="true" className="text-[#4A5262]">·</span>
+              <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
               <span>
-                {t('連擊')} <strong className="text-[#D89B3C] font-semibold">{combo}x</strong>
+                {t('連擊')} <strong className="text-[var(--dojo-ochre)] font-semibold">{combo}x</strong>
               </span>
-              <span aria-hidden="true" className="text-[#4A5262]">·</span>
+              <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
               <span>
-                {t('進度')} <strong className="text-[#F2EEE6] font-semibold">{Math.min(cursor, deck.length)}/{deck.length}</strong>
+                {t('進度')} <strong className="text-[var(--dojo-text)] font-semibold">{Math.min(cursor, deck.length)}/{deck.length}</strong>
               </span>
               {tab === 'bottleneck' && bottleneckKey && (
                 <>
-                  <span aria-hidden="true" className="text-[#4A5262]">·</span>
-                  <span className="text-[#D89B3C]">
+                  <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
+                  <span className="text-[var(--dojo-ochre)] font-medium">
                     {t('瓶頸專攻')} {bottleneckKey.toUpperCase()}（{getChamberSummaryForKey(bottleneckKey).primaryAnchor}）
                   </span>
                 </>
@@ -715,8 +775,8 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                       }}
                       className={`px-2.5 py-1 text-[11px] rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                         !usingCustomText && passageIdx === idx
-                          ? 'bg-[#1D2534] text-[#F5F1E8]'
-                          : 'text-[#7D8696] hover:text-[#D5CFC2]'
+                          ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)] font-medium'
+                          : 'text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text)]'
                       }`}
                     >
                       {t(p.title.slice(0, 4))}
@@ -730,8 +790,8 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                     }}
                     className={`px-2.5 py-1 text-[11px] rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                       usingCustomText || pasteOpen
-                        ? 'bg-[#D89B3C]/20 text-[#F2C36B]'
-                        : 'text-[#8D96A6] hover:text-[#F2EEE6]'
+                        ? 'bg-[var(--dojo-ochre-wash)] text-[var(--dojo-ochre)] font-medium'
+                        : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
                     }`}
                   >
                     {t('貼入文段')}
@@ -743,7 +803,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                 <button
                   type="button"
                   onClick={() => setDeckVersion((v) => v + 1)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-[#9AA3B2] hover:text-[#F2EEE6] rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <RotateCcw className="w-3 h-3" />
                   <span>{t('換一組')}</span>
@@ -754,12 +814,12 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
 
           {/* Inline Custom Text Paste Drawer */}
           {pasteOpen && (
-            <div className="my-4 p-4 bg-[#121722] border border-[#F2EEE6]/14 rounded-xl">
+            <div className="my-4 p-4 bg-[var(--dojo-surface)] border border-[var(--dojo-border-strong)] rounded-xl">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-[#F5F1E8]">
+                <span className="text-xs font-semibold text-[var(--dojo-text-bright)]">
                   {t('貼入任意文章進行純鍵碼盲打跟打')}
                 </span>
-                <span className="text-[11px] font-mono-tabular text-[#9AA3B2]">
+                <span className="text-[11px] font-mono-tabular text-[var(--dojo-text-sub)]">
                   {t('可練')} {pastePreview.drillableEntries.length} {t('字')} · {t('自動略過')}{' '}
                   {pastePreview.punctuationCount + pastePreview.skippedUnsupportedCount} {t('標點／未收錄')}
                 </span>
@@ -769,14 +829,14 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                 value={pasteDraft}
                 onChange={(e) => setPasteDraft(e.target.value)}
                 rows={4}
-                placeholder={t('在此貼入想苦練的文章段落、詩詞或常用筆記⋯⋯')}
-                className="w-full p-3 bg-[#0B0F17] border border-[#F2EEE6]/12 rounded-lg text-sm text-[#F2EEE6] placeholder-[#5A6273] focus:outline-none focus:border-[#D89B3C]/60 resize-none"
+                placeholder={t('在此貼入想專練的文章段落、詩詞或常用筆記⋯⋯')}
+                className="w-full p-3 bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] rounded-lg text-sm text-[var(--dojo-text)] placeholder-[var(--dojo-text-muted)] focus:outline-none focus:border-[var(--dojo-ochre)] resize-none"
               />
               <div className="flex items-center justify-end gap-2 mt-3">
                 <button
                   type="button"
                   onClick={() => setPasteOpen(false)}
-                  className="px-3 py-1.5 text-xs text-[#9AA3B2] hover:text-[#F2EEE6] cursor-pointer"
+                  className="px-3 py-1.5 text-xs text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] cursor-pointer"
                 >
                   {t('取消')}
                 </button>
@@ -789,7 +849,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                     setTab('passage');
                     setPasteOpen(false);
                   }}
-                  className="px-4 py-1.5 text-xs font-semibold bg-[#D94A38] hover:bg-[#E45643] disabled:opacity-40 text-white rounded-lg transition-colors cursor-pointer"
+                  className="px-4 py-1.5 text-xs font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] disabled:opacity-40 text-white rounded-lg transition-colors cursor-pointer"
                 >
                   {t('開始盲打')}
                 </button>
@@ -799,28 +859,28 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
 
           {/* Eye-Ahead Rolling Passage / Sequence Track */}
           {!isFinished && (
-            <div className="mt-5 px-4 py-3.5 bg-[#111620] border border-[#F2EEE6]/8 rounded-xl">
+            <div className="mt-5 px-4 py-3.5 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-xl">
               <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-2 font-display text-lg sm:text-xl leading-relaxed tracking-wide">
                 {ribbonTokens.map((tk, i) => {
                   if (tk.drillIndex === -1) {
                     return (
-                      <span key={`p-${i}`} className="text-[#565F70] select-none">
+                      <span key={`p-${i}`} className="text-[var(--dojo-text-muted)] select-none">
                         {tk.raw}
                       </span>
                     );
                   }
                   const done = results[tk.drillIndex];
                   const isCurrent = tk.drillIndex === cursor;
-                  let colorCls = 'text-[#7F8899]';
+                  let colorCls = 'text-[var(--dojo-text-sub)]';
                   if (done) {
                     colorCls =
                       done.status === 'clean'
-                        ? 'text-[#2EA87E]/80'
+                        ? 'text-[var(--dojo-pine)] opacity-85'
                         : done.status === 'slow'
-                          ? 'text-[#D89B3C]'
-                          : 'text-[#D94A38]';
+                          ? 'text-[var(--dojo-ochre)]'
+                          : 'text-[var(--dojo-crimson)]';
                   } else if (isCurrent) {
-                    colorCls = 'text-[#FFF9EE] font-bold border-b-2 border-[#D94A38] pb-0.5';
+                    colorCls = 'text-[var(--dojo-text-bright)] font-bold border-b-2 border-[var(--dojo-crimson)] pb-0.5';
                   }
                   return (
                     <span key={`d-${tk.drillIndex}-${i}`} className={`${colorCls} transition-colors`}>
@@ -842,8 +902,8 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                     <span
                       className={
                         isOverThreshold
-                          ? 'text-[#D89B3C] font-medium'
-                          : 'text-[#7D8696]'
+                          ? 'text-[var(--dojo-ochre)] font-medium'
+                          : 'text-[var(--dojo-text-muted)]'
                       }
                     >
                       {isOverThreshold
@@ -852,18 +912,18 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                     </span>
                     <span
                       className={
-                        isOverThreshold ? 'text-[#D89B3C] font-semibold' : 'text-[#A8B0BE]'
+                        isOverThreshold ? 'text-[var(--dojo-ochre)] font-semibold' : 'text-[var(--dojo-text-sub)]'
                       }
                     >
                       {elapsedMs}ms
                     </span>
                   </div>
-                  <div className="w-full h-1 bg-[#18202E] rounded-full overflow-hidden">
+                  <div className="w-full h-1 bg-[var(--dojo-surface-2)] rounded-full overflow-hidden">
                     <div
                       className="h-full transition-colors"
                       style={{
                         width: `${Math.min(100, (elapsedMs / thresholdMs) * 100)}%`,
-                        backgroundColor: isOverThreshold ? '#D89B3C' : '#2EA87E',
+                        backgroundColor: isOverThreshold ? 'var(--dojo-ochre)' : 'var(--dojo-pine)',
                       }}
                     />
                   </div>
@@ -873,10 +933,22 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-8 sm:gap-12">
                   <div className="flex flex-col items-center">
                     <div
-                      className={`font-display text-8xl sm:text-[112px] leading-none font-bold select-none transition-transform duration-150 ${
-                        errorCue ? 'text-[#F07D6C]' : 'text-[#FFF9EE]'
+                      key={`${activeEntry.char}_${cursor}`}
+                      className={`wash-enter relative font-display text-8xl sm:text-[112px] leading-none font-bold select-none transition-transform duration-150 ${
+                        errorCue ? 'text-[var(--dojo-crimson-text)]' : 'text-[var(--dojo-text-bright)]'
                       }`}
                     >
+                      {isWash && (
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute -inset-6 rounded-full -z-10"
+                          style={{
+                            background: errorCue
+                              ? 'radial-gradient(circle, rgba(184, 59, 42, 0.14) 0%, transparent 70%)'
+                              : 'radial-gradient(circle, rgba(28, 26, 23, 0.06) 0%, rgba(31, 110, 82, 0.03) 45%, transparent 72%)',
+                          }}
+                        />
+                      )}
                       {activeEntry.char}
                     </div>
 
@@ -890,16 +962,22 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                         return (
                           <div
                             key={idx}
-                            className={`w-11 h-12 rounded-lg border flex items-center justify-center font-mono-tabular text-xl font-bold uppercase transition-colors ${
+                            className={`relative w-11 h-12 rounded-lg border flex items-center justify-center font-mono-tabular text-xl font-bold uppercase transition-all ${
                               isFilled
-                                ? 'bg-[#142722] border-[#2EA87E] text-[#7CE5BC]'
+                                ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)] text-[var(--dojo-pine-text)] wash:shadow-[0_0_14px_rgba(31,110,82,0.22)]'
                                 : isNext && errorCue
-                                  ? 'bg-[#2A1517] border-[#D94A38] text-[#F59A8E]'
+                                  ? 'bg-[var(--dojo-crimson-wash)] border-[var(--dojo-crimson)] text-[var(--dojo-crimson-text)] wash:shadow-[0_0_14px_rgba(184,59,42,0.22)]'
                                   : isNext
-                                    ? 'bg-[#151C28] border-[#F2EEE6]/35 text-[#F2EEE6]'
-                                    : 'bg-[#111620] border-[#F2EEE6]/12 text-[#5E6778]'
+                                    ? 'bg-[var(--dojo-surface-2)] border-[var(--dojo-border-strong)] text-[var(--dojo-text-bright)]'
+                                    : 'bg-[var(--dojo-surface)] border-[var(--dojo-border)] text-[var(--dojo-text-muted)]'
                             }`}
                           >
+                            {isWash && isFilled && (
+                              <span
+                                aria-hidden="true"
+                                className="pointer-events-none absolute -inset-1 rounded-xl border border-[#1F6E52]/55 ink-bloom-ring"
+                              />
+                            )}
                             {isFilled ? typedChar : revealLetter ? targetChar : '·'}
                           </div>
                         );
@@ -909,15 +987,15 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                     {/* Wrong key cue or subtle helper */}
                     <div className="h-6 mt-3 flex items-center justify-center text-xs">
                       {errorCue ? (
-                        <span className="text-[#F07D6C] font-medium">
+                        <span className="text-[var(--dojo-crimson-text)] font-medium">
                           {t('錯鍵')} · {errorCue}
                         </span>
                       ) : imeWarning ? (
-                        <span className="text-[#D89B3C]">
+                        <span className="text-[var(--dojo-ochre)]">
                           {t('請將系統輸入法切換至英文狀態以直出字根')}
                         </span>
                       ) : (
-                        <span className="text-[#667082]">
+                        <span className="text-[var(--dojo-text-muted)]">
                           {t('Tab 閃看拆法 · Space 清空當前緩衝')}
                         </span>
                       )}
@@ -926,10 +1004,10 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
 
                   {/* In-Place Lightning X-Ray & Split Formula (revealed on timeout, 2 errors, or Tab) */}
                   {showXrayRescue && (
-                    <div className="flex flex-col items-center sm:items-start gap-3 p-4 bg-[#121722] border border-[#F2EEE6]/12 rounded-xl max-w-xs">
-                      <div className="flex items-center justify-between w-full gap-4 text-[11px] text-[#9AA3B2]">
-                        <span className="font-medium text-[#D89B3C]">{t('結構拆解閃視')}</span>
-                        <span className="font-mono-tabular uppercase text-[#F2EEE6]">
+                    <div className="flex flex-col items-center sm:items-start gap-3 p-4 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-xl max-w-xs">
+                      <div className="flex items-center justify-between w-full gap-4 text-[11px] text-[var(--dojo-text-sub)]">
+                        <span className="font-medium text-[var(--dojo-ochre)]">{t('結構拆解閃視')}</span>
+                        <span className="font-mono-tabular uppercase text-[var(--dojo-text)]">
                           {activeEntry.code}
                         </span>
                       </div>
@@ -947,14 +1025,16 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                               );
                               const strokeColor =
                                 targetIdx >= 0
-                                  ? ROOT_COLORS[Math.min(targetIdx, ROOT_COLORS.length - 1)]
-                                  : '#4E5768';
+                                  ? rootColors[Math.min(targetIdx, rootColors.length - 1)]
+                                  : isWash
+                                    ? '#8F8778'
+                                    : '#4E5768';
                               return (
                                 <path
                                   key={sIdx}
                                   d={d}
                                   fill={strokeColor}
-                                  fillOpacity={targetIdx >= 0 ? 0.92 : 0.4}
+                                  fillOpacity={targetIdx >= 0 ? 0.92 : 0.35}
                                 />
                               );
                             })}
@@ -966,19 +1046,19 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                         {activeEntry.rootDetails.map((rd, idx) => {
                           const color =
                             idx === activeEntry.rootDetails.length - 1 && activeEntry.rootDetails.length > 1
-                              ? ROOT_COLORS[3]
-                              : ROOT_COLORS[Math.min(idx, 2)];
+                              ? rootColors[3]
+                              : rootColors[Math.min(idx, 2)];
                           return (
                             <div
                               key={`${rd.radical}-${idx}`}
-                              className="flex items-center gap-1.5 px-2 py-1 bg-[#0B0F17] rounded-md border border-[#F2EEE6]/10 text-xs"
+                              className="flex items-center gap-1.5 px-2 py-1 bg-[var(--dojo-surface-inset)] rounded-md border border-[var(--dojo-border)] text-xs"
                             >
                               <span className="font-display text-base font-bold" style={{ color }}>
                                 {rd.radical}
                               </span>
-                              <span className="font-mono-tabular text-[11px] text-[#A8B0BE] uppercase">
+                              <span className="font-mono-tabular text-[11px] text-[var(--dojo-text-sub)] uppercase">
                                 {rd.chamberKey}
-                                <span className="text-[#667082]">({rd.ma})</span>
+                                <span className="text-[var(--dojo-text-muted)]">({rd.ma})</span>
                               </span>
                             </div>
                           );
@@ -990,35 +1070,35 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
 
                 {/* Graduation celebration toast */}
                 {graduatedBanner && (
-                  <div className="mt-4 text-xs font-medium text-[#7CE5BC]">
+                  <div className="mt-4 text-xs font-medium text-[var(--dojo-pine-text)]">
                     {graduatedBanner}
                   </div>
                 )}
               </div>
             ) : (
               /* SESSION COMPLETE SUMMARY IN STAGE */
-              <div className="w-full max-w-lg p-6 bg-[#121722] border border-[#F2EEE6]/12 rounded-xl text-center">
-                <h2 className="font-display text-2xl font-bold text-[#FFF9EE] mb-2">
-                  {t('本輪苦練完成')}
+              <div className="w-full max-w-lg p-6 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-xl text-center">
+                <h2 className="font-display text-2xl font-bold text-[var(--dojo-text-bright)] mb-2">
+                  {t('本輪實戰完成')}
                 </h2>
-                <p className="text-xs text-[#9AA3B2] mb-6">
+                <p className="text-xs text-[var(--dojo-text-sub)] mb-6">
                   {t('實戰延遲與慢字紀錄已同步寫入全域熟練度')}
                 </p>
 
-                <div className="grid grid-cols-3 gap-4 py-4 border-y border-[#F2EEE6]/10 mb-6 font-mono-tabular">
+                <div className="grid grid-cols-3 gap-4 py-4 border-y border-[var(--dojo-border)] mb-6 font-mono-tabular">
                   <div>
-                    <div className="text-[11px] font-sans text-[#7D8696] mb-1">{t('純直出率')}</div>
-                    <div className="text-2xl font-bold text-[#2EA87E]">{cleanRate}%</div>
+                    <div className="text-[11px] font-sans text-[var(--dojo-text-muted)] mb-1">{t('純直出率')}</div>
+                    <div className="text-2xl font-bold text-[var(--dojo-pine)]">{cleanRate}%</div>
                   </div>
                   <div>
-                    <div className="text-[11px] font-sans text-[#7D8696] mb-1">{t('實戰均速')}</div>
-                    <div className="text-2xl font-bold text-[#F5F1E8]">{avgCharMs}ms</div>
+                    <div className="text-[11px] font-sans text-[var(--dojo-text-muted)] mb-1">{t('實戰均速')}</div>
+                    <div className="text-2xl font-bold text-[var(--dojo-text-bright)]">{avgCharMs}ms</div>
                   </div>
                   <div>
-                    <div className="text-[11px] font-sans text-[#7D8696] mb-1">
+                    <div className="text-[11px] font-sans text-[var(--dojo-text-muted)] mb-1">
                       {tab === 'slowhell' ? t('移出達標') : t('記為慢字')}
                     </div>
-                    <div className="text-2xl font-bold text-[#D89B3C]">
+                    <div className="text-2xl font-bold text-[var(--dojo-ochre)]">
                       {tab === 'slowhell' ? sessionGraduated : sessionSlowAdded}
                     </div>
                   </div>
@@ -1029,7 +1109,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                     <button
                       type="button"
                       onClick={handleLaunchSlowHell}
-                      className="px-5 py-2.5 text-xs font-semibold bg-[#D94A38] hover:bg-[#E45643] text-white rounded-lg transition-colors cursor-pointer"
+                      className="px-5 py-2.5 text-xs font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors cursor-pointer"
                     >
                       {t('立刻清零慢字')} ({slowPool.length})
                     </button>
@@ -1037,7 +1117,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                   <button
                     type="button"
                     onClick={() => setDeckVersion((v) => v + 1)}
-                    className="px-5 py-2.5 text-xs font-semibold bg-[#1B2332] hover:bg-[#242F42] border border-[#F2EEE6]/14 text-[#F2EEE6] rounded-lg transition-colors cursor-pointer"
+                    className="px-5 py-2.5 text-xs font-semibold bg-[var(--dojo-surface-2)] hover:opacity-90 border border-[var(--dojo-border-strong)] text-[var(--dojo-text)] rounded-lg transition-colors cursor-pointer"
                   >
                     {t('再練一輪')}
                   </button>
@@ -1045,7 +1125,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                     <button
                       type="button"
                       onClick={() => setPassageIdx((i) => (i + 1) % DRILL_PASSAGES.length)}
-                      className="px-5 py-2.5 text-xs font-semibold text-[#A8B0BE] hover:text-[#F2EEE6] transition-colors cursor-pointer"
+                      className="px-5 py-2.5 text-xs font-semibold text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors cursor-pointer"
                     >
                       {t('下一篇短文')}
                     </button>
@@ -1056,7 +1136,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
           </div>
 
           {/* Quiet Bottom Context Line */}
-          <div className="pt-3 border-t border-[#F2EEE6]/8 flex items-center justify-between text-[11px] text-[#7D8696]">
+          <div className="pt-3 border-t border-[var(--dojo-border)] flex items-center justify-between text-[11px] text-[var(--dojo-text-muted)]">
             <span>
               {tab === 'passage'
                 ? usingCustomText
@@ -1075,35 +1155,35 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
         </main>
 
         {/* RIGHT 32% SLOW POOL & BOTTLENECK CHAMBER DECK (Single-Level Surface) */}
-        <aside className="lg:w-[32%] lg:min-w-[320px] shrink-0 bg-[#121722] border-t lg:border-t-0 lg:border-l border-[#F2EEE6]/10 flex flex-col min-h-0 overflow-y-auto">
+        <aside className="lg:w-[32%] lg:min-w-[320px] shrink-0 bg-[var(--dojo-surface)] wash:bg-[#ECE4D4]/84 wash:backdrop-blur-xs border-t lg:border-t-0 lg:border-l border-[var(--dojo-border)] flex flex-col min-h-0 overflow-y-auto">
           {/* Upper Section: Slow & Error Pool */}
-          <section className="p-5 border-b border-[#F2EEE6]/10 flex-1 min-h-[240px] flex flex-col">
+          <section className="p-5 border-b border-[var(--dojo-border)] flex-1 min-h-[240px] flex flex-col">
             <div className="flex items-baseline justify-between mb-1">
-              <h2 className="text-sm font-semibold text-[#F5F1E8]">
-                {t('待消滅慢字／錯字池')}
-                <span className="ml-2 font-mono-tabular text-[#D89B3C]">{slowPool.length}</span>
+              <h2 className="text-sm font-semibold text-[var(--dojo-text-bright)]">
+                {t('慢字／錯字精修池')}
+                <span className="ml-2 font-mono-tabular text-[var(--dojo-ochre)]">{slowPool.length}</span>
               </h2>
               {slowPool.length > 0 && (
                 <button
                   type="button"
                   onClick={handleClearSlowPool}
-                  className="text-[11px] text-[#7D8696] hover:text-[#D94A38] transition-colors cursor-pointer"
+                  className="text-[11px] text-[var(--dojo-text-muted)] hover:text-[var(--dojo-crimson-text)] transition-colors cursor-pointer"
                 >
                   {t('清空')}
                 </button>
               )}
             </div>
-            <p className="text-[11px] text-[#7D8696] mb-3">
+            <p className="text-[11px] text-[var(--dojo-text-muted)] mb-3">
               {t('連續')} {SLOW_POOL_GRADUATE_STREAK} {t('次在')} {(thresholdMs / 1000).toFixed(1)}s{' '}
               {t('內無錯直出即移出')}
             </p>
 
             {slowPool.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center text-xs text-[#667082] py-8 text-center">
+              <div className="flex-1 flex items-center justify-center text-xs text-[var(--dojo-text-muted)] py-8 text-center">
                 {t('目前尚無卡殼字，持續保持直出節奏')}
               </div>
             ) : (
-              <div className="divide-y divide-[#F2EEE6]/8 overflow-y-auto max-h-[280px]">
+              <div className="divide-y divide-[var(--dojo-border)] overflow-y-auto max-h-[280px]">
                 {slowPool.slice(0, 12).map((item) => {
                   const isSelected = inspectedChar === item.char;
                   return (
@@ -1114,18 +1194,20 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                         setInspectedChar((prev) => (prev === item.char ? null : item.char))
                       }
                       className={`w-full py-2.5 px-2 flex items-center justify-between gap-2 text-left transition-colors cursor-pointer ${
-                        isSelected ? 'bg-[#1A2232]' : 'hover:bg-[#171E2C]'
+                        isSelected
+                          ? 'bg-[var(--dojo-surface-2)]'
+                          : 'hover:bg-[var(--dojo-surface-2)]/65'
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="font-display text-xl font-bold text-[#F5F1E8] w-7 text-center shrink-0">
+                        <span className="font-display text-xl font-bold text-[var(--dojo-text-bright)] w-7 text-center shrink-0">
                           {item.char}
                         </span>
                         <div className="min-w-0">
-                          <div className="text-xs text-[#C8C3B8] truncate">
+                          <div className="text-xs text-[var(--dojo-text-sub)] truncate">
                             {item.parts.join(' · ')}
                           </div>
-                          <div className="text-[11px] font-mono-tabular text-[#7D8696] uppercase">
+                          <div className="text-[11px] font-mono-tabular text-[var(--dojo-text-muted)] uppercase">
                             {item.code}
                           </div>
                         </div>
@@ -1134,12 +1216,14 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                       <div className="flex items-center gap-3 shrink-0 text-xs font-mono-tabular">
                         <span
                           className={
-                            item.reason === 'error' ? 'text-[#D94A38] font-medium' : 'text-[#D89B3C] font-medium'
+                            item.reason === 'error'
+                              ? 'text-[var(--dojo-crimson-text)] font-medium'
+                              : 'text-[var(--dojo-ochre)] font-medium'
                           }
                         >
                           {item.reason === 'error' ? t('錯') : t('慢')} {item.lastLatencyMs}ms
                         </span>
-                        <span className="text-[#8D96A6]">
+                        <span className="text-[var(--dojo-text-sub)]">
                           {item.fastCleanStreak}/{SLOW_POOL_GRADUATE_STREAK}
                         </span>
                       </div>
@@ -1151,19 +1235,19 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
 
             {/* Quick inline inspection of clicked slow glyph */}
             {inspectedChar && inspectedEntry && (
-              <div className="mt-3 pt-3 border-t border-[#F2EEE6]/10 flex items-center justify-between gap-3">
+              <div className="mt-3 pt-3 border-t border-[var(--dojo-border)] flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-xs">
-                  <Eye className="w-3.5 h-3.5 text-[#D89B3C] shrink-0" />
-                  <span className="font-display text-base font-bold text-[#F5F1E8]">
+                  <Eye className="w-3.5 h-3.5 text-[var(--dojo-ochre)] shrink-0" />
+                  <span className="font-display text-base font-bold text-[var(--dojo-text-bright)]">
                     {inspectedEntry.char}
                   </span>
-                  <span className="text-[#9AA3B2]">
+                  <span className="text-[var(--dojo-text-sub)]">
                     {inspectedEntry.rootDetails
                       .map((r) => `${r.radical}(${r.chamberKey.toUpperCase()})`)
                       .join(' + ')}
                   </span>
                 </div>
-                <span className="font-mono-tabular text-xs font-bold uppercase text-[#7CE5BC]">
+                <span className="font-mono-tabular text-xs font-bold uppercase text-[var(--dojo-pine-text)]">
                   {inspectedEntry.code}
                 </span>
               </div>
@@ -1173,7 +1257,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
           {/* Lower Section: Top 3 Bottleneck Consonant Chambers */}
           <section className="p-5 flex flex-col">
             <div className="flex items-baseline justify-between mb-1">
-              <h2 className="text-sm font-semibold text-[#F5F1E8]">
+              <h2 className="text-sm font-semibold text-[var(--dojo-text-bright)]">
                 {t('瓶頸字根（最慢 3 個宮殿鍵位）')}
               </h2>
               {tab === 'bottleneck' && (
@@ -1183,17 +1267,17 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                     setBottleneckKey(null);
                     setTab('passage');
                   }}
-                  className="text-[11px] text-[#7CE5BC] hover:underline cursor-pointer"
+                  className="text-[11px] text-[var(--dojo-pine-text)] hover:underline cursor-pointer"
                 >
                   {t('返回短文')}
                 </button>
               )}
             </div>
-            <p className="text-[11px] text-[#7D8696] mb-3">
+            <p className="text-[11px] text-[var(--dojo-text-muted)] mb-3">
               {t('點擊任一鍵位，立即抽出 16 字進行專屬拔刺快練')}
             </p>
 
-            <div className="divide-y divide-[#F2EEE6]/8">
+            <div className="divide-y divide-[var(--dojo-border)]">
               {bottleneckKeys.map((wk) => {
                 const isSelected = tab === 'bottleneck' && bottleneckKey === wk.key;
                 const errPct = wk.attempts > 0 ? Math.round(wk.errorRate * 100) : 0;
@@ -1203,18 +1287,20 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                     type="button"
                     onClick={() => handleLaunchBottleneck(wk.key)}
                     className={`w-full py-2.5 px-2 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer ${
-                      isSelected ? 'bg-[#1D2534]' : 'hover:bg-[#171E2C]'
+                      isSelected
+                        ? 'bg-[var(--dojo-surface-2)]'
+                        : 'hover:bg-[var(--dojo-surface-2)]/65'
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className="w-7 h-7 rounded bg-[#0B0F17] border border-[#F2EEE6]/14 flex items-center justify-center font-mono-tabular text-xs font-bold uppercase text-[#F5F1E8]">
+                      <span className="w-7 h-7 rounded bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border-strong)] flex items-center justify-center font-mono-tabular text-xs font-bold uppercase text-[var(--dojo-text-bright)]">
                         {wk.key}
                       </span>
                       <div>
-                        <div className="text-xs font-medium text-[#F2EEE6]">
+                        <div className="text-xs font-medium text-[var(--dojo-text)]">
                           {t('主根')} {wk.primary}
                         </div>
-                        <div className="text-[11px] font-mono-tabular text-[#7D8696]">
+                        <div className="text-[11px] font-mono-tabular text-[var(--dojo-text-muted)]">
                           {wk.attempts > 0
                             ? `${Math.round(wk.emaLatencyMs)}ms · ${t('錯率')} ${errPct}%`
                             : t('尚待累積樣本')}
@@ -1222,7 +1308,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                       </div>
                     </div>
 
-                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#D89B3C] shrink-0">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--dojo-ochre)] shrink-0">
                       <Target className="w-3 h-3" />
                       <span>{t('專攻')}</span>
                     </span>

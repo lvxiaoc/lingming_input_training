@@ -43,6 +43,8 @@ import {
   PDF_TIER_COLORS,
   StrokeCloudSelection,
   StrokeCloudStage,
+  WASH_FREQUENCY_TIER_COLORS,
+  WASH_PDF_TIER_COLORS,
 } from './StrokeCloudStage';
 import { synth } from '../audio/synth';
 import { getRadicalReading, speech } from '../audio/speech';
@@ -52,12 +54,14 @@ import {
   ScriptMode,
 } from '../data/scriptFilter';
 import { uiMnemonic, useUiScript, useUiText } from '../data/uiScript';
+import { THEME_OPTIONS, ThemeMode, useThemeMode } from '../data/theme';
 
 interface MemoryPalaceCloudProps {
   mastery: SchemeMasteryStore;
   chamberPasses?: Record<string, ChamberPassRecord>;
   scriptMode: ScriptMode;
   onChangeScriptMode?: (mode: ScriptMode) => void;
+  onChangeThemeMode?: (mode: ThemeMode) => void;
   speechEnabled: boolean;
   onToggleSpeech: () => void;
   onBack: () => void;
@@ -83,11 +87,12 @@ function getTierForRank(rank: number): FrequencyTier {
   return 'rest';
 }
 
-function getClusterAccent(clusterId: string): string {
-  if (clusterId.endsWith('_primary')) return FREQUENCY_TIER_COLORS.primary;
-  if (clusterId.endsWith('_t25')) return FREQUENCY_TIER_COLORS.rank2_5;
-  if (clusterId.endsWith('_t69')) return FREQUENCY_TIER_COLORS.rank6_9;
-  return FREQUENCY_TIER_COLORS.rest;
+function getClusterAccent(clusterId: string, isWash: boolean): string {
+  const palette = isWash ? WASH_FREQUENCY_TIER_COLORS : FREQUENCY_TIER_COLORS;
+  if (clusterId.endsWith('_primary')) return palette.primary;
+  if (clusterId.endsWith('_t25')) return palette.rank2_5;
+  if (clusterId.endsWith('_t69')) return palette.rank6_9;
+  return palette.rest;
 }
 
 /** Crisp calligraphic SVG fallback for CJK Ext-B 「𠂇」 so M key never renders as a missing-font tofu box */
@@ -119,6 +124,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
   chamberPasses,
   scriptMode,
   onChangeScriptMode,
+  onChangeThemeMode,
   speechEnabled,
   onToggleSpeech,
   onBack,
@@ -126,6 +132,10 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
 }) => {
   const t = useUiText();
   const uiScript = useUiScript();
+  const themeMode = useThemeMode();
+  const isWash = themeMode === 'wash';
+  const freqPalette = isWash ? WASH_FREQUENCY_TIER_COLORS : FREQUENCY_TIER_COLORS;
+  const pdfPalette = isWash ? WASH_PDF_TIER_COLORS : PDF_TIER_COLORS;
   const [selectedKey, setSelectedKey] = useState<string>('q');
   const [selectedNode, setSelectedNode] = useState<StrokeCloudSelection | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -175,7 +185,13 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
 
   const fingerLabel = FINGER_LABELS[KEY_FINGER_MAP[activeChamber.key]];
   const isLeft = activeChamber.handGroup.startsWith('left');
-  const chamberColor = isLeft ? '#38A885' : '#4F86C6';
+  const chamberColor = isLeft
+    ? isWash
+      ? '#1F6E52'
+      : '#38A885'
+    : isWash
+      ? '#275D96'
+      : '#4F86C6';
   const allChamberRadicals = activeChamber.clusters.flatMap((c) => c.radicals);
   const totalRadicals = allChamberRadicals.length;
   const activeRadicals = allChamberRadicals.filter((r) =>
@@ -223,9 +239,9 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
   const rowOffsets = ['pl-0', 'pl-3 sm:pl-6', 'pl-7 sm:pl-14'];
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#0E1218] text-[#F2EEE6] overflow-hidden">
+    <div className="relative z-10 w-full h-full flex flex-col bg-[var(--dojo-canvas)] wash:bg-transparent text-[var(--dojo-text)] overflow-hidden wash-enter">
       {/* Compact top utility strip */}
-      <header className="shrink-0 h-13 px-4 sm:px-6 bg-[#0C1016] border-b border-[#F2EEE6]/8 flex items-center justify-between gap-4">
+      <header className="shrink-0 h-13 px-4 sm:px-6 bg-[var(--dojo-header)] wash:bg-[var(--dojo-header)]/88 wash:backdrop-blur-sm border-b border-[var(--dojo-border)] flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
@@ -233,17 +249,17 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
               synth.playClick();
               onBack();
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#C8C3B8] hover:text-white bg-[#171C26] hover:bg-[#222938] border border-[#F2EEE6]/10 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>{t('返回')}</span>
           </button>
           <div className="flex items-center gap-2 text-xs min-w-0">
-            <span className="font-display text-base font-bold text-[#F5F1E8] whitespace-nowrap">
+            <span className="font-display text-base font-bold text-[var(--dojo-text-bright)] whitespace-nowrap">
               {t('靈明字根 · 記憶宮殿壁畫地圖')}
             </span>
-            <span aria-hidden="true" className="hidden md:inline text-[#565F70]">·</span>
-            <span className="hidden md:inline text-[#8F98A8] truncate">
+            <span aria-hidden="true" className="hidden md:inline text-[var(--dojo-text-muted)]">·</span>
+            <span className="hidden md:inline text-[var(--dojo-text-sub)] truncate">
               {t('每鍵以最高頻主根為骨架，其餘字根自第一筆起順著筆順按頻率排列')}
             </span>
           </div>
@@ -252,7 +268,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
         <div className="flex items-center gap-2 shrink-0">
           {onChangeScriptMode && (
             <div
-              className="hidden sm:inline-flex items-center gap-0.5 p-0.5 bg-[#121722] border border-[#F2EEE6]/10 rounded-lg"
+              className="hidden sm:inline-flex items-center gap-0.5 p-0.5 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-lg"
               title={t('切換訓練與宮殿高亮字集；非本字集字根自動淡化顯示')}
             >
               {SCRIPT_MODE_OPTIONS.map((opt) => (
@@ -265,8 +281,32 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                   }}
                   className={`px-2 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
                     scriptMode === opt.id
-                      ? 'bg-[#212A3A] text-[#F2D59B]'
-                      : 'text-[#8994A6] hover:text-[#E5E0D5]'
+                      ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-ochre)]'
+                      : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
+                  }`}
+                >
+                  {t(opt.short)}
+                </button>
+              ))}
+            </div>
+          )}
+          {onChangeThemeMode && (
+            <div
+              className="hidden sm:inline-flex items-center gap-0.5 p-0.5 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-lg"
+              title={t('切換視覺色調（玄墨夜練 / 宣紙水墨）')}
+            >
+              {THEME_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    synth.playClick();
+                    onChangeThemeMode(opt.id);
+                  }}
+                  className={`px-2 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                    themeMode === opt.id
+                      ? 'bg-[var(--dojo-ochre-wash)] text-[var(--dojo-ochre)]'
+                      : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
                   }`}
                 >
                   {t(opt.short)}
@@ -280,8 +320,8 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
             title={t('開關字根代表發音朗讀')}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap cursor-pointer ${
               speechEnabled
-                ? 'bg-[#172824] hover:bg-[#1E3530] border-[#2EA87E]/50 text-[#7CE5BC]'
-                : 'bg-[#171C26] hover:bg-[#222938] border-[#F2EEE6]/10 text-[#8F98A8]'
+                ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/50 text-[var(--dojo-pine-text)]'
+                : 'bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)]'
             }`}
           >
             <AudioLines className="w-3.5 h-3.5" />
@@ -291,7 +331,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
           <button
             type="button"
             onClick={() => onLaunchChamberDrill(null, 'root', false)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[#D94A38] hover:bg-[#E25644] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
             <span>{t('全盤 20 宮殿完整碼實戰')}</span>
@@ -303,23 +343,23 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
       <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 flex flex-col gap-4 max-w-6xl w-full mx-auto">
         {/* Section 1: Spatial 25-Key Memory Palace Map */}
         <section aria-label={t('靈明25鍵空間記憶宮殿')}>
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2 text-xs text-[#9AA3B2]">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2 text-xs text-[var(--dojo-text-sub)]">
             <div className="flex flex-wrap items-center gap-4">
               <span className="inline-flex items-center gap-1.5">
-                <span className="w-2.5 h-1 rounded-sm bg-[#38A885]" />
+                <span className={`w-2.5 h-1 rounded-sm ${isWash ? 'bg-[#1F6E52]' : 'bg-[#38A885]'}`} />
                 <span>{t('A區左手大碼')}</span>
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="w-2.5 h-1 rounded-sm bg-[#4F86C6]" />
+                <span className={`w-2.5 h-1 rounded-sm ${isWash ? 'bg-[#275D96]' : 'bg-[#4F86C6]'}`} />
                 <span>{t('A區右手大碼')}</span>
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="w-2.5 h-1 rounded-sm bg-[#D89B3C]" />
+                <span className="w-2.5 h-1 rounded-sm bg-[var(--dojo-ochre)]" />
                 <span>{t('B區元音韻腹（E的 U不 I是 O我 A了）')}</span>
               </span>
-              <span className="text-[#6D7584]">{t('Z 鍵不用（z/zh→V · q→K · 零聲母→J）')}</span>
+              <span className="text-[var(--dojo-text-muted)]">{t('Z 鍵不用（z/zh→V · q→K · 零聲母→J）')}</span>
             </div>
-            <span className="font-mono-tabular text-[#7D8696]">
+            <span className="font-mono-tabular text-[var(--dojo-text-muted)]">
               {t('敲擊實體鍵切換宮殿')}
             </span>
           </div>
@@ -351,14 +391,14 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                     return (
                       <div
                         key={k}
-                        className="flex flex-col justify-between items-center rounded-lg border border-[#F2EEE6]/6 bg-[#11151D]/60 px-1.5 py-1.5 opacity-55"
+                        className="flex flex-col justify-between items-center rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface)] px-1.5 py-1.5 opacity-55"
                         style={{ width: 'clamp(56px, 8.6vw, 96px)', minHeight: '58px' }}
                       >
-                        <span className="self-start font-mono-tabular text-[10px] font-bold text-[#646C7B]">
+                        <span className="self-start font-mono-tabular text-[10px] font-bold text-[var(--dojo-text-muted)]">
                           Z
                         </span>
-                        <span className="text-[11px] text-[#6E7787] font-medium">{t('不用')}</span>
-                        <span className="font-mono-tabular text-[9px] text-[#5B6372]">z/zh→V</span>
+                        <span className="text-[11px] text-[var(--dojo-text-sub)] font-medium">{t('不用')}</span>
+                        <span className="font-mono-tabular text-[9px] text-[var(--dojo-text-muted)]">z/zh→V</span>
                       </div>
                     );
                   }
@@ -369,21 +409,21 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                       <div
                         key={k}
                         title={t(vm.note)}
-                        className="flex flex-col justify-between items-center rounded-lg border border-[#D89B3C]/35 bg-[#D89B3C]/10 px-1.5 py-1.5"
+                        className="flex flex-col justify-between items-center rounded-lg border border-[var(--dojo-ochre)]/40 bg-[var(--dojo-ochre-wash)] px-1.5 py-1.5"
                         style={{ width: 'clamp(56px, 8.6vw, 96px)', minHeight: '58px' }}
                       >
                         <div className="w-full flex items-center justify-between">
-                          <span className="font-mono-tabular text-[10px] font-bold text-[#E6B55E]">
+                          <span className="font-mono-tabular text-[10px] font-bold text-[var(--dojo-ochre)]">
                             {k.toUpperCase()}
                           </span>
-                          <span className="text-[9px] text-[#D89B3C]/90">
+                          <span className="text-[9px] text-[var(--dojo-ochre)] opacity-90">
                             {t('韻')} {k}
                           </span>
                         </div>
-                        <span className="font-display text-lg font-bold text-[#F5DC9F] leading-none my-0.5">
+                        <span className="font-display text-lg font-bold text-[var(--dojo-text-bright)] leading-none my-0.5">
                           {vm.shortWord}
                         </span>
-                        <span className="text-[9px] text-[#B8985B] truncate max-w-full">
+                        <span className="text-[9px] text-[var(--dojo-ochre)] truncate max-w-full">
                           {t(k === 'o' ? 'o / 無音' : 'B區韻腹')}
                         </span>
                       </div>
@@ -391,7 +431,13 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                   }
 
                   const leftSide = chamber?.handGroup.startsWith('left');
-                  const accent = leftSide ? '#38A885' : '#4F86C6';
+                  const accent = leftSide
+                    ? isWash
+                      ? '#1F6E52'
+                      : '#38A885'
+                    : isWash
+                      ? '#275D96'
+                      : '#4F86C6';
                   const chamberPass = chamberPasses?.[k];
                   const isChamberCleared = (chamberPass?.clears ?? 0) > 0;
                   const keyRadicals = chamber?.clusters.flatMap((c) => c.radicals) ?? [];
@@ -412,34 +458,53 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                           speech.speakGlyph(chamber.primaryAnchor);
                         }
                       }}
-                      className="keycap-surface relative flex flex-col justify-between items-center rounded-lg border px-1.5 py-1.5 text-center cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D89B3C]"
+                      className="keycap-surface relative flex flex-col justify-between items-center rounded-lg border px-1.5 py-1.5 text-center cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dojo-ochre)]"
                       style={{
                         width: 'clamp(56px, 8.6vw, 96px)',
                         minHeight: '58px',
                         backgroundColor: isSelected
-                          ? leftSide
-                            ? 'rgba(56, 168, 133, 0.22)'
-                            : 'rgba(79, 134, 198, 0.22)'
-                          : '#161C27',
+                          ? isWash
+                            ? leftSide
+                              ? 'rgba(31, 110, 82, 0.14)'
+                              : 'rgba(39, 93, 150, 0.14)'
+                            : leftSide
+                              ? 'rgba(56, 168, 133, 0.22)'
+                              : 'rgba(79, 134, 198, 0.22)'
+                          : isWash
+                            ? '#F7F3EA'
+                            : '#161C27',
+                        backgroundImage: isWash
+                          ? isSelected
+                            ? leftSide
+                              ? 'radial-gradient(circle at 50% 45%, rgba(31, 110, 82, 0.26) 0%, rgba(31, 110, 82, 0.08) 70%, transparent 100%)'
+                              : 'radial-gradient(circle at 50% 45%, rgba(39, 93, 150, 0.24) 0%, rgba(39, 93, 150, 0.08) 70%, transparent 100%)'
+                            : 'linear-gradient(180deg, #FAF6EE 0%, #EFE8D8 100%)'
+                          : 'none',
                         borderColor: isSelected
                           ? accent
                           : isChamberCleared
-                            ? 'rgba(46, 168, 126, 0.45)'
-                            : 'rgba(242, 238, 230, 0.11)',
+                            ? isWash
+                              ? 'rgba(31, 110, 82, 0.45)'
+                              : 'rgba(46, 168, 126, 0.45)'
+                            : isWash
+                              ? 'rgba(28, 26, 23, 0.16)'
+                              : 'rgba(242, 238, 230, 0.11)',
                         boxShadow: isSelected
-                          ? `0 0 0 1px ${accent}, 0 4px 16px rgba(0,0,0,0.4)`
-                          : '0 2px 0 #090C11',
+                          ? `0 0 0 1px ${accent}, 0 4px 16px ${isWash ? 'rgba(28, 26, 23, 0.15)' : 'rgba(0,0,0,0.4)'}`
+                          : isWash
+                            ? '0 2px 0 #C7BEB0, inset 0 1px 0 rgba(255, 253, 248, 0.65)'
+                            : '0 2px 0 #090C11',
                       }}
                     >
                       <div className="w-full flex items-center justify-between">
                         <span
                           className="font-mono-tabular text-[10px] font-bold"
-                          style={{ color: isSelected ? '#FFFFFF' : accent }}
+                          style={{ color: isSelected ? (isWash ? '#12110F' : '#FFFFFF') : accent }}
                         >
                           {k.toUpperCase()}
                         </span>
                         <span
-                          className="inline-flex items-center gap-0.5 font-mono-tabular text-[9px] text-[#7A8496]"
+                          className="inline-flex items-center gap-0.5 font-mono-tabular text-[9px] text-[var(--dojo-text-muted)]"
                           title={
                             keyActiveCount < keyTotalCount
                               ? `${keyActiveCount}/${keyTotalCount}${t('根')}`
@@ -447,7 +512,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                           }
                         >
                           {isChamberCleared && (
-                            <Check className="w-2.5 h-2.5 text-[#34D399]" aria-label={t('已逐鍵過關')} />
+                            <Check className="w-2.5 h-2.5 text-[var(--dojo-pine)]" aria-label={t('已逐鍵過關')} />
                           )}
                           <span>
                             {keyActiveCount}
@@ -456,11 +521,11 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                         </span>
                       </div>
 
-                      <span className="font-display text-lg font-bold text-[#F5F1E8] leading-none my-0.5">
+                      <span className="font-display text-lg font-bold text-[var(--dojo-text-bright)] leading-none my-0.5">
                         <InlineGlyph char={chamber?.primaryAnchor || ''} />
                       </span>
 
-                      <span className="text-[9px] text-[#9BA3B2] truncate max-w-full leading-tight">
+                      <span className="text-[9px] text-[var(--dojo-text-sub)] truncate max-w-full leading-tight">
                         {subTokens.map((tok, tIdx) => {
                           const radMatch = keyRadicals.find((r) => r.char === tok);
                           const tokActive = matchesScript(
@@ -478,7 +543,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                         })}
                       </span>
 
-                      <div className="w-full h-[2px] bg-[#F2EEE6]/8 rounded-full overflow-hidden mt-1">
+                      <div className="w-full h-[2px] bg-[var(--dojo-border)] rounded-full overflow-hidden mt-1">
                         {masteryPct > 0 && (
                           <div
                             className="h-full"
@@ -486,10 +551,10 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                               width: `${masteryPct}%`,
                               backgroundColor:
                                 masteryPct >= 70
-                                  ? '#2EA87E'
+                                  ? 'var(--dojo-pine)'
                                   : masteryPct >= 40
-                                    ? '#D89B3C'
-                                    : '#D9604C',
+                                    ? 'var(--dojo-ochre)'
+                                    : 'var(--dojo-crimson)',
                             }}
                           />
                         )}
@@ -503,9 +568,9 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
         </section>
 
         {/* Section 2: Frequency-Ordered Stroke-Aligned Mural Palace */}
-        <section className="flex-1 min-h-[300px] grid grid-cols-1 lg:grid-cols-12 gap-4 bg-[#141923] border border-[#F2EEE6]/10 rounded-xl p-4 sm:p-5">
+        <section className="flex-1 min-h-[300px] grid grid-cols-1 lg:grid-cols-12 gap-4 bg-[var(--dojo-surface)] wash:bg-[#ECE4D4]/86 wash:backdrop-blur-xs border border-[var(--dojo-border)] rounded-xl p-4 sm:p-5">
           {/* Left: Giant #1 主根 Silhouette + Frequency-Ordered Stroke Cloud (1:1 PDF + Interactive Editor) */}
-          <div className="lg:col-span-5 flex flex-col justify-between bg-[#0F141C] rounded-xl border border-[#F2EEE6]/8 p-4">
+          <div className="lg:col-span-5 flex flex-col justify-between bg-[var(--dojo-surface-inset)] wash:bg-[#F7F3EA]/88 wash:shadow-[inset_0_0_28px_rgba(28,26,23,0.05)] rounded-xl border border-[var(--dojo-border)] p-4">
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-2 min-w-0">
@@ -515,12 +580,12 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                   >
                     {activeChamber.key.toUpperCase()} {t('鍵宮殿')}
                   </span>
-                  <span aria-hidden="true" className="text-[#565F70]">·</span>
-                  <span className="text-[#9AA3B2] truncate">{t(fingerLabel)}</span>
+                  <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
+                  <span className="text-[var(--dojo-text-sub)] truncate">{t(fingerLabel)}</span>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-mono-tabular text-[#7D8696]">
+                  <span className="font-mono-tabular text-[var(--dojo-text-muted)]">
                     {activeRadicals < totalRadicals ? `${activeRadicals}/${totalRadicals}` : totalRadicals}
                     {t('根')} · {totalPdfGlyphs}
                     {t('形')}
@@ -534,8 +599,8 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                     title={t('拖曳調整字根位置、大小或匯出雲圖座標 JSON')}
                     className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border transition-colors cursor-pointer ${
                       editMode
-                        ? 'bg-[#2B2214] border-[#D89B3C]/65 text-[#F7D286]'
-                        : 'bg-[#151B26] hover:bg-[#1D2534] border-[#F2EEE6]/10 text-[#9AA3B2] hover:text-[#F2EEE6]'
+                        ? 'bg-[var(--dojo-ochre-wash)] border-[var(--dojo-ochre)]/65 text-[var(--dojo-ochre)]'
+                        : 'bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
                     }`}
                   >
                     <Move className="w-3 h-3" />
@@ -545,47 +610,53 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
               </div>
 
               {/* A4 Poster 5-Tier Frequency + Variant Legend */}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#8F99AA] pt-0.5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--dojo-text-sub)] pt-0.5">
                 <span className="inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-[#DCE8E3]/55" />
+                  <span
+                    className="w-2 h-2 rounded-full opacity-75"
+                    style={{ backgroundColor: freqPalette.primary }}
+                  />
                   <span>{t('主根')}</span>
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span
                     className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: FREQUENCY_TIER_COLORS.rank2_5 }}
+                    style={{ backgroundColor: freqPalette.rank2_5 }}
                   />
                   <span>{t('第 2–5')}</span>
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span
                     className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: FREQUENCY_TIER_COLORS.rank6_9 }}
+                    style={{ backgroundColor: freqPalette.rank6_9 }}
                   />
                   <span>{t('第 6–9')}</span>
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span
                     className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: FREQUENCY_TIER_COLORS.rest }}
+                    style={{ backgroundColor: freqPalette.rest }}
                   />
                   <span>{t('其餘')}</span>
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span
                     className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: PDF_TIER_COLORS.var_2_5 }}
+                    style={{ backgroundColor: pdfPalette.var_2_5 }}
                   />
                   <span>{t('變體')}</span>
                 </span>
-                <span className="text-[#6F798B]">· {t('順筆順按頻率排列')}</span>
+                <span className="text-[var(--dojo-text-muted)]">· {t('順筆順按頻率排列')}</span>
                 {scriptMode !== 'both' && (
-                  <span className="text-[#6F798B]/90">· {t('半透明：非本字集對照')}</span>
+                  <span className="text-[var(--dojo-text-muted)] opacity-90">· {t('半透明：非本字集對照')}</span>
                 )}
               </div>
             </div>
 
-            <div className="flex-1 min-h-[240px] flex items-center justify-center my-1">
+            <div
+              key={activeChamber.key}
+              className="flex-1 min-h-[240px] flex items-center justify-center my-1 wash-enter"
+            >
               <StrokeCloudStage
                 chamberKey={activeChamber.key}
                 variant="palace"
@@ -610,9 +681,9 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
 
             {/* Cloud Editor Controls (only shown when editMode is ON) */}
             {editMode && (
-              <div className="mb-2.5 p-2.5 rounded-lg bg-[#141A24] border border-[#D89B3C]/28 flex flex-col gap-2 text-xs">
+              <div className="mb-2.5 p-2.5 rounded-lg bg-[var(--dojo-surface)] border border-[var(--dojo-ochre)]/30 flex flex-col gap-2 text-xs">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[#E6C485] font-medium">
+                  <span className="text-[var(--dojo-ochre)] font-medium">
                     {t(
                       selectedNode
                         ? '微調選中字根（可直接在圖上拖曳）'
@@ -627,7 +698,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                           synth.playClick();
                           setOverrides(resetChamberOverrides(activeChamber.key));
                         }}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#1D2432] hover:bg-[#273144] text-[11px] text-[#C8C3B8] cursor-pointer"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--dojo-surface-2)] hover:opacity-90 text-[11px] text-[var(--dojo-text)] cursor-pointer"
                       >
                         <RotateCcw className="w-3 h-3" />
                         <span>{t('還原此鍵')}</span>
@@ -636,7 +707,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                     <button
                       type="button"
                       onClick={handleOpenExport}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#1D2432] hover:bg-[#273144] text-[11px] text-[#9BC4E2] cursor-pointer"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--dojo-surface-2)] hover:opacity-90 text-[11px] text-[var(--dojo-pine-text)] cursor-pointer"
                     >
                       <Upload className="w-3 h-3" />
                       <span>{t('匯出/匯入')}</span>
@@ -645,8 +716,8 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                 </div>
 
                 {selectedNode && selectedOverride && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-[#F2EEE6]/8">
-                    <div className="flex items-center gap-2 font-mono-tabular text-[11px] text-[#B8C0CE]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-[var(--dojo-border)]">
+                    <div className="flex items-center gap-2 font-mono-tabular text-[11px] text-[var(--dojo-text-sub)]">
                       <span>
                         X:{(selectedNode.cx + selectedOverride.dx).toFixed(1)}
                       </span>
@@ -655,7 +726,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                       </span>
                     </div>
 
-                    <label className="flex items-center gap-2 text-[11px] text-[#C8C3B8] flex-1 min-w-[140px] max-w-[200px]">
+                    <label className="flex items-center gap-2 text-[11px] text-[var(--dojo-text-sub)] flex-1 min-w-[140px] max-w-[200px]">
                       <span>{t('縮放')}</span>
                       <input
                         type="range"
@@ -670,7 +741,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                             })
                           );
                         }}
-                        className="w-full accent-[#D89B3C] cursor-pointer"
+                        className="w-full accent-[var(--dojo-ochre)] cursor-pointer"
                       />
                       <span className="font-mono-tabular w-9 text-right">
                         {selectedOverride.scale.toFixed(2)}x
@@ -683,7 +754,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                         synth.playClick();
                         setOverrides(resetPalaceNodeOverride(selectedNode.id));
                       }}
-                      className="px-2 py-0.5 rounded bg-[#1A202C] hover:bg-[#242C3D] text-[11px] text-[#D89B3C] cursor-pointer"
+                      className="px-2 py-0.5 rounded bg-[var(--dojo-surface-2)] hover:opacity-90 text-[11px] text-[var(--dojo-ochre)] cursor-pointer"
                     >
                       {t('重設此字根')}
                     </button>
@@ -691,16 +762,16 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                 )}
 
                 {jsonPanelOpen && (
-                  <div className="pt-2 border-t border-[#F2EEE6]/10 flex flex-col gap-1.5">
+                  <div className="pt-2 border-t border-[var(--dojo-border)] flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-[#9AA3B2]">
+                      <span className="text-[11px] text-[var(--dojo-text-sub)]">
                         {t(`雲圖座標 JSON（${jsonStatus || '貼上即可匯入'}）`)}
                       </span>
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={handleDownloadJson}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#1B2A25] hover:bg-[#233831] text-[11px] text-[#7CE5BC] cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--dojo-pine-wash)] text-[11px] text-[var(--dojo-pine-text)] cursor-pointer"
                         >
                           <Download className="w-3 h-3" />
                           <span>{t('下載')}</span>
@@ -708,7 +779,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                         <button
                           type="button"
                           onClick={handleImportJson}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#2B2214] hover:bg-[#3A2E1A] text-[11px] text-[#F7D286] cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--dojo-ochre-wash)] text-[11px] text-[var(--dojo-ochre)] cursor-pointer"
                         >
                           <Check className="w-3 h-3" />
                           <span>{t('套用匯入')}</span>
@@ -717,7 +788,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                           type="button"
                           onClick={() => setJsonPanelOpen(false)}
                           aria-label={t('關閉 JSON 面板')}
-                          className="p-0.5 text-[#7D8696] hover:text-white cursor-pointer"
+                          className="p-0.5 text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text-bright)] cursor-pointer"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -728,30 +799,30 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                       onChange={(e) => setJsonDraft(e.target.value)}
                       rows={4}
                       spellCheck={false}
-                      className="w-full rounded bg-[#0A0E14] border border-[#F2EEE6]/12 p-2 font-mono-tabular text-[10px] text-[#C8D0DC] focus:outline-none focus:border-[#D89B3C]"
+                      className="w-full rounded bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] p-2 font-mono-tabular text-[10px] text-[var(--dojo-text)] focus:outline-none focus:border-[var(--dojo-ochre)]"
                     />
                   </div>
                 )}
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-2 text-xs border-t border-[#F2EEE6]/8 pt-2.5">
+            <div className="flex items-center justify-between gap-2 text-xs border-t border-[var(--dojo-border)] pt-2.5">
               {selectedNode ? (
-                <div className="flex items-center gap-2 text-[#E5E0D5] min-w-0">
+                <div className="flex items-center gap-2 text-[var(--dojo-text)] min-w-0">
                   {selectedNode.path ? (
                     <svg
                       viewBox={`${selectedNode.cx - Math.max(4, selectedNode.r) * 1.25} ${selectedNode.cy - Math.max(4, selectedNode.r) * 1.25} ${Math.max(4, selectedNode.r) * 2.5} ${Math.max(4, selectedNode.r) * 2.5}`}
-                      className="w-5 h-5 shrink-0 text-[#F7D286]"
+                      className="w-5 h-5 shrink-0 text-[var(--dojo-ochre)]"
                       aria-label={selectedNode.char}
                     >
                       <path d={selectedNode.path} fill="currentColor" />
                     </svg>
                   ) : (
-                    <span className="font-display text-base font-bold text-[#F7D286]">
+                    <span className="font-display text-base font-bold text-[var(--dojo-ochre)]">
                       <InlineGlyph char={selectedNode.char} />
                     </span>
                   )}
-                  <span className="font-mono-tabular text-[11px] text-[#8F99AA]">
+                  <span className="font-mono-tabular text-[11px] text-[var(--dojo-text-muted)]">
                     #{selectedNode.rank}
                   </span>
                   {selectedNode.ma && (
@@ -760,9 +831,9 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                         {selectedNode.ma[0].toUpperCase()}
                       </span>
                       {!selectedNode.isXiao && (
-                        <span className="text-[#E5E0D5]">{selectedNode.ma[1]}</span>
+                        <span className="text-[var(--dojo-text)]">{selectedNode.ma[1]}</span>
                       )}
-                      <span className="text-[#D89B3C]">
+                      <span className="text-[var(--dojo-ochre)]">
                         {selectedNode.ma[selectedNode.ma.length - 1]}
                       </span>
                     </span>
@@ -773,12 +844,12 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                       : selectedNode.char;
                     const rd = getRadicalReading(lookupChar);
                     return rd.pinyin ? (
-                      <span className="text-[#7CE5BC] font-mono-tabular truncate">
+                      <span className="text-[var(--dojo-pine-text)] font-mono-tabular truncate">
                         {rd.pinyin}
                       </span>
                     ) : null;
                   })()}
-                  <span className="text-[#8F98A8] truncate">
+                  <span className="text-[var(--dojo-text-sub)] truncate">
                     {t(
                       selectedNode.note ||
                         LINGMING_ROOT_MAP.get(selectedNode.parentChar)?.note ||
@@ -803,12 +874,12 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                   </span>
                 </div>
               ) : (
-                <span className="text-[#C8C3B8] truncate">
+                <span className="text-[var(--dojo-text-sub)] truncate">
                   {t('筆順口訣：')}
                   {uiMnemonic(activeChamber.mnemonic, uiScript)}
                 </span>
               )}
-              <span className="text-[11px] text-[#7A8496] shrink-0">
+              <span className="text-[11px] text-[var(--dojo-text-muted)] shrink-0">
                 {t(editMode ? '拖曳調整位置' : '點擊字根聽發音')}
               </span>
             </div>
@@ -818,7 +889,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
           <div className="lg:col-span-7 flex flex-col justify-between gap-4">
             <div className="flex flex-col gap-3">
               {activeChamber.clusters.map((cl) => {
-                const tierAccent = getClusterAccent(cl.id);
+                const tierAccent = getClusterAccent(cl.id, isWash);
                 const activeInCluster = cl.radicals.filter((rad) =>
                   matchesScript(
                     getLingmingRadicalScript(rad.char, activeChamber.key, rad.ma),
@@ -828,16 +899,16 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                 return (
                   <div
                     key={cl.id}
-                    className="pb-3 border-b border-[#F2EEE6]/7 last:border-b-0 last:pb-0"
+                    className="pb-3 border-b border-[var(--dojo-border)] last:border-b-0 last:pb-0"
                   >
                     <div className="flex items-center gap-2 mb-2 text-xs">
                       <span
                         className="w-2 h-2 rounded-full shrink-0"
                         style={{ backgroundColor: tierAccent }}
                       />
-                      <span className="font-medium text-[#E5E0D5]">{t(cl.label)}</span>
-                      <span aria-hidden="true" className="text-[#565F70]">·</span>
-                      <span className="font-mono-tabular text-[#8A94A6]">
+                      <span className="font-medium text-[var(--dojo-text)]">{t(cl.label)}</span>
+                      <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
+                      <span className="font-mono-tabular text-[var(--dojo-text-sub)]">
                         {activeInCluster < cl.radicals.length
                           ? `${activeInCluster}/${cl.radicals.length}`
                           : cl.radicals.length}{' '}
@@ -900,18 +971,22 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                             className={`px-2.5 py-1.5 rounded-lg border flex items-center gap-2 transition-all cursor-pointer ${
                               isSel
                                 ? inScript
-                                  ? 'bg-[#1D2736] border-[#D89B3C]'
-                                  : 'bg-[#1A212D] border-[#D89B3C]/70 opacity-85'
+                                  ? 'bg-[var(--dojo-surface-2)] border-[var(--dojo-ochre)]'
+                                  : 'bg-[var(--dojo-surface-2)] border-[var(--dojo-ochre)]/70 opacity-85'
                                 : inScript
-                                  ? 'bg-[#10141C] border-[#F2EEE6]/9 hover:border-[#F2EEE6]/25'
-                                  : 'bg-[#0C1017] border-[#F2EEE6]/5 opacity-28 hover:opacity-75'
+                                  ? 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] hover:border-[var(--dojo-border-strong)]'
+                                  : 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] opacity-35 hover:opacity-75'
                             }`}
                           >
                             <span
                               className="font-display text-base font-bold leading-none"
                               style={{
                                 color:
-                                  rad.rank === 1 ? '#FFF8EB' : FREQUENCY_TIER_COLORS[tier],
+                                  rad.rank === 1
+                                    ? isWash
+                                      ? '#12110F'
+                                      : '#FFF8EB'
+                                    : freqPalette[tier],
                               }}
                             >
                               <InlineGlyph char={rad.char} />
@@ -919,10 +994,10 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                             <div className="flex flex-col items-start leading-tight">
                               <span className="font-mono-tabular text-xs font-semibold">
                                 <span style={{ color: chamberColor }}>{da}</span>
-                                {sheng && <span className="text-[#D8D3C8]">{sheng}</span>}
-                                <span className="text-[#D89B3C]">{yun}</span>
+                                {sheng && <span className="text-[var(--dojo-text)]">{sheng}</span>}
+                                <span className="text-[var(--dojo-ochre)]">{yun}</span>
                               </span>
-                              <span className="text-[10px] text-[#7A8496]">
+                              <span className="text-[10px] text-[var(--dojo-text-muted)]">
                                 #{rad.rank} ·{' '}
                                 {!inScript
                                   ? t(radScript === 'trad' ? '僅繁 · 對照' : '僅簡 · 對照')
@@ -939,18 +1014,18 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
             </div>
 
             {/* Instant Chamber Practice Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#F2EEE6]/10">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[#8D96A6]">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[var(--dojo-border)]">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--dojo-text-sub)]">
                 <span>
                   {t('編碼色標：')}
                   <span style={{ color: chamberColor }}>{t('大碼')}</span> ·{' '}
-                  <span className="text-[#E5E0D5]">{t('聲碼')}</span> ·{' '}
-                  <span className="text-[#D89B3C]">{t('韻碼(AEIOU)')}</span>
+                  <span className="text-[var(--dojo-text)]">{t('聲碼')}</span> ·{' '}
+                  <span className="text-[var(--dojo-ochre)]">{t('韻碼(AEIOU)')}</span>
                 </span>
                 {(chamberPasses?.[activeChamber.key]?.clears ?? 0) > 0 && (
                   <>
-                    <span aria-hidden="true" className="text-[#565F70]">·</span>
-                    <span className="font-mono-tabular text-[#7CE5BC]">
+                    <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
+                    <span className="font-mono-tabular text-[var(--dojo-pine-text)]">
                       {t(`已過 ${chamberPasses![activeChamber.key].clears} 遍 · 最佳 ${chamberPasses![activeChamber.key].bestAccuracy}%`)}
                     </span>
                   </>
@@ -961,7 +1036,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                 <button
                   type="button"
                   onClick={() => onLaunchChamberDrill(activeChamber.key, 'root', false)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#D94A38] hover:bg-[#E25644] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                 >
                   <Target className="w-3.5 h-3.5" />
                   <span>
@@ -971,9 +1046,9 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                 <button
                   type="button"
                   onClick={() => onLaunchChamberDrill(activeChamber.key, 'root', true)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-[#1D2432] hover:bg-[#273144] border border-[#F2EEE6]/12 text-[#F2EEE6] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-[var(--dojo-surface-2)] hover:opacity-90 border border-[var(--dojo-border-strong)] text-[var(--dojo-text)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                 >
-                  <EyeOff className="w-3.5 h-3.5 text-[#2EA87E]" />
+                  <EyeOff className="w-3.5 h-3.5 text-[var(--dojo-pine)]" />
                   <span>
                     {t('直接默背')} {activeChamber.key.toUpperCase()} {t('宮殿')}
                   </span>

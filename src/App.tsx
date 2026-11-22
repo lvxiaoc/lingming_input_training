@@ -52,6 +52,13 @@ import {
 } from './data/scriptFilter';
 import { UiScriptContext, uiText } from './data/uiScript';
 import {
+  loadThemeMode,
+  saveThemeMode,
+  THEME_OPTIONS,
+  ThemeContext,
+  ThemeMode,
+} from './data/theme';
+import {
   ActiveTargetSnapshot,
   GameCanvas,
   GameMode,
@@ -160,6 +167,13 @@ export default function App() {
   const [scriptMode, setScriptMode] = useState<ScriptMode>(() => loadScriptMode());
   const [uiScript, setUiScript] = useState<UiScript>(() => loadUiScript(loadScriptMode()));
   const t = useCallback((text: string) => uiText(text, uiScript), [uiScript]);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => loadThemeMode());
+  const isWash = themeMode === 'wash';
+  const handleChangeThemeMode = useCallback((next: ThemeMode) => {
+    synth.playClick();
+    setThemeMode(next);
+    saveThemeMode(next);
+  }, []);
   const [activeStage, setActiveStage] = useState<CampaignStage | null>(null);
   const [activeCustomDeck, setActiveCustomDeck] = useState<GlyphEntry[] | null>(null);
   const [isWeakDrill, setIsWeakDrill] = useState(false);
@@ -246,6 +260,11 @@ export default function App() {
     document.documentElement.lang = uiScript === 'simp' ? 'zh-Hans' : 'zh-Hant';
     document.title = uiText('墨鍵道場 · 靈明輸入法筆畫雲圖與記憶宮殿訓練', uiScript);
   }, [uiScript]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+    saveThemeMode(themeMode);
+  }, [themeMode]);
 
   const switchScheme = useCallback((nextScheme: ShapeCodeScheme) => {
     setActiveScheme(nextScheme);
@@ -858,36 +877,118 @@ export default function App() {
 
   return (
     <UiScriptContext.Provider value={uiScript}>
-    <div className="relative w-screen h-screen overflow-hidden bg-[#0B0F17] text-[#F2EEE6] flex flex-col">
+    <ThemeContext.Provider value={themeMode}>
+    <div className="relative w-screen h-screen overflow-hidden bg-[var(--dojo-canvas)] text-[var(--dojo-text)] flex flex-col">
+      {/* Global Xuan-paper texture & ambient ink-wash clouds across ALL views in wash mode */}
+      {isWash && (
+        <div
+          aria-hidden="true"
+          className="dojo-ink-paper-bg pointer-events-none fixed inset-0 z-0 overflow-hidden"
+        >
+          <svg
+            viewBox="0 0 1200 800"
+            preserveAspectRatio="none"
+            className="dojo-ink-mist-layer absolute inset-0 w-full h-full opacity-[0.62]"
+          >
+            <defs>
+              <radialGradient id="globalInkMistTL" cx="12%" cy="15%" r="44%">
+                <stop offset="0%" stopColor="#1C1A17" stopOpacity="0.13" />
+                <stop offset="50%" stopColor="#6E6659" stopOpacity="0.055" />
+                <stop offset="100%" stopColor="#F2EDE2" stopOpacity="0" />
+              </radialGradient>
+              <radialGradient id="globalInkMistBR" cx="88%" cy="86%" r="46%">
+                <stop offset="0%" stopColor="#1F6E52" stopOpacity="0.095" />
+                <stop offset="48%" stopColor="#4F493F" stopOpacity="0.05" />
+                <stop offset="100%" stopColor="#F2EDE2" stopOpacity="0" />
+              </radialGradient>
+              <radialGradient id="globalInkMistTR" cx="86%" cy="16%" r="36%">
+                <stop offset="0%" stopColor="#9C6414" stopOpacity="0.06" />
+                <stop offset="55%" stopColor="#5D5549" stopOpacity="0.028" />
+                <stop offset="100%" stopColor="#F2EDE2" stopOpacity="0" />
+              </radialGradient>
+              <filter id="globalInkCloudBlur" x="-15%" y="-15%" width="130%" height="130%">
+                <feGaussianBlur stdDeviation="26" />
+              </filter>
+            </defs>
+            <ellipse
+              cx="120"
+              cy="110"
+              rx="380"
+              ry="220"
+              fill="url(#globalInkMistTL)"
+              filter="url(#globalInkCloudBlur)"
+            />
+            <ellipse
+              cx="1040"
+              cy="125"
+              rx="320"
+              ry="180"
+              fill="url(#globalInkMistTR)"
+              filter="url(#globalInkCloudBlur)"
+            />
+            <ellipse
+              cx="1050"
+              cy="700"
+              rx="420"
+              ry="240"
+              fill="url(#globalInkMistBR)"
+              filter="url(#globalInkCloudBlur)"
+            />
+            {/* Distant ink-wash mountain & valley mist ridges */}
+            <path
+              d="M-60 765 Q 165 620, 380 705 T 810 675 T 1260 610 L 1260 840 L -60 840 Z"
+              fill="#26221D"
+              fillOpacity="0.058"
+              filter="url(#globalInkCloudBlur)"
+            />
+            <path
+              d="M-40 805 Q 240 695, 510 755 T 1010 700 T 1260 665 L 1260 840 L -40 840 Z"
+              fill="#1C1A17"
+              fillOpacity="0.042"
+              filter="url(#globalInkCloudBlur)"
+            />
+          </svg>
+        </div>
+      )}
+
       {/* ==================== TITLE SCREEN ==================== */}
       {gameState === 'TITLE_MENU' && (
-        <div className="relative w-full h-full flex flex-col justify-between overflow-hidden">
+        <div className="relative z-10 w-full h-full flex flex-col justify-between overflow-hidden">
           {!heroImgFailed ? (
             <img
               src={TITLE_ART_URL}
               alt={t('墨鍵道場木質書桌與機械鍵盤')}
               referrerPolicy="no-referrer"
               onError={() => setHeroImgFailed(true)}
-              className="absolute inset-0 w-full h-full object-cover object-center"
+              className={`absolute inset-0 w-full h-full object-cover object-center transition-all duration-300 ${
+                isWash ? 'opacity-20 mix-blend-multiply saturate-40 contrast-95' : ''
+              }`}
             />
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-[#121722] via-[#171D29] to-[#0E1218]" />
+            <div
+              className={`absolute inset-0 bg-gradient-to-br ${
+                isWash
+                  ? 'from-[#F2EDE2]/60 via-[#EBE3D3]/60 to-[#DFD5C0]/60'
+                  : 'from-[#121722] via-[#171D29] to-[#0E1218]'
+              }`}
+            />
           )}
 
           <div
-            className="absolute inset-0"
+            className="absolute inset-0 transition-opacity duration-300"
             style={{
-              background:
-                'linear-gradient(90deg, rgba(11,14,20,0.95) 0%, rgba(11,14,20,0.82) 44%, rgba(11,14,20,0.22) 76%, rgba(11,14,20,0.14) 100%)',
+              background: isWash
+                ? 'linear-gradient(90deg, rgba(242,237,226,0.92) 0%, rgba(242,237,226,0.80) 46%, rgba(242,237,226,0.34) 78%, rgba(242,237,226,0.14) 100%)'
+                : 'linear-gradient(90deg, rgba(11,14,20,0.95) 0%, rgba(11,14,20,0.82) 44%, rgba(11,14,20,0.22) 76%, rgba(11,14,20,0.14) 100%)',
             }}
           />
 
-          {/* Top quiet status & audio row */}
-          <div className="relative z-10 flex items-center justify-between px-6 sm:px-10 pt-6">
-            <div className="flex items-center gap-3 text-xs text-[#9FA8B8]">
-              <span className="text-[#E5E0D5] font-medium">{t(activeScheme.shortName)}</span>
+          {/* Top quiet status, theme switch & audio row */}
+          <div className="relative z-10 flex items-center justify-between gap-3 px-6 sm:px-10 pt-6">
+            <div className="flex items-center gap-3 text-xs text-[var(--dojo-text-sub)]">
+              <span className="text-[var(--dojo-text-bright)] font-medium">{t(activeScheme.shortName)}</span>
               <span aria-hidden="true">·</span>
-              <span className="font-mono-tabular text-[#D89B3C]">
+              <span className="font-mono-tabular text-[var(--dojo-ochre)]">
                 {t('段位')} {t(campaignSummary.rank.title)} · ★ {campaignSummary.totalStars}/
                 {campaignSummary.maxStars}
               </span>
@@ -902,25 +1003,59 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Visual Theme Switcher: 玄墨夜練 / 宣紙水墨 */}
+              <div
+                role="group"
+                aria-label={t('切換道場視覺色調')}
+                className="inline-flex items-center p-0.5 rounded-lg bg-[var(--dojo-surface)]/92 border border-[var(--dojo-border)] backdrop-blur-sm"
+              >
+                {THEME_OPTIONS.map((opt) => {
+                  const active = themeMode === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => handleChangeThemeMode(opt.id)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                        active
+                          ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)] shadow-xs'
+                          : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
+                      }`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`w-2 h-2 rounded-full border ${
+                          opt.id === 'night'
+                            ? 'bg-[#121722] border-[#6E788A]'
+                            : 'bg-[#F2EDE2] border-[#9C6414]/65'
+                        }`}
+                      />
+                      <span className="hidden sm:inline">{t(opt.label)}</span>
+                      <span className="sm:hidden">{t(opt.short)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
               <button
                 type="button"
                 onClick={toggleSpeech}
                 title={t('開關字根代表性發音朗讀')}
                 className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap cursor-pointer ${
                   speechEnabled
-                    ? 'bg-[#14201E]/85 hover:bg-[#1B2B28] border-[#2EA87E]/35 text-[#88DEC0]'
-                    : 'bg-[#151A24]/85 hover:bg-[#1F2736] border-[#F2EEE6]/10 text-[#9AA3B2]'
+                    ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/35 text-[var(--dojo-pine-text)]'
+                    : 'bg-[var(--dojo-surface)]/90 hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)]'
                 }`}
               >
                 <AudioLines className="w-3.5 h-3.5" />
-                <span>{t(speechEnabled ? '字根發音：開' : '字根發音：關')}</span>
+                <span className="hidden sm:inline">{t(speechEnabled ? '字根發音：開' : '字根發音：關')}</span>
               </button>
               <button
                 type="button"
                 onClick={toggleMute}
                 title={t(muted ? '按鍵音效：已關閉（預設靜音，點擊開啟）' : '按鍵音效：已開啟（點擊關閉）')}
                 aria-label={t(muted ? '開啟按鍵音效' : '關閉按鍵音效')}
-                className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#151A24]/85 hover:bg-[#1F2736] border border-[#F2EEE6]/10 text-[#C8C3B8] transition-colors cursor-pointer"
+                className="w-9 h-9 flex items-center justify-center rounded-lg bg-[var(--dojo-surface)]/90 hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)] transition-colors cursor-pointer"
               >
                 {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               </button>
@@ -928,7 +1063,7 @@ export default function App() {
           </div>
 
           {/* Center-left Hero Lockup — Brand + 3 Primary Entries */}
-          <div className="relative z-10 px-6 sm:px-10 my-auto max-w-2xl">
+          <div className="relative z-10 px-6 sm:px-10 my-auto max-w-2xl wash-enter">
             <svg
               viewBox="0 0 430 92"
               className="w-full max-w-[400px] h-auto mb-8"
@@ -940,8 +1075,8 @@ export default function App() {
                 width="54"
                 height="54"
                 rx="6"
-                fill="#C93E2D"
-                stroke="#E8715F"
+                fill={isWash ? '#B83B2A' : '#C93E2D'}
+                stroke={isWash ? '#8F291C' : '#E8715F'}
                 strokeWidth="1.5"
               />
               <rect
@@ -970,7 +1105,7 @@ export default function App() {
               <text
                 x="74"
                 y="50"
-                fill="#F6F2EA"
+                fill={isWash ? '#1C1A17' : '#F6F2EA'}
                 fontSize="44"
                 fontWeight="700"
                 letterSpacing="4"
@@ -979,11 +1114,18 @@ export default function App() {
                 {t('墨鍵道場')}
               </text>
 
-              <line x1="74" y1="66" x2="128" y2="66" stroke="#D89B3C" strokeWidth="1.5" />
+              <line
+                x1="74"
+                y1="66"
+                x2="128"
+                y2="66"
+                stroke={isWash ? '#9C6414' : '#D89B3C'}
+                strokeWidth="1.5"
+              />
               <text
                 x="138"
                 y="70"
-                fill="#B8B0A0"
+                fill={isWash ? '#5A5347' : '#B8B0A0'}
                 fontSize="13"
                 letterSpacing="1.8"
                 fontFamily="'Plus Jakarta Sans', sans-serif"
@@ -993,20 +1135,20 @@ export default function App() {
             </svg>
 
             {/* Three Primary Entries */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 items-stretch gap-3 max-w-2xl">
+            <div className="grid grid-cols-1 sm:grid-cols-3 items-stretch gap-3 max-w-2xl wash-enter-soft">
               <button
                 type="button"
                 onClick={() => {
                   synth.playClick();
                   setGameState('CAMPAIGN_MAP');
                 }}
-                className="flex flex-col items-start justify-center gap-1 px-5 py-4 bg-[#D94A38] hover:bg-[#E45643] active:scale-[0.99] text-white rounded-xl shadow-lg transition-all cursor-pointer text-left"
+                className="flex flex-col items-start justify-center gap-1 px-5 py-4 bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] active:scale-[0.99] text-white rounded-xl shadow-lg transition-all cursor-pointer text-left"
               >
                 <div className="flex items-center gap-2 text-base font-bold whitespace-nowrap">
                   <MapIcon className="w-4 h-4 shrink-0" />
                   <span>{t('五重道場闖關')}</span>
                 </div>
-                <span className="text-xs text-white/80 font-mono-tabular whitespace-nowrap">
+                <span className="text-xs text-white/85 font-mono-tabular whitespace-nowrap">
                   {t('循序破關')} · {t(campaignSummary.nextRecommendedStage.indexLabel)}
                 </span>
               </button>
@@ -1014,13 +1156,17 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => startPlay(mode)}
-                className="flex flex-col items-start justify-center gap-1 px-5 py-4 bg-[#161D2A]/92 hover:bg-[#1E2738] active:scale-[0.99] border border-[#F2EEE6]/16 text-[#F2EEE6] rounded-xl transition-all cursor-pointer text-left"
+                className={`flex flex-col items-start justify-center gap-1 px-5 py-4 active:scale-[0.99] border rounded-xl transition-all cursor-pointer text-left ${
+                  isWash
+                    ? 'bg-[#FAF6EE]/95 hover:bg-[#FFFDF8] border-[#1C1A17]/16 text-[#1C1A17] shadow-sm'
+                    : 'bg-[#161D2A]/92 hover:bg-[#1E2738] border-[#F2EEE6]/16 text-[#F2EEE6]'
+                }`}
               >
                 <div className="flex items-center gap-2 text-base font-bold whitespace-nowrap">
-                  <Play className="w-4 h-4 fill-current text-[#2EA87E] shrink-0" />
+                  <Play className="w-4 h-4 fill-current text-[var(--dojo-pine)] shrink-0" />
                   <span>{t('自由鍛煉')}</span>
                 </div>
-                <span className="text-xs text-[#9AA3B2] whitespace-nowrap">
+                <span className="text-xs text-[var(--dojo-text-sub)] whitespace-nowrap">
                   {t(MODE_OPTIONS.find((m) => m.id === mode)?.label ?? '記憶宮殿反射')}
                 </span>
               </button>
@@ -1031,25 +1177,29 @@ export default function App() {
                   synth.playClick();
                   setGameState('DRILL_STUDIO');
                 }}
-                className="flex flex-col items-start justify-center gap-1 px-5 py-4 bg-[#161D2A]/92 hover:bg-[#1E2738] active:scale-[0.99] border border-[#D89B3C]/35 text-[#F2EEE6] rounded-xl transition-all cursor-pointer text-left"
+                className={`flex flex-col items-start justify-center gap-1 px-5 py-4 active:scale-[0.99] border rounded-xl transition-all cursor-pointer text-left ${
+                  isWash
+                    ? 'bg-[#FAF6EE]/95 hover:bg-[#FFFDF8] border-[#9C6414]/32 text-[#1C1A17] shadow-sm'
+                    : 'bg-[#161D2A]/92 hover:bg-[#1E2738] border-[#D89B3C]/35 text-[#F2EEE6]'
+                }`}
               >
                 <div className="flex items-center gap-2 text-base font-bold whitespace-nowrap">
-                  <Flame className="w-4 h-4 text-[#D89B3C] shrink-0" />
-                  <span>{t('極限苦練室')}</span>
+                  <Flame className="w-4 h-4 text-[var(--dojo-ochre)] shrink-0" />
+                  <span>{t('文心實戰室')}</span>
                 </div>
-                <span className="text-xs text-[#C8B58A] font-mono-tabular whitespace-nowrap">
+                <span className="text-xs text-[var(--dojo-ochre)] font-mono-tabular whitespace-nowrap">
                   {Object.keys(mastery.slowGlyphs || {}).length > 0
                     ? `${t('實戰盲打')} · ${t('慢字')} ${Object.keys(mastery.slowGlyphs || {}).length}`
-                    : `${t('實戰連打')} · ${t('抓慢回爐')}`}
+                    : `${t('行雲連打')} · ${t('慢字精修')}`}
                 </span>
               </button>
             </div>
           </div>
 
           {/* Quiet bottom line */}
-          <div className="relative z-10 px-6 sm:px-10 pb-5 flex items-center justify-between text-xs text-[#8D96A6]">
+          <div className="relative z-10 px-6 sm:px-10 pb-5 flex items-center justify-between text-xs text-[var(--dojo-text-muted)]">
             <span>{t('Enter / Space 進入五重道場')}</span>
-            <span className="hidden sm:inline font-mono-tabular text-[#6F7888]">
+            <span className="hidden sm:inline font-mono-tabular">
               {t('最高紀錄')} {mastery.bestScore}
             </span>
           </div>
@@ -1066,6 +1216,7 @@ export default function App() {
             (chamberReturnTo === 'CAMPAIGN_MAP' && singleChamberKey ? 3 : undefined)
           }
           onChangeScriptMode={(next) => handleChangeScriptMode(next)}
+          onChangeThemeMode={handleChangeThemeMode}
           onBackToTitle={() => setGameState('TITLE_MENU')}
           onOpenPalaceCloud={() => openPalaceCloud('CAMPAIGN_MAP')}
           onLaunchStage={launchCampaignStage}
@@ -1082,6 +1233,7 @@ export default function App() {
           chamberPasses={campaignProgress.chambers}
           scriptMode={scriptMode}
           onChangeScriptMode={(next) => handleChangeScriptMode(next)}
+          onChangeThemeMode={handleChangeThemeMode}
           speechEnabled={speechEnabled}
           onToggleSpeech={toggleSpeech}
           onBack={() => setGameState(returnStateFromPalace)}
@@ -1091,13 +1243,15 @@ export default function App() {
         />
       )}
 
-      {/* ==================== EXTREME DELIBERATE PRACTICE STUDIO ==================== */}
+      {/* ==================== WENXIN LIVE PRACTICE STUDIO ==================== */}
       {gameState === 'DRILL_STUDIO' && (
         <ExtremeDrillStudio
           mastery={mastery}
           onMasteryChange={handleMasteryChange}
           scriptMode={scriptMode}
           onChangeScriptMode={(next) => handleChangeScriptMode(next)}
+          themeMode={themeMode}
+          onChangeThemeMode={handleChangeThemeMode}
           muted={muted}
           onToggleMute={toggleMute}
           onBack={() => setGameState('TITLE_MENU')}
@@ -1109,38 +1263,38 @@ export default function App() {
         gameState !== 'CAMPAIGN_MAP' &&
         gameState !== 'PALACE_CLOUD' &&
         gameState !== 'DRILL_STUDIO' && (
-        <div className="w-full h-full flex flex-col">
+        <div className="relative z-10 w-full h-full flex flex-col">
           {/* Compact low-occlusion perimeter HUD */}
-          <header className="shrink-0 h-12 px-4 sm:px-6 bg-[#0B0E15] border-b border-[#F2EEE6]/8 flex items-center justify-between gap-3 z-30">
+          <header className="shrink-0 h-12 px-4 sm:px-6 bg-[var(--dojo-header)] wash:bg-[var(--dojo-header)]/88 wash:backdrop-blur-sm border-b border-[var(--dojo-border)] flex items-center justify-between gap-3 z-30">
             <div className="flex items-center gap-2 text-xs min-w-0">
               {activeStage ? (
                 <>
-                  <span className="font-display text-sm font-bold text-[#F5F1E8] whitespace-nowrap">
+                  <span className="font-display text-sm font-bold text-[var(--dojo-text-bright)] whitespace-nowrap">
                     {t(activeStage.indexLabel)} · {t(activeStage.title)}
                   </span>
                   {isWeakDrill ? (
                     <>
-                      <span aria-hidden="true" className="text-[#505868]">·</span>
-                      <span className="text-[#34D399] whitespace-nowrap">{t('弱點複訓')}</span>
+                      <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
+                      <span className="text-[var(--dojo-pine-text)] whitespace-nowrap">{t('弱點複訓')}</span>
                     </>
                   ) : activeStage.chapterId === 4 ? (
                     <>
-                      <span aria-hidden="true" className="hidden md:inline text-[#505868]">·</span>
-                      <span className="hidden md:inline text-[#D89B3C] truncate">
+                      <span aria-hidden="true" className="hidden md:inline text-[var(--dojo-text-muted)]">·</span>
+                      <span className="hidden md:inline text-[var(--dojo-ochre)] truncate">
                         {t('僅輸入高亮筆畫字根全碼')} · {t(SCRIPT_MODE_LABELS[scriptMode])}
                       </span>
                     </>
                   ) : activeStage.chapterId === 2 || activeStage.chapterId === 5 ? (
                     <>
-                      <span aria-hidden="true" className="hidden md:inline text-[#505868]">·</span>
-                      <span className="hidden md:inline text-[#9BA3B2] truncate">
+                      <span aria-hidden="true" className="hidden md:inline text-[var(--dojo-text-muted)]">·</span>
+                      <span className="hidden md:inline text-[var(--dojo-text-sub)] truncate">
                         {t(`第 ${activeStage.chapterId} 關`)} · {t(SCRIPT_MODE_LABELS[scriptMode])}
                       </span>
                     </>
                   ) : (
                     <>
-                      <span aria-hidden="true" className="hidden md:inline text-[#505868]">·</span>
-                      <span className="hidden md:inline text-[#9BA3B2] truncate">
+                      <span aria-hidden="true" className="hidden md:inline text-[var(--dojo-text-muted)]">·</span>
+                      <span className="hidden md:inline text-[var(--dojo-text-sub)] truncate">
                         {t(`第 ${activeStage.chapterId} 關 · 全字根`)} · {t(SCRIPT_MODE_LABELS[scriptMode])}
                       </span>
                     </>
@@ -1148,33 +1302,33 @@ export default function App() {
                 </>
               ) : (
                 <>
-                  <span className="font-display text-sm font-bold text-[#F5F1E8] whitespace-nowrap">
+                  <span className="font-display text-sm font-bold text-[var(--dojo-text-bright)] whitespace-nowrap">
                     {singleChamberKey
                       ? `${singleChamberKey.toUpperCase()} ${t('鍵宮殿')}（${
                           LINGMING_CHAMBER_BY_KEY[singleChamberKey]?.primaryAnchor || ''
                         }）`
                       : t(MODE_OPTIONS.find((m) => m.id === mode)?.label ?? '')}
                   </span>
-                  <span aria-hidden="true" className="text-[#505868]">·</span>
-                  <span className="text-[#9BA3B2] truncate">
+                  <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
+                  <span className="text-[var(--dojo-text-sub)] truncate">
                     {singleChamberKey ? t('逐鍵巡禮') : t(activeScheme.shortName)}
                   </span>
                   {activeScheme.isLingming && singleChamberKey && (
                     <>
-                      <span aria-hidden="true" className="hidden md:inline text-[#505868]">·</span>
-                      <span className="hidden md:inline text-[#7CE5BC] whitespace-nowrap">
+                      <span aria-hidden="true" className="hidden md:inline text-[var(--dojo-text-muted)]">·</span>
+                      <span className="hidden md:inline text-[var(--dojo-pine-text)] whitespace-nowrap">
                         {t(SCRIPT_MODE_LABELS[scriptMode])}
                       </span>
                     </>
                   )}
                   {activeScheme.isLingming && !singleChamberKey && (
                     <>
-                      <span aria-hidden="true" className="hidden md:inline text-[#505868]">·</span>
-                      <span className="hidden md:inline text-[#D89B3C] whitespace-nowrap">
+                      <span aria-hidden="true" className="hidden md:inline text-[var(--dojo-text-muted)]">·</span>
+                      <span className="hidden md:inline text-[var(--dojo-ochre)] whitespace-nowrap">
                         {t(SCOPE_OPTIONS.find((s) => s.id === trainingScope)?.label ?? '')}
                       </span>
-                      <span aria-hidden="true" className="hidden lg:inline text-[#505868]">·</span>
-                      <span className="hidden lg:inline text-[#7CE5BC] whitespace-nowrap">
+                      <span aria-hidden="true" className="hidden lg:inline text-[var(--dojo-text-muted)]">·</span>
+                      <span className="hidden lg:inline text-[var(--dojo-pine-text)] whitespace-nowrap">
                         {t(SCRIPT_MODE_LABELS[scriptMode])}
                       </span>
                     </>
@@ -1184,48 +1338,48 @@ export default function App() {
             </div>
 
             {/* Tabular telemetry meters */}
-            <div className="flex items-center gap-3.5 sm:gap-5 text-xs font-mono-tabular">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-[#7D8696] font-sans">{t('得分')}</span>
-                <span className="text-sm font-semibold text-[#F5F1E8]">{hud.score}</span>
+            <div className="shrink-0 flex items-center gap-3 xl:gap-4 text-xs font-mono-tabular whitespace-nowrap">
+              <div className="flex items-baseline gap-1 whitespace-nowrap">
+                <span className="text-[var(--dojo-text-muted)] font-sans">{t('得分')}</span>
+                <span className="text-sm font-semibold text-[var(--dojo-text-bright)]">{hud.score}</span>
               </div>
 
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-[#7D8696] font-sans">{t('連擊')}</span>
+              <div className="flex items-baseline gap-1 whitespace-nowrap">
+                <span className="text-[var(--dojo-text-muted)] font-sans">{t('連擊')}</span>
                 <span
                   className={`text-sm font-semibold ${
                     hud.combo >= 10
-                      ? 'text-[#D89B3C]'
+                      ? 'text-[var(--dojo-ochre)]'
                       : hud.combo >= 3
-                        ? 'text-[#2EA87E]'
-                        : 'text-[#C8C3B8]'
+                        ? 'text-[var(--dojo-pine-text)]'
+                        : 'text-[var(--dojo-text-sub)]'
                   }`}
                 >
                   {hud.combo}x
                 </span>
               </div>
 
-              <div className="hidden sm:flex items-baseline gap-1.5">
-                <span className="text-[#7D8696] font-sans">{t('均速')}</span>
-                <span className="text-sm font-semibold text-[#E5E0D5]">
+              <div className="hidden sm:flex items-baseline gap-1 whitespace-nowrap">
+                <span className="text-[var(--dojo-text-muted)] font-sans">{t('均速')}</span>
+                <span className="text-sm font-semibold text-[var(--dojo-text)]">
                   {hud.avgKeyMs > 0 ? `${hud.avgKeyMs}ms` : '--'}
                 </span>
               </div>
 
-              <div className="hidden md:flex items-baseline gap-1.5">
-                <span className="text-[#7D8696] font-sans">{t('準確')}</span>
-                <span className="text-sm font-semibold text-[#E5E0D5]">{hud.accuracy}%</span>
+              <div className="hidden md:flex items-baseline gap-1 whitespace-nowrap">
+                <span className="text-[var(--dojo-text-muted)] font-sans">{t('準確')}</span>
+                <span className="text-sm font-semibold text-[var(--dojo-text)]">{hud.accuracy}%</span>
               </div>
 
               {(mode === 'arcade' || (activeStage?.isBossTrial && !isWeakDrill)) && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[#7D8696] font-sans">{t('墨印')}</span>
+                <div className="flex items-center gap-1 whitespace-nowrap">
+                  <span className="text-[var(--dojo-text-muted)] font-sans">{t('墨印')}</span>
                   <div className="flex items-center gap-1" aria-label={t(`剩餘 ${hud.lives} 點墨印`)}>
                     {Array.from({ length: hud.maxLives }).map((_, i) => (
                       <span
                         key={i}
                         className={`w-2.5 h-2.5 rounded-[2px] ${
-                          i < hud.lives ? 'bg-[#D94A38]' : 'bg-[#F2EEE6]/12'
+                          i < hud.lives ? 'bg-[var(--dojo-crimson)]' : 'bg-[var(--dojo-border-strong)]'
                         }`}
                       />
                     ))}
@@ -1234,24 +1388,24 @@ export default function App() {
               )}
 
               {(mode !== 'arcade' || Boolean(activeStage)) && (
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-[#7D8696] font-sans">{t('進度')}</span>
-                  <span className="text-sm font-semibold text-[#E5E0D5]">
+                <div className="flex items-baseline gap-1 whitespace-nowrap">
+                  <span className="text-[var(--dojo-text-muted)] font-sans">{t('進度')}</span>
+                  <span className="text-sm font-semibold text-[var(--dojo-text)]">
                     {hud.cleared}/{hud.targetGoal}
                   </span>
                 </div>
               )}
             </div>
 
-            {/* Right: Functional controls including instant Depth/Split A-B comparison! */}
+            {/* Right: Functional controls including instant Depth/Split A-B & Theme comparison */}
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
                 onClick={toggleLayoutMode}
                 title={t('即時對比「疊層景深零掃視」與「上下分區」')}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[#CFE0F5] hover:text-white bg-[#151D2B] hover:bg-[#1F2B40] border border-[#4F86C6]/35 rounded-md transition-colors whitespace-nowrap cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[var(--dojo-text)] bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border-strong)] rounded-md transition-colors whitespace-nowrap cursor-pointer"
               >
-                <Layers className="w-3.5 h-3.5 text-[#58A6E0]" />
+                <Layers className="w-3.5 h-3.5 text-[#3B7CC4] wash:text-[#1F6E52]" />
                 <span className="hidden lg:inline">
                   {t(layoutMode === 'depth' ? 'Alice 景深' : '上下分區')}
                 </span>
@@ -1262,9 +1416,9 @@ export default function App() {
                   type="button"
                   onClick={() => openPalaceCloud('PLAYING')}
                   title={t('查看筆畫鍵位雲圖記憶宮殿')}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[#E8C57B] hover:text-white bg-[#171D28] hover:bg-[#232C3D] border border-[#D89B3C]/35 rounded-md transition-colors whitespace-nowrap cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[var(--dojo-ochre)] bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-ochre)]/35 rounded-md transition-colors whitespace-nowrap cursor-pointer"
                 >
-                  <Compass className="w-3.5 h-3.5 text-[#D89B3C]" />
+                  <Compass className="w-3.5 h-3.5 text-[var(--dojo-ochre)]" />
                   <span className="hidden sm:inline">{t('雲圖')}</span>
                 </button>
               )}
@@ -1275,8 +1429,8 @@ export default function App() {
                 title={t(hideCodeHints ? '目前隱藏下方鍵碼槽（按 Tab 可臨時偷看），點擊顯示' : '隱藏下方鍵位編碼槽，保持極簡勿打擾')}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border transition-colors whitespace-nowrap cursor-pointer ${
                   hideCodeHints
-                    ? 'bg-[#17252B] hover:bg-[#1F323A] border-[#38A885]/45 text-[#7CE5BC]'
-                    : 'bg-[#161B24] hover:bg-[#202735] border-[#F2EEE6]/10 text-[#C8C3B8]'
+                    ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/45 text-[var(--dojo-pine-text)]'
+                    : 'bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
                 }`}
               >
                 <Keyboard className="w-3.5 h-3.5" />
@@ -1288,9 +1442,9 @@ export default function App() {
                   type="button"
                   onClick={toggleCloudEchoMotion}
                   title={t('切換背景雲圖出場方式：原地漸顯（極簡勿打擾） vs 從背景 Alice 鍵位放大到前螢幕')}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border bg-[#161B24] hover:bg-[#202735] border-[#F2EEE6]/10 text-[#C8C3B8] hover:text-white transition-colors whitespace-nowrap cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)] transition-colors whitespace-nowrap cursor-pointer"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-[#7CE5BC]" />
+                  <Sparkles className="w-3.5 h-3.5 text-[var(--dojo-pine)]" />
                   <span className="hidden xl:inline">
                     {t(cloudEchoMotion === 'fade' ? '雲圖漸顯' : '鍵位放大')}
                   </span>
@@ -1301,24 +1455,47 @@ export default function App() {
                 type="button"
                 onClick={cycleScaffold}
                 title={t('切換漸隱 / 默背模式')}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[#C8C3B8] hover:text-[#F5F1E8] bg-[#161B24] hover:bg-[#202735] border border-[#F2EEE6]/10 rounded-md transition-colors whitespace-nowrap cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)] bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border)] rounded-md transition-colors whitespace-nowrap cursor-pointer"
               >
                 {scaffoldMode === 'blind' ? (
-                  <EyeOff className="w-3.5 h-3.5 text-[#2EA87E]" />
+                  <EyeOff className="w-3.5 h-3.5 text-[var(--dojo-pine)]" />
                 ) : (
-                  <Eye className="w-3.5 h-3.5 text-[#D89B3C]" />
+                  <Eye className="w-3.5 h-3.5 text-[var(--dojo-ochre)]" />
                 )}
                 <span className="hidden xl:inline">{t(SCAFFOLD_LABELS[scaffoldMode])}</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setHintPulseTick((t) => t + 1)}
+                onClick={() => setHintPulseTick((n) => n + 1)}
                 title={t('瞬間拉焦顯示提示 (Tab)')}
-                className="px-2.5 py-1.5 text-xs font-medium text-[#9BA3B2] hover:text-[#F5F1E8] bg-[#161B24] hover:bg-[#202735] border border-[#F2EEE6]/10 rounded-md transition-colors whitespace-nowrap cursor-pointer"
+                className="px-2.5 py-1.5 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)] bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border)] rounded-md transition-colors whitespace-nowrap cursor-pointer"
               >
                 {t('拉焦')}
               </button>
+
+              {/* Compact theme toggle inside active play */}
+              <div
+                role="group"
+                aria-label={t('切換道場視覺色調')}
+                className="hidden sm:inline-flex items-center p-0.5 rounded-md border border-[var(--dojo-border)] bg-[var(--dojo-surface)]"
+              >
+                {THEME_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => handleChangeThemeMode(opt.id)}
+                    title={t(opt.label)}
+                    className={`px-2 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer ${
+                      themeMode === opt.id
+                        ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)]'
+                        : 'text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text)]'
+                    }`}
+                  >
+                    {t(opt.short)}
+                  </button>
+                ))}
+              </div>
 
               <button
                 type="button"
@@ -1327,8 +1504,8 @@ export default function App() {
                 aria-label={t(speechEnabled ? '關閉字根發音' : '開啟字根發音')}
                 className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md border transition-colors whitespace-nowrap cursor-pointer ${
                   speechEnabled
-                    ? 'bg-[#142722] hover:bg-[#1B352E] border-[#2EA87E]/45 text-[#7CE5BC]'
-                    : 'bg-[#161B24] hover:bg-[#202735] border-[#F2EEE6]/10 text-[#7F8898]'
+                    ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/45 text-[var(--dojo-pine-text)]'
+                    : 'bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-muted)]'
                 }`}
               >
                 <AudioLines className="w-3.5 h-3.5" />
@@ -1340,7 +1517,7 @@ export default function App() {
                 onClick={toggleMute}
                 title={t(muted ? '按鍵音效：已關閉（點擊開啟）' : '按鍵音效：已開啟（點擊靜音）')}
                 aria-label={t(muted ? '開啟按鍵音效' : '關閉按鍵音效')}
-                className="w-8 h-8 flex items-center justify-center rounded-md text-[#9BA3B2] hover:text-[#F5F1E8] hover:bg-[#1E2430] transition-colors cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] hover:bg-[var(--dojo-surface-2)] transition-colors cursor-pointer"
               >
                 {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               </button>
@@ -1351,7 +1528,7 @@ export default function App() {
                   setGameState((prev) => (prev === 'PLAYING' ? 'PAUSED' : 'PLAYING'))
                 }
                 aria-label={t('暫停')}
-                className="w-8 h-8 flex items-center justify-center rounded-md text-[#9BA3B2] hover:text-[#F5F1E8] hover:bg-[#1E2430] transition-colors cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] hover:bg-[var(--dojo-surface-2)] transition-colors cursor-pointer"
               >
                 <Pause className="w-4 h-4" />
               </button>
@@ -1359,10 +1536,10 @@ export default function App() {
           </header>
 
           {/* ==================== UNIFIED STAGE ==================== */}
-          <main ref={stageRef} className="flex-1 min-h-0 relative overflow-hidden bg-[#0B0F17]">
+          <main ref={stageRef} className="flex-1 min-h-0 relative overflow-hidden bg-[var(--dojo-canvas)] wash:bg-transparent">
             {/* Layer 0: Alice Split Keyboard backdrop */}
             {layoutMode === 'depth' && (
-              <div className="absolute inset-0 z-10">
+              <div className="absolute inset-0 z-10 wash-enter">
                 <BlurredKeyboardBackdrop
                   scheme={activeScheme}
                   target={target}
@@ -1371,7 +1548,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Layer 1: Reactive Key-1 Memory Palace Cloud Stimulus — pure原地漸顯 or Alice 鍵位放大 */}
+            {/* Layer 1: Reactive Key-1 Memory Palace Cloud Stimulus — pure原地漸顯 / 水墨暈染 or Alice 鍵位放大 */}
             {activeScheme.isLingming && mode !== 'arcade' && echoMemory && (
               <div
                 aria-hidden="true"
@@ -1384,16 +1561,29 @@ export default function App() {
                   width: layoutMode === 'depth' ? `${depthMetrics.echoBoxSize}px` : '900px',
                   height: layoutMode === 'depth' ? `${depthMetrics.echoBoxSize}px` : '900px',
                   opacity: !showCloudEcho ? 0 : echoPose.settled ? 1 : cloudEchoMotion === 'keyzoom' ? 0.08 : 0,
+                  filter: isWash
+                    ? !showCloudEcho
+                      ? 'blur(4px)'
+                      : echoPose.settled
+                        ? 'blur(0px)'
+                        : 'blur(6px)'
+                    : 'none',
                   transform:
                     !showCloudEcho || echoPose.settled || cloudEchoMotion === 'fade'
                       ? 'translate(-50%, -50%) scale(1)'
                       : `translate(calc(-50% + ${echoPose.startDx.toFixed(1)}px), calc(-50% + ${echoPose.startDy.toFixed(1)}px)) scale(${echoPose.startScale})`,
                   transition: !showCloudEcho
-                    ? 'opacity 140ms ease-out'
+                    ? isWash
+                      ? 'opacity 160ms ease-out, filter 160ms ease-out'
+                      : 'opacity 140ms ease-out'
                     : echoPose.settled
                       ? cloudEchoMotion === 'keyzoom'
-                        ? 'opacity 250ms ease-out, transform 340ms cubic-bezier(0.16, 1, 0.3, 1)'
-                        : 'opacity 260ms ease-out'
+                        ? isWash
+                          ? 'opacity 280ms ease-out, filter 320ms ease-out, transform 340ms cubic-bezier(0.16, 1, 0.3, 1)'
+                          : 'opacity 250ms ease-out, transform 340ms cubic-bezier(0.16, 1, 0.3, 1)'
+                        : isWash
+                          ? 'opacity 300ms ease-out, filter 340ms ease-out'
+                          : 'opacity 260ms ease-out'
                       : 'none',
                 }}
               >
@@ -1407,7 +1597,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Layer 2 (Foreground · Crisp Warm-Ivory 60fps Interactive Canvas) */}
+            {/* Layer 2 (Foreground · High-contrast 60fps Interactive Canvas) */}
             <div className="relative z-20 w-full h-full">
               <GameCanvas
                 scheme={activeScheme}
@@ -1455,39 +1645,69 @@ export default function App() {
       {/* ==================== PAUSE MODAL ==================== */}
       {gameState === 'PAUSED' && (
         <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-black/72 p-4"
+          className={`fixed inset-0 z-40 flex items-center justify-center p-4 ${
+            isWash ? 'bg-[#1C1A17]/35 backdrop-blur-[2px]' : 'bg-black/72'
+          }`}
           role="dialog"
           aria-modal="true"
           aria-label={t('遊戲暫停')}
         >
-          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-[#151A24] border border-[#F2EEE6]/12 rounded-xl p-6 shadow-2xl">
-            <h2 className="font-display text-2xl font-bold text-[#F5F1E8]">{t('暫停鍛煉')}</h2>
-            <p className="text-xs text-[#949DAD] mt-1">
+          <div className="wash-enter w-full max-w-md max-h-[90vh] overflow-y-auto bg-[var(--dojo-surface)] wash:bg-[#F3EEE3]/96 border border-[var(--dojo-border)] rounded-xl p-6 shadow-2xl wash:shadow-[0_18px_50px_rgba(28,26,23,0.18)]">
+            <h2 className="font-display text-2xl font-bold text-[var(--dojo-text-bright)]">{t('暫停鍛煉')}</h2>
+            <p className="text-xs text-[var(--dojo-text-sub)] mt-1">
               {activeStage
                 ? `${t(activeStage.indexLabel)} · ${t(activeStage.title)}`
                 : `${t(activeScheme.name)} · ${t(layoutMode === 'depth' ? '疊層景深（零掃視）' : '上下分區')}`}
             </p>
 
-            <div className="grid grid-cols-3 gap-3 my-5 py-4 border-y border-[#F2EEE6]/8 text-center font-mono-tabular">
+            <div className="grid grid-cols-3 gap-3 my-5 py-4 border-y border-[var(--dojo-border)] text-center font-mono-tabular">
               <div>
-                <div className="text-xs text-[#7F8898] font-sans">{t('得分')}</div>
-                <div className="text-lg font-bold text-[#F5F1E8] mt-0.5">{hud.score}</div>
+                <div className="text-xs text-[var(--dojo-text-muted)] font-sans">{t('得分')}</div>
+                <div className="text-lg font-bold text-[var(--dojo-text-bright)] mt-0.5">{hud.score}</div>
               </div>
               <div>
-                <div className="text-xs text-[#7F8898] font-sans">{t('準確率')}</div>
-                <div className="text-lg font-bold text-[#2EA87E] mt-0.5">{hud.accuracy}%</div>
+                <div className="text-xs text-[var(--dojo-text-muted)] font-sans">{t('準確率')}</div>
+                <div className="text-lg font-bold text-[var(--dojo-pine)] mt-0.5">{hud.accuracy}%</div>
               </div>
               <div>
-                <div className="text-xs text-[#7F8898] font-sans">{t('均鍵延遲')}</div>
-                <div className="text-lg font-bold text-[#D89B3C] mt-0.5">
+                <div className="text-xs text-[var(--dojo-text-muted)] font-sans">{t('均鍵延遲')}</div>
+                <div className="text-lg font-bold text-[var(--dojo-ochre)] mt-0.5">
                   {hud.avgKeyMs > 0 ? `${hud.avgKeyMs}ms` : '--'}
                 </div>
               </div>
             </div>
 
+            <div className="mb-4">
+              <div className="text-xs text-[var(--dojo-text-sub)] mb-2">{t('道場視覺色調')}</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {THEME_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => handleChangeThemeMode(opt.id)}
+                    className={`py-2 px-2.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap cursor-pointer inline-flex items-center justify-center gap-1.5 ${
+                      themeMode === opt.id
+                        ? 'bg-[var(--dojo-surface-2)] border-[var(--dojo-ochre)] text-[var(--dojo-text-bright)]'
+                        : 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`w-2 h-2 rounded-full border ${
+                        opt.id === 'night'
+                          ? 'bg-[#121722] border-[#6E788A]'
+                          : 'bg-[#F2EDE2] border-[#9C6414]/70'
+                      }`}
+                    />
+                    <span>{t(opt.label)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {!activeStage && !singleChamberKey && (
               <div className="mb-4">
-                <div className="text-xs text-[#8F98A8] mb-2">{t('切換鍛煉模式')}</div>
+                <div className="text-xs text-[var(--dojo-text-sub)] mb-2">{t('切換鍛煉模式')}</div>
                 <div className="grid grid-cols-3 gap-1.5">
                   {MODE_OPTIONS.map((opt) => (
                     <button
@@ -1496,8 +1716,8 @@ export default function App() {
                       onClick={() => startPlay(opt.id, null, trainingScope)}
                       className={`py-2 px-2 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap cursor-pointer ${
                         mode === opt.id
-                          ? 'bg-[#262F40] border-[#D94A38]/70 text-[#F5F1E8]'
-                          : 'bg-[#10141C] border-[#F2EEE6]/10 text-[#9BA3B2] hover:text-white'
+                          ? 'bg-[var(--dojo-crimson-wash)] border-[var(--dojo-crimson)]/70 text-[var(--dojo-text-bright)]'
+                          : 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
                       }`}
                     >
                       {t(opt.label)}
@@ -1509,7 +1729,7 @@ export default function App() {
 
             {activeScheme.isLingming && !activeStage && !singleChamberKey && (
               <div className="mb-4">
-                <div className="text-xs text-[#8F98A8] mb-2">{t('切換靈明訓練層級')}</div>
+                <div className="text-xs text-[var(--dojo-text-sub)] mb-2">{t('切換靈明訓練層級')}</div>
                 <div className="grid grid-cols-2 gap-1.5">
                   {SCOPE_OPTIONS.map((sc) => (
                     <button
@@ -1518,8 +1738,8 @@ export default function App() {
                       onClick={() => startPlay(mode, focusKeys, sc.id)}
                       className={`py-2 px-2.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
                         trainingScope === sc.id
-                          ? 'bg-[#1F2A38] border-[#D89B3C] text-[#F2D59B]'
-                          : 'bg-[#10141C] border-[#F2EEE6]/10 text-[#9BA3B2] hover:text-white'
+                          ? 'bg-[var(--dojo-ochre-wash)] border-[var(--dojo-ochre)] text-[var(--dojo-text-bright)]'
+                          : 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
                       }`}
                     >
                       {t(sc.label)}
@@ -1531,7 +1751,7 @@ export default function App() {
 
             {activeScheme.isLingming && (
               <div className="mb-4">
-                <div className="text-xs text-[#8F98A8] mb-2">
+                <div className="text-xs text-[var(--dojo-text-sub)] mb-2">
                   {t('繁簡訓練範圍（字根與拆字同步分流）')}
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -1545,8 +1765,8 @@ export default function App() {
                       }}
                       className={`py-2 px-2 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap cursor-pointer ${
                         scriptMode === opt.id
-                          ? 'bg-[#152823] border-[#2EA87E]/55 text-[#7CE5BC]'
-                          : 'bg-[#10141C] border-[#F2EEE6]/10 text-[#9BA3B2] hover:text-white'
+                          ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/55 text-[var(--dojo-pine-text)]'
+                          : 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
                       }`}
                     >
                       {t(opt.short)}
@@ -1560,14 +1780,14 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setGameState('PLAYING')}
-                className="w-full py-2.5 text-sm font-semibold bg-[#D94A38] hover:bg-[#E25644] text-white rounded-lg transition-colors cursor-pointer"
+                className="w-full py-2.5 text-sm font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors cursor-pointer"
               >
                 {t('繼續鍛煉')}
               </button>
               <button
                 type="button"
                 onClick={() => openPalaceCloud('PLAYING')}
-                className="w-full py-2.5 text-sm font-medium bg-[#1B2230] hover:bg-[#252F42] border border-[#D89B3C]/35 text-[#F2D59B] rounded-lg transition-colors cursor-pointer"
+                className="w-full py-2.5 text-sm font-medium bg-[var(--dojo-surface-2)] hover:brightness-105 border border-[var(--dojo-ochre)]/35 text-[var(--dojo-ochre)] rounded-lg transition-colors cursor-pointer"
               >
                 {t('開啟筆畫鍵位雲圖 · 記憶宮殿')}
               </button>
@@ -1576,7 +1796,7 @@ export default function App() {
                 onClick={() =>
                   activeStage ? launchCampaignStage(activeStage) : startPlay(mode, focusKeys)
                 }
-                className="w-full py-2.5 text-sm font-medium bg-[#1E2533] hover:bg-[#273042] text-[#E5E0D5] rounded-lg transition-colors cursor-pointer"
+                className="w-full py-2.5 text-sm font-medium bg-[var(--dojo-surface-2)] hover:brightness-105 text-[var(--dojo-text)] rounded-lg transition-colors cursor-pointer"
               >
                 {t(activeStage ? '重新開始本節' : '重新開始本局')}
               </button>
@@ -1584,7 +1804,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setGameState(activeStage ? 'CAMPAIGN_MAP' : chamberReturnTo)}
-                  className="w-full py-2.5 text-xs font-medium bg-[#10141C] hover:bg-[#19202D] border border-[#F2EEE6]/10 text-[#C8C3B8] rounded-lg transition-colors cursor-pointer"
+                  className="w-full py-2.5 text-xs font-medium bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border)] text-[var(--dojo-text-sub)] rounded-lg transition-colors cursor-pointer"
                 >
                   {t(
                     activeStage
@@ -1600,8 +1820,8 @@ export default function App() {
                 onClick={toggleHideCodeHints}
                 className={`w-full py-2.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
                   hideCodeHints
-                    ? 'bg-[#152823] hover:bg-[#1C352E] border-[#2EA87E]/45 text-[#7CE5BC]'
-                    : 'bg-[#10141C] hover:bg-[#19202D] border-[#F2EEE6]/10 text-[#9BA3B2]'
+                    ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/45 text-[var(--dojo-pine-text)]'
+                    : 'bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)]'
                 }`}
               >
                 {t(hideCodeHints ? '下方鍵位提示：已隱藏（極簡勿打擾，按 Tab 偷看）' : '下方鍵位提示：已顯示（點擊隱藏）')}
@@ -1610,7 +1830,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={toggleCloudEchoMotion}
-                  className="w-full py-2.5 text-xs font-medium rounded-lg border bg-[#10141C] hover:bg-[#19202D] border-[#F2EEE6]/10 text-[#C8C3B8] transition-colors cursor-pointer"
+                  className="w-full py-2.5 text-xs font-medium rounded-lg border bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] transition-colors cursor-pointer"
                 >
                   {t(
                     cloudEchoMotion === 'fade'
@@ -1624,8 +1844,8 @@ export default function App() {
                 onClick={toggleSpeech}
                 className={`w-full py-2.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
                   speechEnabled
-                    ? 'bg-[#152823] hover:bg-[#1C352E] border-[#2EA87E]/45 text-[#7CE5BC]'
-                    : 'bg-[#10141C] hover:bg-[#19202D] border-[#F2EEE6]/10 text-[#9BA3B2]'
+                    ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/45 text-[var(--dojo-pine-text)]'
+                    : 'bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)]'
                 }`}
               >
                 {t(speechEnabled ? '字根代表發音：已開啟（點擊關閉）' : '字根代表發音：已關閉（點擊開啟）')}
@@ -1633,7 +1853,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setGameState('TITLE_MENU')}
-                className="w-full py-1.5 text-xs font-medium text-[#7D8696] hover:text-[#F5F1E8] transition-colors cursor-pointer"
+                className="w-full py-1.5 text-xs font-medium text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text-bright)] transition-colors cursor-pointer"
               >
                 {t('返回主畫面')}
               </button>
@@ -1645,15 +1865,17 @@ export default function App() {
       {/* ==================== ROUND SUMMARY / CHAMBER PASS COMPLETE MODAL ==================== */}
       {(gameState === 'ROUND_SUMMARY' || gameState === 'GAME_OVER') && roundResult && (
         <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-black/78 p-4"
+          className={`fixed inset-0 z-40 flex items-center justify-center p-4 ${
+            isWash ? 'bg-[#1C1A17]/35 backdrop-blur-[2px]' : 'bg-black/78'
+          }`}
           role="dialog"
           aria-modal="true"
           aria-label={t('回合結算')}
         >
-          <div className="w-full max-w-lg bg-[#151A24] border border-[#F2EEE6]/12 rounded-xl p-6 sm:p-7 shadow-2xl">
+          <div className="wash-enter w-full max-w-lg bg-[var(--dojo-surface)] wash:bg-[#F3EEE3]/96 border border-[var(--dojo-border)] rounded-xl p-6 sm:p-7 shadow-2xl wash:shadow-[0_18px_50px_rgba(28,26,23,0.18)]">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="font-display text-2xl font-bold text-[#F5F1E8]">
+                <h2 className="font-display text-2xl font-bold text-[var(--dojo-text-bright)]">
                   {activeStage
                     ? isWeakDrill
                       ? `${t(activeStage.indexLabel)} · ${t('弱點複訓完成')}`
@@ -1670,7 +1892,7 @@ export default function App() {
                         ? t('墨印耗盡 · 本陣結束')
                         : t('鍛煉完成 · 肌肉記憶已記錄')}
                 </h2>
-                <p className="text-xs text-[#949DAD] mt-1 font-mono-tabular">
+                <p className="text-xs text-[var(--dojo-text-sub)] mt-1 font-mono-tabular">
                   {activeStage
                     ? `${roundResult.cleared} ${t('題')} · ${t('耗時')} ${roundResult.durationSec} ${t('秒')}${
                         lastStageBadge?.isNewRecord ? ` · ${t('刷新紀錄')}` : ''
@@ -1689,16 +1911,16 @@ export default function App() {
                       className={`w-5 h-5 ${
                         n <= lastStageBadge.earnedStars
                           ? activeStage.isBossTrial
-                            ? 'fill-[#D94A38] text-[#D94A38]'
-                            : 'fill-[#D89B3C] text-[#D89B3C]'
-                          : 'text-[#313949]'
+                            ? 'fill-[var(--dojo-crimson)] text-[var(--dojo-crimson)]'
+                            : 'fill-[var(--dojo-ochre)] text-[var(--dojo-ochre)]'
+                          : 'text-[var(--dojo-border-strong)]'
                       }`}
                     />
                   ))}
                 </div>
               ) : (
                 roundResult.promotedCount > 0 && (
-                  <div className="inline-flex items-center gap-1.5 text-xs font-medium text-[#2EA87E] whitespace-nowrap">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--dojo-pine)] whitespace-nowrap">
                     <Sparkles className="w-4 h-4" />
                     <span>{roundResult.promotedCount} {t('項晉級')}</span>
                   </div>
@@ -1708,7 +1930,7 @@ export default function App() {
 
             {/* When finishing a single Palace Chamber, render the full completed Stroke Cloud right inside the summary! */}
             {singleChamberKey ? (
-              <div className="my-4 h-52 bg-[#0F141C] rounded-xl border border-[#F2EEE6]/8 flex items-center justify-center p-2">
+              <div className="my-4 h-52 bg-[var(--dojo-surface-inset)] rounded-xl border border-[var(--dojo-border)] flex items-center justify-center p-2">
                 <StrokeCloudStage
                   chamberKey={singleChamberKey}
                   completedChars={completedChars}
@@ -1718,26 +1940,26 @@ export default function App() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-5 py-4 border-y border-[#F2EEE6]/8 font-mono-tabular">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-5 py-4 border-y border-[var(--dojo-border)] font-mono-tabular">
                   <div>
-                    <div className="text-xs text-[#7F8898] font-sans">{t('總分')}</div>
-                    <div className="text-xl font-bold text-[#F5F1E8] mt-0.5">{roundResult.score}</div>
+                    <div className="text-xs text-[var(--dojo-text-muted)] font-sans">{t('總分')}</div>
+                    <div className="text-xl font-bold text-[var(--dojo-text-bright)] mt-0.5">{roundResult.score}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-[#7F8898] font-sans">{t('最高連擊')}</div>
-                    <div className="text-xl font-bold text-[#D89B3C] mt-0.5">
+                    <div className="text-xs text-[var(--dojo-text-muted)] font-sans">{t('最高連擊')}</div>
+                    <div className="text-xl font-bold text-[var(--dojo-ochre)] mt-0.5">
                       {roundResult.maxCombo}x
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-[#7F8898] font-sans">{t('準確率')}</div>
-                    <div className="text-xl font-bold text-[#2EA87E] mt-0.5">
+                    <div className="text-xs text-[var(--dojo-text-muted)] font-sans">{t('準確率')}</div>
+                    <div className="text-xl font-bold text-[var(--dojo-pine)] mt-0.5">
                       {roundResult.accuracy}%
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-[#7F8898] font-sans">{t('均鍵反應')}</div>
-                    <div className="text-xl font-bold text-[#E5E0D5] mt-0.5">
+                    <div className="text-xs text-[var(--dojo-text-muted)] font-sans">{t('均鍵反應')}</div>
+                    <div className="text-xl font-bold text-[var(--dojo-text)] mt-0.5">
                       {roundResult.avgKeyMs > 0 ? `${roundResult.avgKeyMs}ms` : '--'}
                     </div>
                   </div>
@@ -1746,10 +1968,10 @@ export default function App() {
                 {activeStage ? (
                   <div className="mb-6">
                     <div className="flex items-center justify-between text-xs mb-2.5">
-                      <span className="font-medium text-[#B8BECA]">
+                      <span className="font-medium text-[var(--dojo-text-sub)]">
                         {t('本節錯題與慢鍵診斷')}
                       </span>
-                      <span className="font-mono-tabular text-[#7F8898]">
+                      <span className="font-mono-tabular text-[var(--dojo-text-muted)]">
                         {t('三星條件')} ≥{activeStage.threeStarAccuracy}% · ≤{activeStage.threeStarAvgMs}ms
                       </span>
                     </div>
@@ -1761,15 +1983,15 @@ export default function App() {
                           return (
                             <div
                               key={`${wk.entry.id}_${idx}`}
-                              className="p-2.5 rounded-lg bg-[#10141C] border border-[#F2EEE6]/8 text-center"
+                              className="p-2.5 rounded-lg bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] text-center"
                             >
-                              <div className="font-display text-xl font-bold text-[#F5F1E8] leading-tight">
+                              <div className="font-display text-xl font-bold text-[var(--dojo-text-bright)] leading-tight">
                                 {displayChar}
                               </div>
-                              <div className="font-mono-tabular text-xs font-bold text-[#D89B3C] mt-0.5">
+                              <div className="font-mono-tabular text-xs font-bold text-[var(--dojo-ochre)] mt-0.5">
                                 {wk.entry.code.toUpperCase()}
                               </div>
-                              <div className="font-mono-tabular text-[10px] text-[#8B93A3] mt-0.5">
+                              <div className="font-mono-tabular text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
                                 {wk.errors > 0 ? `${t('錯')} ${wk.errors} ${t('次')}` : `${wk.avgMs}ms`}
                               </div>
                             </div>
@@ -1777,29 +1999,29 @@ export default function App() {
                         })}
                       </div>
                     ) : (
-                      <div className="py-3 px-3.5 rounded-lg bg-[#10161D] border border-[#2EA87E]/25 text-xs text-[#7CE5BC]">
+                      <div className="py-3 px-3.5 rounded-lg bg-[var(--dojo-pine-wash)] border border-[var(--dojo-pine)]/25 text-xs text-[var(--dojo-pine-text)]">
                         {t('本節節奏流暢且無明顯誤按，條件反射已穩定成型。')}
                       </div>
                     )}
                   </div>
                 ) : (
                   <div className="mb-6">
-                    <div className="text-xs font-medium text-[#B8BECA] mb-2.5">
+                    <div className="text-xs font-medium text-[var(--dojo-text-sub)] mb-2.5">
                       {t('記憶曲線診斷 · 最需強化的 5 個宮殿鍵位')}
                     </div>
                     <div className="grid grid-cols-5 gap-2">
                       {weakestKeys.map((wk) => (
                         <div
                           key={wk.key}
-                          className="p-2.5 rounded-lg bg-[#10141C] border border-[#F2EEE6]/8 text-center"
+                          className="p-2.5 rounded-lg bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] text-center"
                         >
-                          <div className="font-mono-tabular text-[11px] font-bold text-[#D89B3C]">
+                          <div className="font-mono-tabular text-[11px] font-bold text-[var(--dojo-ochre)]">
                             {wk.key.toUpperCase()}
                           </div>
-                          <div className="font-display text-lg font-bold text-[#F5F1E8] leading-tight my-0.5">
+                          <div className="font-display text-lg font-bold text-[var(--dojo-text-bright)] leading-tight my-0.5">
                             {wk.primary}
                           </div>
-                          <div className="font-mono-tabular text-[10px] text-[#8B93A3]">
+                          <div className="font-mono-tabular text-[10px] text-[var(--dojo-text-muted)]">
                             {wk.attempts > 0 ? `${wk.emaLatencyMs}ms` : t('未練')}
                           </div>
                         </div>
@@ -1825,7 +2047,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={nextProgression.run}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-semibold bg-[#D94A38] hover:bg-[#E45643] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                       >
                         {nextProgression.isBoss ? (
                           <Shield className="w-4 h-4" />
@@ -1841,7 +2063,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => launchCampaignStage(activeStage)}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-semibold bg-[#D94A38] hover:bg-[#E45643] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                       >
                         <RotateCcw className="w-4 h-4" />
                         <span>{t('再戰本節（Enter）')}</span>
@@ -1852,7 +2074,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => launchWeakDrill(weakList)}
-                        className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-semibold bg-[#2EA87E] hover:bg-[#36BC8E] text-[#0A1410] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                        className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-semibold bg-[var(--dojo-pine)] hover:brightness-110 text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                       >
                         <Target className="w-4 h-4" />
                         <span>{t('針對弱點複訓')}</span>
@@ -1863,7 +2085,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => launchCampaignStage(activeStage)}
-                        className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-medium bg-[#1E2533] hover:bg-[#273042] text-[#F2EEE6] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                        className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-medium bg-[var(--dojo-surface-2)] hover:brightness-105 text-[var(--dojo-text)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                       >
                         <RotateCcw className="w-4 h-4" />
                         <span>{t('重練沖星')}</span>
@@ -1873,7 +2095,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setGameState('CAMPAIGN_MAP')}
-                      className="py-2.5 px-3 text-xs font-medium text-[#949DAD] hover:text-[#F5F1E8] transition-colors whitespace-nowrap cursor-pointer"
+                      className="py-2.5 px-3 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors whitespace-nowrap cursor-pointer"
                     >
                       {t('返回卷軸地圖')}
                     </button>
@@ -1892,7 +2114,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={nextProgression.run}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-semibold bg-[#2EA87E] hover:bg-[#36BC8E] text-[#0A1410] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-semibold bg-[var(--dojo-pine)] hover:brightness-110 text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                       >
                         <span>
                           {nextProgression.label}
@@ -1905,7 +2127,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => startPlay('reflex', [singleChamberKey], trainingScope)}
-                      className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-medium bg-[#1E2533] hover:bg-[#273042] text-[#F2EEE6] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                      className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-medium bg-[var(--dojo-surface-2)] hover:brightness-105 text-[var(--dojo-text)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                     >
                       <RotateCcw className="w-4 h-4" />
                       <span>{t('再練一遍')}</span>
@@ -1921,16 +2143,16 @@ export default function App() {
                           scaffoldMode === 'blind' ? 'adaptive' : 'blind'
                         )
                       }
-                      className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-medium bg-[#161C27] hover:bg-[#222B3C] border border-[#F2EEE6]/12 text-[#F2EEE6] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                      className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-medium bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border)] text-[var(--dojo-text)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                     >
-                      <EyeOff className="w-4 h-4 text-[#D89B3C]" />
+                      <EyeOff className="w-4 h-4 text-[var(--dojo-ochre)]" />
                       <span>{t(scaffoldMode === 'blind' ? '切回雲圖提示' : '換成默背')}</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setGameState(chamberReturnTo)}
-                      className="py-2.5 px-3 text-xs font-medium text-[#949DAD] hover:text-[#F5F1E8] transition-colors whitespace-nowrap cursor-pointer"
+                      className="py-2.5 px-3 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors whitespace-nowrap cursor-pointer"
                     >
                       {t(chamberReturnTo === 'CAMPAIGN_MAP' ? '返回第三關逐鍵' : '返回雲圖')}
                     </button>
@@ -1949,7 +2171,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={nextProgression.run}
-                        className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-semibold bg-[#D94A38] hover:bg-[#E25644] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                        className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                       >
                         <ArrowRight className="w-4 h-4" />
                         <span>
@@ -1961,7 +2183,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => startPlay(mode, focusKeys)}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-semibold bg-[#D94A38] hover:bg-[#E25644] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                       >
                         <RotateCcw className="w-4 h-4" />
                         <span>{t('再來一局（Enter）')}</span>
@@ -1978,7 +2200,7 @@ export default function App() {
                             activeScheme.isLingming ? 'root' : 'all'
                           )
                         }
-                        className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-medium bg-[#2EA87E] hover:bg-[#36BC8E] text-[#0A1410] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                        className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-medium bg-[var(--dojo-pine)] hover:brightness-110 text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                       >
                         <Target className="w-4 h-4" />
                         <span>{t('弱鍵突擊')}</span>
@@ -1989,7 +2211,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => startPlay(mode, focusKeys)}
-                        className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-medium bg-[#1E2533] hover:bg-[#273042] text-[#F2EEE6] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                        className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-medium bg-[var(--dojo-surface-2)] hover:brightness-105 text-[var(--dojo-text)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                       >
                         <RotateCcw className="w-4 h-4" />
                         <span>{t('再練本組')}</span>
@@ -1999,7 +2221,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setGameState('TITLE_MENU')}
-                      className="py-2.5 px-3 text-xs font-medium text-[#949DAD] hover:text-[#F5F1E8] transition-colors whitespace-nowrap cursor-pointer"
+                      className="py-2.5 px-3 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors whitespace-nowrap cursor-pointer"
                     >
                       {t('主畫面')}
                     </button>
@@ -2010,7 +2232,7 @@ export default function App() {
 
             {/* Quiet auto-advance footer strip when a next stage exists */}
             {gameState === 'ROUND_SUMMARY' && nextProgression && (
-              <div className="mt-3 pt-2.5 border-t border-[#F2EEE6]/8 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#848E9F]">
+              <div className="mt-3 pt-2.5 border-t border-[var(--dojo-border)] flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--dojo-text-muted)]">
                 <span className="font-mono-tabular">
                   {autoAdvanceEnabled && !autoAdvancePaused
                     ? `${autoAdvanceSec} ${t('秒後自動進入下一階段 · Enter 立即前往')}`
@@ -2024,7 +2246,7 @@ export default function App() {
                         synth.playClick();
                         setAutoAdvancePaused(true);
                       }}
-                      className="text-[#D89B3C] hover:text-[#F2D59B] transition-colors cursor-pointer"
+                      className="text-[var(--dojo-ochre)] hover:underline transition-colors cursor-pointer"
                     >
                       {t('停在本頁 (Esc)')}
                     </button>
@@ -2032,7 +2254,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={toggleAutoAdvance}
-                    className="text-[#949DAD] hover:text-[#F5F1E8] transition-colors cursor-pointer"
+                    className="text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors cursor-pointer"
                   >
                     {t(
                       autoAdvanceEnabled
@@ -2050,6 +2272,7 @@ export default function App() {
       )}
 
     </div>
+    </ThemeContext.Provider>
     </UiScriptContext.Provider>
   );
 }

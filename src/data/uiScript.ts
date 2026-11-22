@@ -205,6 +205,7 @@ const CHAR_MAP: Record<string, string> = {
   設: '设',
   診: '诊',
   詞: '词',
+  詩: '诗',
   評: '评',
   試: '试',
   詳: '详',
@@ -352,6 +353,13 @@ const CHAR_MAP: Record<string, string> = {
   彈: '弹',
   窗: '窗',
   略: '略',
+  紙: '纸',
+  紋: '纹',
+  濃: '浓',
+  硯: '砚',
+  研: '研',
+  修: '修',
+  墨: '墨',
 };
 
 const MNEMONIC_PROSE_TOKENS: Array<[string, string]> = [

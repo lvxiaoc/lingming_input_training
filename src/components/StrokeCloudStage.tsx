@@ -15,6 +15,7 @@ import { getLingmingRadicalScript, LINGMING_ROOT_MAP } from '../data/lingming';
 import { FrequencyTier } from '../data/palaceStrokes';
 import { matchesScript, ScriptMode } from '../data/scriptFilter';
 import { useUiText } from '../data/uiScript';
+import { useThemeMode } from '../data/theme';
 
 export interface StrokeCloudSelection {
   id: string;
@@ -92,6 +93,34 @@ const ECHO_PDF_TIER_COLORS: Record<PdfStrokeTier, string> = {
   rest: '#A1525D',
 };
 
+// 宣紙水墨 (Xuan Paper Ink-Wash) high-contrast ink tones
+export const WASH_FREQUENCY_TIER_COLORS: Record<FrequencyTier, string> = {
+  primary: '#1E211D',
+  rank2_5: '#146B7A',
+  rank6_9: '#88306A',
+  rest: '#B83B2A',
+};
+
+export const WASH_PDF_TIER_COLORS: Record<PdfStrokeTier, string> = {
+  primary: '#1E211D',
+  var_primary: '#4A6E24',
+  rank2_5: '#146B7A',
+  var_2_5: '#1C6E50',
+  rank6_9: '#88306A',
+  var_6_9: '#553B9A',
+  rest: '#B83B2A',
+};
+
+const WASH_ECHO_PDF_TIER_COLORS: Record<PdfStrokeTier, string> = {
+  primary: '#4E5750',
+  var_primary: '#5E7245',
+  rank2_5: '#446E78',
+  var_2_5: '#436E5E',
+  rank6_9: '#754C68',
+  var_6_9: '#5D527D',
+  rest: '#8A4E48',
+};
+
 function buildNodeTransform(
   cx: number,
   cy: number,
@@ -121,6 +150,7 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
   scriptMode = 'both',
 }) => {
   const t = useUiText();
+  const isWash = useThemeMode() === 'wash';
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [internalOverrides, setInternalOverrides] = useState<PalaceOverridesMap>(() =>
     loadPalaceOverrides()
@@ -298,15 +328,25 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
             ? 0.11
             : 0.05;
 
-  const monumentColor = isEcho
-    ? isMonumentActive
-      ? '#8DF5D0'
-      : '#5C988E'
-    : !isMidground && isMonumentSelected
-      ? '#F7D286'
-      : isMidground
-        ? '#7BC4B2'
-        : '#DCE8E3';
+  const monumentColor = isWash
+    ? isEcho
+      ? isMonumentActive
+        ? '#1F6E52'
+        : '#5A615B'
+      : !isMidground && isMonumentSelected
+        ? '#9C6414'
+        : isMidground
+          ? '#3F6E5D'
+          : '#1C1A17'
+    : isEcho
+      ? isMonumentActive
+        ? '#8DF5D0'
+        : '#5C988E'
+      : !isMidground && isMonumentSelected
+        ? '#F7D286'
+        : isMidground
+          ? '#7BC4B2'
+          : '#DCE8E3';
 
   const makeMonumentSelection = (m: PdfMonumentGlyph): StrokeCloudSelection => {
     const lm = LINGMING_ROOT_MAP.get(m.displayChar);
@@ -399,16 +439,49 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
           <radialGradient id={`palaceGlow_${chamberKey}_${variant}`} cx="50%" cy="50%" r="50%">
             <stop
               offset="0%"
-              stopColor={isEcho && isMonumentActive ? '#34D399' : '#3E9C8A'}
-              stopOpacity={isEcho ? (isMonumentActive ? '0.14' : '0.09') : isMidground ? '0.12' : '0.14'}
+              stopColor={
+                isWash
+                  ? isEcho && isMonumentActive ? '#1F6E52' : '#3C372F'
+                  : isEcho && isMonumentActive ? '#34D399' : '#3E9C8A'
+              }
+              stopOpacity={
+                isWash
+                  ? isEcho ? (isMonumentActive ? '0.13' : '0.075') : '0.095'
+                  : isEcho ? (isMonumentActive ? '0.14' : '0.09') : isMidground ? '0.12' : '0.14'
+              }
             />
-            <stop offset="68%" stopColor="#1D3E3D" stopOpacity={isEcho ? '0.025' : '0.04'} />
-            <stop offset="100%" stopColor="#0B0F17" stopOpacity="0" />
+            <stop
+              offset="52%"
+              stopColor={isWash ? '#8D8372' : '#1D3E3D'}
+              stopOpacity={isWash ? (isEcho ? '0.045' : '0.055') : (isEcho ? '0.025' : '0.04')}
+            />
+            <stop offset="100%" stopColor={isWash ? '#F2EDE2' : '#0B0F17'} stopOpacity="0" />
           </radialGradient>
+
+          {isWash && (
+            <>
+              <radialGradient id={`palaceMistCloud_${chamberKey}_${variant}`} cx="38%" cy="40%" r="52%">
+                <stop offset="0%" stopColor="#1C1A17" stopOpacity={isEcho ? '0.055' : '0.07'} />
+                <stop offset="60%" stopColor="#5E5649" stopOpacity={isEcho ? '0.025' : '0.032'} />
+                <stop offset="100%" stopColor="#F2EDE2" stopOpacity="0" />
+              </radialGradient>
+
+              <filter id={`washInkBleed_${chamberKey}_${variant}`} x="-12%" y="-12%" width="124%" height="124%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="0.42" result="bleed" />
+                <feComponentTransfer in="bleed" result="softBleed">
+                  <feFuncA type="linear" slope="0.34" />
+                </feComponentTransfer>
+                <feMerge>
+                  <feMergeNode in="softBleed" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </>
+          )}
 
           {isEcho && (
             <filter id={`echoNodeGlow_${chamberKey}`} x="-60%" y="-60%" width="220%" height="220%">
-              <feGaussianBlur stdDeviation="0.55" result="blur" />
+              <feGaussianBlur stdDeviation={isWash ? '0.75' : '0.55'} result="blur" />
               <feMerge>
                 <feMergeNode in="blur" />
                 <feMergeNode in="SourceGraphic" />
@@ -424,6 +497,35 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
           r="49"
           fill={`url(#palaceGlow_${chamberKey}_${variant})`}
         />
+        {isWash && (
+          <>
+            <ellipse
+              cx="42"
+              cy="44"
+              rx="42"
+              ry="34"
+              fill={`url(#palaceMistCloud_${chamberKey}_${variant})`}
+            />
+            <circle
+              cx="50"
+              cy="50"
+              r="45.5"
+              fill="none"
+              stroke="rgba(28, 26, 23, 0.065)"
+              strokeWidth="0.42"
+              strokeDasharray="24 7 6 10"
+            />
+            <circle
+              cx="50.6"
+              cy="49.5"
+              r="44.2"
+              fill="none"
+              stroke="rgba(31, 110, 82, 0.045)"
+              strokeWidth="0.28"
+              strokeDasharray="16 14"
+            />
+          </>
+        )}
 
         {editMode && (
           <rect
@@ -456,14 +558,27 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
           }
         >
           {isEcho && isMonumentActive && (
-            <circle
-              cx={monument.cx}
-              cy={monument.cy}
-              r={5.8}
-              fill="rgba(52, 211, 153, 0.07)"
-              stroke="rgba(141, 245, 208, 0.45)"
-              strokeWidth="0.28"
-            />
+            <>
+              {isWash && (
+                <circle
+                  cx={monument.cx}
+                  cy={monument.cy}
+                  r={7.8}
+                  fill="rgba(31, 110, 82, 0.06)"
+                  stroke="rgba(31, 110, 82, 0.22)"
+                  strokeWidth="0.22"
+                  strokeDasharray="2.2 1.4"
+                />
+              )}
+              <circle
+                cx={monument.cx}
+                cy={monument.cy}
+                r={5.8}
+                fill={isWash ? 'rgba(31, 110, 82, 0.11)' : 'rgba(52, 211, 153, 0.07)'}
+                stroke={isWash ? 'rgba(31, 110, 82, 0.55)' : 'rgba(141, 245, 208, 0.45)'}
+                strokeWidth="0.28"
+              />
+            </>
           )}
           {editMode && isMonumentSelected && (
             <circle
@@ -481,7 +596,13 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
             fill={monumentColor}
             fillOpacity={monumentOpacity}
             shapeRendering="geometricPrecision"
-            filter={isEcho && isMonumentActive ? `url(#echoNodeGlow_${chamberKey})` : undefined}
+            filter={
+              isEcho && isMonumentActive
+                ? `url(#echoNodeGlow_${chamberKey})`
+                : isWash
+                  ? `url(#washInkBleed_${chamberKey}_${variant})`
+                  : undefined
+            }
           />
         </g>
 
@@ -500,21 +621,37 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
                 (!node.isVariant && completedChars.has(node.parentChar)))
           );
 
-          const baseColor = isEcho
-            ? ECHO_PDF_TIER_COLORS[node.tier]
-            : PDF_TIER_COLORS[node.tier];
+          const baseColor = isWash
+            ? isEcho
+              ? WASH_ECHO_PDF_TIER_COLORS[node.tier]
+              : WASH_PDF_TIER_COLORS[node.tier]
+            : isEcho
+              ? ECHO_PDF_TIER_COLORS[node.tier]
+              : PDF_TIER_COLORS[node.tier];
 
-          const fillColor = isEcho
-            ? isCurrent
-              ? '#8DF5D0' // Soft celadon-mint focus glow during Key-1 stimulus
-              : baseColor
-            : isCurrent
-              ? '#FFF7E6'
-              : isDone
-                ? '#4CD4A4'
-                : isSelected
-                  ? '#F7D286'
-                  : baseColor;
+          const fillColor = isWash
+            ? isEcho
+              ? isCurrent
+                ? '#1F6E52'
+                : baseColor
+              : isCurrent
+                ? '#141210'
+                : isDone
+                  ? '#1F6E52'
+                  : isSelected
+                    ? '#9C6414'
+                    : baseColor
+            : isEcho
+              ? isCurrent
+                ? '#8DF5D0' // Soft celadon-mint focus glow during Key-1 stimulus
+                : baseColor
+              : isCurrent
+                ? '#FFF7E6'
+                : isDone
+                  ? '#4CD4A4'
+                  : isSelected
+                    ? '#F7D286'
+                    : baseColor;
 
           const inScript = isPdfGlyphInScript(node.displayChar, node.parentChar, node.ma);
 
@@ -571,27 +708,50 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
               }
             >
               {(isCurrent || isSelected) && (
-                <circle
-                  cx={effCx}
-                  cy={effCy}
-                  r={haloRadius}
-                  fill={
-                    isEcho
-                      ? 'rgba(52, 211, 153, 0.07)'
-                      : isCurrent
-                        ? 'rgba(216, 155, 60, 0.20)'
-                        : 'rgba(247, 210, 134, 0.16)'
-                  }
-                  stroke={
-                    isEcho
-                      ? 'rgba(141, 245, 208, 0.45)'
-                      : isCurrent
-                        ? '#E5AE4E'
-                        : '#F7D286'
-                  }
-                  strokeWidth={isEcho ? '0.28' : editMode && isSelected ? '0.65' : '0.45'}
-                  strokeDasharray={editMode && isSelected ? '1.6 1.1' : undefined}
-                />
+                <>
+                  {isWash && (
+                    <circle
+                      cx={effCx}
+                      cy={effCy}
+                      r={haloRadius * 1.32}
+                      fill={isEcho ? 'rgba(31, 110, 82, 0.055)' : 'rgba(156, 100, 20, 0.06)'}
+                      stroke={isEcho ? 'rgba(31, 110, 82, 0.25)' : 'rgba(156, 100, 20, 0.30)'}
+                      strokeWidth="0.22"
+                      strokeDasharray="2.1 1.3"
+                    />
+                  )}
+                  <circle
+                    cx={effCx}
+                    cy={effCy}
+                    r={haloRadius}
+                    fill={
+                      isWash
+                        ? isEcho
+                          ? 'rgba(31, 110, 82, 0.10)'
+                          : isCurrent
+                            ? 'rgba(156, 100, 20, 0.15)'
+                            : 'rgba(156, 100, 20, 0.12)'
+                        : isEcho
+                          ? 'rgba(52, 211, 153, 0.07)'
+                          : isCurrent
+                            ? 'rgba(216, 155, 60, 0.20)'
+                            : 'rgba(247, 210, 134, 0.16)'
+                    }
+                    stroke={
+                      isWash
+                        ? isEcho
+                          ? 'rgba(31, 110, 82, 0.55)'
+                          : '#9C6414'
+                        : isEcho
+                          ? 'rgba(141, 245, 208, 0.45)'
+                          : isCurrent
+                            ? '#E5AE4E'
+                            : '#F7D286'
+                    }
+                    strokeWidth={isEcho ? '0.28' : editMode && isSelected ? '0.65' : '0.45'}
+                    strokeDasharray={editMode && isSelected ? '1.6 1.1' : undefined}
+                  />
+                </>
               )}
 
               {/* Generous invisible hit circle so thin strokes like 一/丨/丿 are easy to click & drag */}
@@ -605,7 +765,13 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
                   fill={fillColor}
                   fillOpacity={fillOpacity}
                   shapeRendering="geometricPrecision"
-                  filter={isEcho && isCurrent ? `url(#echoNodeGlow_${chamberKey})` : undefined}
+                  filter={
+                    isEcho && isCurrent
+                      ? `url(#echoNodeGlow_${chamberKey})`
+                      : isWash && (isCurrent || isSelected || isDone)
+                        ? `url(#washInkBleed_${chamberKey}_${variant})`
+                        : undefined
+                  }
                 />
               </g>
             </g>

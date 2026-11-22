@@ -3,6 +3,7 @@ import { ShapeCodeScheme } from '../data/schemes';
 import { useUiText } from '../data/uiScript';
 import { ActiveTargetSnapshot } from '../engine/GameCanvas';
 import { SchemeMasteryStore } from '../engine/mastery';
+import { useThemeMode } from '../data/theme';
 
 interface BlurredKeyboardBackdropProps {
   scheme: ShapeCodeScheme;
@@ -43,6 +44,8 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
   mastery,
 }) => {
   const t = useUiText();
+  const themeMode = useThemeMode();
+  const isWash = themeMode === 'wash';
   const [pressedKey, setPressedKey] = useState<string | null>(null);
   const [strikeFlash, setStrikeFlash] = useState<StrikeFlash | null>(null);
 
@@ -123,44 +126,94 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
     const isLit = isHitCorrect || isHitWrong || isTabHint || isPressed;
     const keyFilter = isLit ? 'blur(0px)' : `blur(${baseBlurPx}px)`;
     const keyOpacity = isDisabled
-      ? 0.14
+      ? isWash
+        ? 0.22
+        : 0.14
       : isHitCorrect || isHitWrong
         ? 1
         : isTabHint
-          ? 0.92
+          ? 0.94
           : isPressed
-            ? 0.78
-            : baseLayerOpacity;
+            ? 0.85
+            : isWash
+              ? Math.min(0.68, baseLayerOpacity + 0.12)
+              : baseLayerOpacity;
 
-    const bgStyle = isHitWrong
-      ? 'rgba(240, 78, 62, 0.36)'
-      : isHitCorrect
-        ? 'rgba(52, 211, 153, 0.34)'
-        : isTabHint
-          ? 'rgba(232, 179, 86, 0.24)'
-          : isPressed
-            ? 'rgba(118, 152, 206, 0.26)'
+    const bgImageStyle = isWash
+      ? isHitWrong
+        ? 'radial-gradient(circle at 50% 48%, rgba(184, 59, 42, 0.28) 0%, rgba(184, 59, 42, 0.12) 60%, rgba(28, 26, 23, 0.04) 100%)'
+        : isHitCorrect
+          ? 'radial-gradient(circle at 50% 48%, rgba(31, 110, 82, 0.28) 0%, rgba(31, 110, 82, 0.12) 60%, rgba(28, 26, 23, 0.04) 100%)'
+          : isTabHint
+            ? 'radial-gradient(circle at 50% 48%, rgba(156, 100, 20, 0.24) 0%, rgba(156, 100, 20, 0.10) 65%, transparent 100%)'
+            : isPressed
+              ? 'radial-gradient(circle at 50% 48%, rgba(28, 26, 23, 0.22) 0%, rgba(28, 26, 23, 0.10) 70%, transparent 100%)'
+              : isVowel
+                ? 'linear-gradient(180deg, rgba(244, 235, 217, 0.88) 0%, rgba(232, 220, 196, 0.80) 100%)'
+                : 'linear-gradient(180deg, rgba(250, 246, 238, 0.86) 0%, rgba(236, 229, 215, 0.78) 100%)'
+      : 'none';
+
+    const bgStyle = isWash
+      ? isHitWrong
+        ? 'rgba(184, 59, 42, 0.12)'
+        : isHitCorrect
+          ? 'rgba(31, 110, 82, 0.12)'
+          : isTabHint
+            ? 'rgba(156, 100, 20, 0.10)'
+            : isPressed
+              ? 'rgba(28, 26, 23, 0.10)'
+              : isVowel
+                ? 'rgba(156, 100, 20, 0.06)'
+                : 'rgba(28, 26, 23, 0.035)'
+      : isHitWrong
+        ? 'rgba(240, 78, 62, 0.36)'
+        : isHitCorrect
+          ? 'rgba(52, 211, 153, 0.34)'
+          : isTabHint
+            ? 'rgba(232, 179, 86, 0.24)'
+            : isPressed
+              ? 'rgba(118, 152, 206, 0.26)'
+              : isVowel
+                ? 'rgba(184, 136, 58, 0.11)'
+                : 'rgba(38, 52, 78, 0.36)';
+
+    const borderStyle = isWash
+      ? isHitWrong
+        ? '#B83B2A'
+        : isHitCorrect
+          ? '#1F6E52'
+          : isTabHint
+            ? '#9C6414'
             : isVowel
-              ? 'rgba(184, 136, 58, 0.11)'
-              : 'rgba(38, 52, 78, 0.36)';
+              ? 'rgba(156, 100, 20, 0.28)'
+              : 'rgba(28, 26, 23, 0.16)'
+      : isHitWrong
+        ? '#F04E3E'
+        : isHitCorrect
+          ? '#34D399'
+          : isTabHint
+            ? '#E8B356'
+            : isVowel
+              ? 'rgba(216, 155, 60, 0.26)'
+              : 'rgba(118, 148, 196, 0.22)';
 
-    const borderStyle = isHitWrong
-      ? '#F04E3E'
-      : isHitCorrect
-        ? '#34D399'
-        : isTabHint
-          ? '#E8B356'
-          : isVowel
-            ? 'rgba(216, 155, 60, 0.26)'
-            : 'rgba(118, 148, 196, 0.22)';
-
-    const glowShadow = isHitWrong
-      ? '0 0 34px rgba(240, 78, 62, 0.55), inset 0 0 12px rgba(240, 78, 62, 0.24)'
-      : isHitCorrect
-        ? '0 0 34px rgba(52, 211, 153, 0.52), inset 0 0 12px rgba(52, 211, 153, 0.22)'
-        : isTabHint
-          ? '0 0 22px rgba(232, 179, 86, 0.32)'
-          : 'none';
+    const glowShadow = isWash
+      ? isHitWrong
+        ? '0 0 28px rgba(184, 59, 42, 0.28), 0 0 52px rgba(184, 59, 42, 0.12), inset 0 0 14px rgba(184, 59, 42, 0.16)'
+        : isHitCorrect
+          ? '0 0 28px rgba(31, 110, 82, 0.26), 0 0 52px rgba(31, 110, 82, 0.12), inset 0 0 14px rgba(31, 110, 82, 0.14)'
+          : isTabHint
+            ? '0 0 22px rgba(156, 100, 20, 0.24), inset 0 0 10px rgba(156, 100, 20, 0.10)'
+            : isPressed
+              ? '0 0 18px rgba(28, 26, 23, 0.18), inset 0 0 10px rgba(28, 26, 23, 0.10)'
+              : '0 2px 6px rgba(28, 26, 23, 0.04)'
+      : isHitWrong
+        ? '0 0 34px rgba(240, 78, 62, 0.55), inset 0 0 12px rgba(240, 78, 62, 0.24)'
+        : isHitCorrect
+          ? '0 0 34px rgba(52, 211, 153, 0.52), inset 0 0 12px rgba(52, 211, 153, 0.22)'
+          : isTabHint
+            ? '0 0 22px rgba(232, 179, 86, 0.32)'
+            : 'none';
 
     const scaleTransform = isHitWrong
       ? 'scale(0.95) translateX(2px)'
@@ -181,6 +234,7 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
           filter: keyFilter,
           opacity: keyOpacity,
           backgroundColor: bgStyle,
+          backgroundImage: bgImageStyle,
           borderColor: borderStyle,
           transform: scaleTransform,
           boxShadow: glowShadow,
@@ -188,17 +242,40 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
             'transform 120ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease, filter 140ms ease, border-color 120ms ease, box-shadow 140ms ease',
         }}
       >
+        {isWash && (isHitCorrect || isHitWrong) && strikeFlash && (
+          <span
+            key={`ripple_${strikeFlash.tick}`}
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-1.5 rounded-2xl border-2 ink-bloom-ring"
+            style={{
+              borderColor: isHitWrong ? 'rgba(184, 59, 42, 0.65)' : 'rgba(31, 110, 82, 0.65)',
+              background: isHitWrong
+                ? 'radial-gradient(circle, rgba(184, 59, 42, 0.18) 0%, transparent 70%)'
+                : 'radial-gradient(circle, rgba(31, 110, 82, 0.18) 0%, transparent 70%)',
+            }}
+          />
+        )}
         <span
           className={`self-start font-mono-tabular text-[11px] font-bold leading-none ${
-            isHitCorrect
-              ? 'text-[#A7F3D0]'
-              : isHitWrong
-                ? 'text-[#FCA5A5]'
-                : isTabHint
-                  ? 'text-[#FCE2A6]'
-                  : isVowel
-                    ? 'text-[#D89B3C]'
-                    : 'text-[#89A5D1]'
+            isWash
+              ? isHitCorrect
+                ? 'text-[#185B43]'
+                : isHitWrong
+                  ? 'text-[#A53020]'
+                  : isTabHint
+                    ? 'text-[#87520A]'
+                    : isVowel
+                      ? 'text-[#9C6414]'
+                      : 'text-[#555046]'
+              : isHitCorrect
+                ? 'text-[#A7F3D0]'
+                : isHitWrong
+                  ? 'text-[#FCA5A5]'
+                  : isTabHint
+                    ? 'text-[#FCE2A6]'
+                    : isVowel
+                      ? 'text-[#D89B3C]'
+                      : 'text-[#89A5D1]'
           }`}
         >
           {k.toUpperCase()}
@@ -208,11 +285,21 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
           className={`font-display font-bold leading-none ${
             isVowel || isDisabled ? 'text-xs sm:text-sm' : 'text-lg sm:text-xl'
           } ${
-            isHitCorrect || isHitWrong || isTabHint
-              ? 'text-white'
-              : isVowel
-                ? 'text-[#E3BC73]'
-                : 'text-[#A8C0E4]'
+            isWash
+              ? isHitCorrect
+                ? 'text-[#144734]'
+                : isHitWrong
+                  ? 'text-[#8C2417]'
+                  : isTabHint
+                    ? 'text-[#1C1A17]'
+                    : isVowel
+                      ? 'text-[#87520A]'
+                      : 'text-[#26231F]'
+              : isHitCorrect || isHitWrong || isTabHint
+                ? 'text-white'
+                : isVowel
+                  ? 'text-[#E3BC73]'
+                  : 'text-[#A8C0E4]'
           }`}
         >
           {def?.primary === '𠂇' ? (
@@ -238,9 +325,17 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
 
         <div className="w-full flex flex-col items-center gap-0.5">
           {isHome && (
-            <span className="block w-3.5 h-[2px] rounded-full bg-[#D89B3C]/65" />
+            <span
+              className={`block w-3.5 h-[2px] rounded-full ${
+                isWash ? 'bg-[#9C6414]/65' : 'bg-[#D89B3C]/65'
+              }`}
+            />
           )}
-          <div className="w-full h-[2px] rounded-full bg-white/8 overflow-hidden">
+          <div
+            className={`w-full h-[2px] rounded-full overflow-hidden ${
+              isWash ? 'bg-[#1C1A17]/10' : 'bg-white/8'
+            }`}
+          >
             {masteryPct > 0 && !isDisabled && (
               <div
                 className="h-full"
@@ -248,10 +343,10 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
                   width: `${masteryPct}%`,
                   backgroundColor:
                     masteryPct >= 70
-                      ? '#38A885'
+                      ? isWash ? '#1F6E52' : '#38A885'
                       : masteryPct >= 40
-                        ? '#D89B3C'
-                        : '#D9604C',
+                        ? isWash ? '#9C6414' : '#D89B3C'
+                        : isWash ? '#B83B2A' : '#D9604C',
                 }}
               />
             )}
@@ -269,23 +364,35 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
       className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center overflow-hidden select-none px-3 sm:px-6"
       aria-hidden="true"
     >
-      {/* Subtle reactive peripheral wing aura on hit (Emerald for correct, Cinnabar for error) */}
+      {/* Subtle reactive peripheral wing aura on hit (Pine/Emerald for correct, Cinnabar for error) */}
       <div
         className="absolute inset-0 transition-opacity duration-200"
         style={{
           opacity: strikeFlash ? 1 : 0,
           background: strikeFlash
-            ? strikeFlash.correct
-              ? isLeftStrike
-                ? 'radial-gradient(circle at 22% 50%, rgba(52, 211, 153, 0.14), transparent 46%)'
-                : isRightStrike
-                  ? 'radial-gradient(circle at 78% 50%, rgba(52, 211, 153, 0.14), transparent 46%)'
-                  : 'none'
-              : isLeftStrike
-                ? 'radial-gradient(circle at 22% 50%, rgba(240, 78, 62, 0.18), transparent 46%)'
-                : isRightStrike
-                  ? 'radial-gradient(circle at 78% 50%, rgba(240, 78, 62, 0.18), transparent 46%)'
-                  : 'none'
+            ? isWash
+              ? strikeFlash.correct
+                ? isLeftStrike
+                  ? 'radial-gradient(ellipse 40% 56% at 22% 50%, rgba(31, 110, 82, 0.16), rgba(31, 110, 82, 0.05) 42%, transparent 72%)'
+                  : isRightStrike
+                    ? 'radial-gradient(ellipse 40% 56% at 78% 50%, rgba(31, 110, 82, 0.16), rgba(31, 110, 82, 0.05) 42%, transparent 72%)'
+                    : 'none'
+                : isLeftStrike
+                  ? 'radial-gradient(ellipse 40% 56% at 22% 50%, rgba(184, 59, 42, 0.18), rgba(184, 59, 42, 0.05) 42%, transparent 72%)'
+                  : isRightStrike
+                    ? 'radial-gradient(ellipse 40% 56% at 78% 50%, rgba(184, 59, 42, 0.18), rgba(184, 59, 42, 0.05) 42%, transparent 72%)'
+                    : 'none'
+              : strikeFlash.correct
+                ? isLeftStrike
+                  ? 'radial-gradient(circle at 22% 50%, rgba(52, 211, 153, 0.14), transparent 46%)'
+                  : isRightStrike
+                    ? 'radial-gradient(circle at 78% 50%, rgba(52, 211, 153, 0.14), transparent 46%)'
+                    : 'none'
+                : isLeftStrike
+                  ? 'radial-gradient(circle at 22% 50%, rgba(240, 78, 62, 0.18), transparent 46%)'
+                  : isRightStrike
+                    ? 'radial-gradient(circle at 78% 50%, rgba(240, 78, 62, 0.18), transparent 46%)'
+                    : 'none'
             : 'none',
         }}
       />
@@ -337,11 +444,17 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
 
       {/* Subtle bottom status line showing reactive hit color legend (zero pre-spoilers!) */}
       <div className="absolute bottom-3.5 inset-x-0 flex items-center justify-center px-6">
-        <div className="flex items-center gap-2.5 text-xs text-[#8995A8]">
+        <div
+          className={`flex items-center gap-2.5 text-xs ${
+            isWash ? 'text-[#555046]' : 'text-[#8995A8]'
+          }`}
+        >
           {strikeFlash ? (
             <span
               className={`font-medium ${
-                strikeFlash.correct ? 'text-[#5EEAD4]' : 'text-[#F87171]'
+                strikeFlash.correct
+                  ? isWash ? 'text-[#185B43]' : 'text-[#5EEAD4]'
+                  : isWash ? 'text-[#A53020]' : 'text-[#F87171]'
               }`}
             >
               {strikeFlash.correct
@@ -351,17 +464,40 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
           ) : (
             <>
               <span>{t('Alice 分離鍵盤')}</span>
-              <span aria-hidden="true" className="text-[#495366]">·</span>
-              <span className="inline-flex items-center gap-1 text-[#7CD6B4]">
-                <span className="w-2 h-2 rounded-full bg-[#34D399]" />
-                {t('正確翠綠')}
+              <span aria-hidden="true" className={isWash ? 'text-[#9B9386]' : 'text-[#495366]'}>·</span>
+              <span
+                className={`inline-flex items-center gap-1 ${
+                  isWash ? 'text-[#185B43]' : 'text-[#7CD6B4]'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isWash ? 'bg-[#1F6E52]' : 'bg-[#34D399]'
+                  }`}
+                />
+                {t(isWash ? '正確松煙' : '正確翠綠')}
               </span>
-              <span className="inline-flex items-center gap-1 text-[#F0887C]">
-                <span className="w-2 h-2 rounded-full bg-[#F04E3E]" />
+              <span
+                className={`inline-flex items-center gap-1 ${
+                  isWash ? 'text-[#A53020]' : 'text-[#F0887C]'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isWash ? 'bg-[#B83B2A]' : 'bg-[#F04E3E]'
+                  }`}
+                />
                 {t('錯誤硃砂')}
               </span>
-              <span aria-hidden="true" className="hidden sm:inline text-[#495366]">·</span>
-              <span className="hidden sm:inline text-[#7D889B]">{t('按 Tab 緊急拉焦提示')}</span>
+              <span
+                aria-hidden="true"
+                className={`hidden sm:inline ${isWash ? 'text-[#9B9386]' : 'text-[#495366]'}`}
+              >
+                ·
+              </span>
+              <span className={`hidden sm:inline ${isWash ? 'text-[#6A6357]' : 'text-[#7D889B]'}`}>
+                {t('按 Tab 緊急拉焦提示')}
+              </span>
             </>
           )}
         </div>

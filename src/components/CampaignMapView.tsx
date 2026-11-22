@@ -28,6 +28,7 @@ import {
   ScriptMode,
 } from '../data/scriptFilter';
 import { useUiText } from '../data/uiScript';
+import { THEME_OPTIONS, ThemeMode, useThemeMode } from '../data/theme';
 import { synth } from '../audio/synth';
 
 const InlinePrimaryGlyph: React.FC<{ char: string; className?: string }> = ({
@@ -61,6 +62,7 @@ interface CampaignMapViewProps {
   scriptMode: ScriptMode;
   initialChapterId?: 1 | 2 | 3 | 4 | 5;
   onChangeScriptMode: (mode: ScriptMode) => void;
+  onChangeThemeMode?: (mode: ThemeMode) => void;
   onBackToTitle: () => void;
   onOpenPalaceCloud: () => void;
   onLaunchStage: (stage: CampaignStage) => void;
@@ -72,12 +74,14 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
   scriptMode,
   initialChapterId,
   onChangeScriptMode,
+  onChangeThemeMode,
   onBackToTitle,
   onOpenPalaceCloud,
   onLaunchStage,
   onLaunchChamberDrill,
 }) => {
   const t = useUiText();
+  const themeMode = useThemeMode();
   const summary = useMemo(() => getCampaignSummary(progress), [progress]);
   const [selectedChapterId, setSelectedChapterId] = useState<1 | 2 | 3 | 4 | 5>(
     initialChapterId ?? summary.nextRecommendedStage.chapterId
@@ -106,9 +110,9 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#0B0F17] text-[#F2EEE6] overflow-hidden">
+    <div className="relative z-10 w-full h-full flex flex-col bg-[var(--dojo-canvas)] wash:bg-transparent text-[var(--dojo-text)] overflow-hidden wash-enter">
       {/* Top Dojo Header */}
-      <header className="shrink-0 h-14 px-4 sm:px-8 bg-[#0D111A] border-b border-[#F2EEE6]/10 flex items-center justify-between gap-4">
+      <header className="shrink-0 h-14 px-4 sm:px-8 bg-[var(--dojo-header)] wash:bg-[var(--dojo-header)]/88 wash:backdrop-blur-sm border-b border-[var(--dojo-border)] flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
@@ -116,26 +120,26 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
               synth.playClick();
               onBackToTitle();
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#C8C3B8] hover:text-white bg-[#161C27] hover:bg-[#212A3A] border border-[#F2EEE6]/10 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border)] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>{t('返回主畫面')}</span>
           </button>
 
           <div className="min-w-0 flex items-baseline gap-2.5">
-            <h1 className="font-display text-base sm:text-lg font-bold text-[#F5F1E8] truncate">
+            <h1 className="font-display text-base sm:text-lg font-bold text-[var(--dojo-text-bright)] truncate">
               {t('墨鍵道場 · 五重修煉卷軸')}
             </h1>
-            <span className="hidden md:inline text-xs text-[#7E8899]">
+            <span className="hidden md:inline text-xs text-[var(--dojo-text-muted)]">
               {t('循序破關兼支援自由跳關體驗')}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+        <div className="flex items-center gap-3 sm:gap-3.5 shrink-0">
           {/* 繁簡分流切換（全五關字根與拆字同步分流） */}
           <div
-            className="hidden md:inline-flex items-center gap-0.5 p-0.5 bg-[#121722] border border-[#F2EEE6]/10 rounded-lg"
+            className="hidden md:inline-flex items-center gap-0.5 p-0.5 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-lg"
             title={t('全程依所選繁簡分流訓練（字根、逐鍵宮殿與拆字同步過濾，避免同源異鍵干擾）；記憶宮殿對照圖則淡化非本字集字根')}
           >
             {SCRIPT_MODE_OPTIONS.map((opt) => (
@@ -148,8 +152,8 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                 }}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
                   scriptMode === opt.id
-                    ? 'bg-[#212A3A] text-[#F2D59B]'
-                    : 'text-[#8994A6] hover:text-[#E5E0D5]'
+                    ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-ochre)]'
+                    : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
                 }`}
               >
                 {t(opt.short)}
@@ -157,22 +161,47 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
             ))}
           </div>
 
+          {onChangeThemeMode && (
+            <div
+              className="hidden sm:inline-flex items-center gap-0.5 p-0.5 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-lg"
+              title={t('切換視覺色調（玄墨夜練 / 宣紙水墨）')}
+            >
+              {THEME_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    synth.playClick();
+                    onChangeThemeMode(opt.id);
+                  }}
+                  className={`px-2 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                    themeMode === opt.id
+                      ? 'bg-[var(--dojo-ochre-wash)] text-[var(--dojo-ochre)]'
+                      : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text)]'
+                  }`}
+                >
+                  {t(opt.short)}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="hidden sm:flex items-center gap-2 text-xs font-mono-tabular">
-            <span className="text-[#8E98A8] font-sans">{t('段位')}</span>
-            <span className="font-display font-bold text-sm text-[#D89B3C]">
+            <span className="text-[var(--dojo-text-muted)] font-sans">{t('段位')}</span>
+            <span className="font-display font-bold text-sm text-[var(--dojo-ochre)]">
               {t(summary.rank.title)}
             </span>
-            <span className="text-[#465063]" aria-hidden="true">·</span>
-            <span className="inline-flex items-center gap-1 text-[#F2D59B]">
-              <Star className="w-3.5 h-3.5 fill-[#D89B3C] text-[#D89B3C]" />
+            <span className="text-[var(--dojo-border-strong)]" aria-hidden="true">·</span>
+            <span className="inline-flex items-center gap-1 text-[var(--dojo-ochre)]">
+              <Star className="w-3.5 h-3.5 fill-[var(--dojo-ochre)] text-[var(--dojo-ochre)]" />
               <span>
                 {summary.totalStars}/{summary.maxStars}
               </span>
             </span>
             {summary.rank.nextTitle && summary.rank.nextMinStars !== undefined && (
               <>
-                <span className="hidden lg:inline text-[#465063]" aria-hidden="true">·</span>
-                <span className="hidden lg:inline text-[#7D8696] font-sans">
+                <span className="hidden lg:inline text-[var(--dojo-border-strong)]" aria-hidden="true">·</span>
+                <span className="hidden lg:inline text-[var(--dojo-text-muted)] font-sans">
                   {t('再')} {Math.max(0, summary.rank.nextMinStars - summary.totalStars)}{' '}
                   {t(`星晉升「${summary.rank.nextTitle}」`)}
                 </span>
@@ -186,9 +215,9 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
               synth.playClick();
               onOpenPalaceCloud();
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#F2D59B] hover:text-white bg-[#171E2C] hover:bg-[#232D40] border border-[#D89B3C]/35 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--dojo-ochre)] hover:text-[var(--dojo-text-bright)] bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-ochre)]/35 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            <Compass className="w-3.5 h-3.5 text-[#D89B3C]" />
+            <Compass className="w-3.5 h-3.5 text-[var(--dojo-ochre)]" />
             <span>{t('記憶宮殿雲圖')}</span>
           </button>
         </div>
@@ -220,35 +249,35 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                     onClick={() => handleSelectChapter(ch.id)}
                     className={`relative text-left p-3.5 rounded-xl border transition-colors cursor-pointer flex flex-col justify-between gap-2 ${
                       isSelected
-                        ? 'bg-[#171E2C] border-[#D89B3C]/65'
-                        : 'bg-[#111621] hover:bg-[#161C29] border-[#F2EEE6]/10'
+                        ? 'bg-[var(--dojo-surface-2)] border-[var(--dojo-ochre)]'
+                        : 'bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)]/75 border-[var(--dojo-border)]'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span
                         className={`font-mono-tabular text-[11px] font-semibold ${
-                          isSelected ? 'text-[#E8C078]' : 'text-[#8994A6]'
+                          isSelected ? 'text-[var(--dojo-ochre)]' : 'text-[var(--dojo-text-sub)]'
                         }`}
                       >
                         {t(`第 ${ch.id} 關 · ${ch.shortTitle}`)}
                       </span>
                       {isNextChapter && (
-                        <span className="text-[11px] font-medium text-[#2EA87E] whitespace-nowrap">
+                        <span className="text-[11px] font-medium text-[var(--dojo-pine)] whitespace-nowrap">
                           {t('當前進度')}
                         </span>
                       )}
                     </div>
 
                     <div>
-                      <div className="font-display text-base font-bold text-[#F5F1E8]">
+                      <div className="font-display text-base font-bold text-[var(--dojo-text-bright)]">
                         {t(ch.sceneName)}
                       </div>
-                      <div className="mt-1 flex items-center justify-between text-xs font-mono-tabular text-[#8F99AA]">
+                      <div className="mt-1 flex items-center justify-between text-xs font-mono-tabular text-[var(--dojo-text-sub)]">
                         <span>
                           {chCleared}/{ch.stages.length} {t('節')}
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[#D89B3C]">
-                          <Star className="w-3 h-3 fill-[#D89B3C] text-[#D89B3C]" />
+                        <span className="inline-flex items-center gap-1 text-[var(--dojo-ochre)]">
+                          <Star className="w-3 h-3 fill-[var(--dojo-ochre)] text-[var(--dojo-ochre)]" />
                           <span>
                             {chStars}/{chMaxStars}
                           </span>
@@ -256,12 +285,12 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="w-full h-[2px] bg-[#F2EEE6]/8 overflow-hidden rounded-full">
+                    <div className="w-full h-[2px] bg-[var(--dojo-border)] overflow-hidden rounded-full">
                       <div
                         className="h-full transition-all duration-300"
                         style={{
                           width: `${pct}%`,
-                          backgroundColor: chStars === chMaxStars ? '#2EA87E' : '#D89B3C',
+                          backgroundColor: chStars === chMaxStars ? 'var(--dojo-pine)' : 'var(--dojo-ochre)',
                         }}
                       />
                     </div>
@@ -272,18 +301,21 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
           </section>
 
           {/* Selected Chapter Editorial Header & Cognitive Breakdown */}
-          <section className="bg-[#121722] border border-[#F2EEE6]/10 rounded-xl p-5 sm:p-6">
-            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 pb-5 border-b border-[#F2EEE6]/8">
+          <section
+            key={selectedChapterId}
+            className="wash-enter-soft bg-[var(--dojo-surface)] wash:bg-[#ECE4D4]/86 wash:backdrop-blur-xs border border-[var(--dojo-border)] rounded-xl p-5 sm:p-6"
+          >
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 pb-5 border-b border-[var(--dojo-border)]">
               <div className="max-w-3xl">
-                <div className="flex items-center gap-2.5 text-xs text-[#D89B3C] font-medium mb-1">
+                <div className="flex items-center gap-2.5 text-xs text-[var(--dojo-ochre)] font-medium mb-1">
                   <span>{t(`第 ${selectedChapter.id} 重境`)}</span>
                   <span aria-hidden="true">·</span>
                   <span>{t(`場景「${selectedChapter.sceneName}」`)}</span>
                 </div>
-                <h2 className="font-display text-2xl font-bold text-[#F5F1E8]">
+                <h2 className="font-display text-2xl font-bold text-[var(--dojo-text-bright)]">
                   {t(selectedChapter.title)}
                 </h2>
-                <p className="mt-2 text-sm text-[#B9C1CE] leading-relaxed">
+                <p className="mt-2 text-sm text-[var(--dojo-text-sub)] leading-relaxed">
                   {t(selectedChapter.cognitiveGoal)}
                 </p>
               </div>
@@ -296,9 +328,9 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                       synth.playClick();
                       onOpenPalaceCloud();
                     }}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[#F2D59B] hover:text-white bg-[#1A2130] hover:bg-[#232D42] border border-[#D89B3C]/40 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[var(--dojo-ochre)] hover:text-[var(--dojo-text-bright)] bg-[var(--dojo-surface-2)] border border-[var(--dojo-ochre)]/40 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                   >
-                    <Compass className="w-3.5 h-3.5 text-[#D89B3C]" />
+                    <Compass className="w-3.5 h-3.5 text-[var(--dojo-ochre)]" />
                     <span>{t('預覽 25 鍵記憶宮殿圖')}</span>
                   </button>
                 )}
@@ -310,7 +342,7 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                       synth.playClick();
                       onLaunchStage(summary.nextRecommendedStage);
                     }}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#D94A38] hover:bg-[#E45643] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     <span>
@@ -322,27 +354,27 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
             </div>
 
             {/* Unboxed Cognitive Barrier & Reflex Target Metadata + Script Scope */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 text-xs border-b border-[#F2EEE6]/8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 text-xs border-b border-[var(--dojo-border)]">
               <div>
-                <div className="text-[#7E8899] mb-1">{t('克服的形碼認知難關')}</div>
-                <div className="text-[#E5E0D5] font-medium">{t(selectedChapter.barrierResolved)}</div>
+                <div className="text-[var(--dojo-text-muted)] mb-1">{t('克服的形碼認知難關')}</div>
+                <div className="text-[var(--dojo-text)] font-medium">{t(selectedChapter.barrierResolved)}</div>
               </div>
               <div>
-                <div className="text-[#7E8899] mb-1">{t('建立的條件反射路徑')}</div>
-                <div className="text-[#7CE5BC] font-medium">{t(selectedChapter.reflexTarget)}</div>
+                <div className="text-[var(--dojo-text-muted)] mb-1">{t('建立的條件反射路徑')}</div>
+                <div className="text-[var(--dojo-pine-text)] font-medium">{t(selectedChapter.reflexTarget)}</div>
               </div>
               <div>
-                <div className="text-[#7E8899] mb-1">{t('繁簡範圍策略')}</div>
+                <div className="text-[var(--dojo-text-muted)] mb-1">{t('繁簡範圍策略')}</div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[#F2D59B] font-medium">
+                  <span className="text-[var(--dojo-ochre)] font-medium">
                     {t(SCRIPT_MODE_LABELS[scriptMode])}
                     {selectedChapter.id === 3 && (
-                      <span className="text-[#8E98A8] font-normal">
+                      <span className="text-[var(--dojo-text-muted)] font-normal">
                         {' '}· {t('記憶宮殿同步淡化非本字集字根')}
                       </span>
                     )}
                   </span>
-                  <div className="inline-flex items-center gap-0.5 p-0.5 bg-[#0D111A] border border-[#F2EEE6]/10 rounded-md md:hidden">
+                  <div className="inline-flex items-center gap-0.5 p-0.5 bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] rounded-md md:hidden">
                     {SCRIPT_MODE_OPTIONS.map((opt) => (
                       <button
                         key={opt.id}
@@ -353,8 +385,8 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                         }}
                         className={`px-2 py-0.5 text-[11px] rounded transition-colors whitespace-nowrap cursor-pointer ${
                           scriptMode === opt.id
-                            ? 'bg-[#212A3A] text-[#F2D59B]'
-                            : 'text-[#8994A6] hover:text-white'
+                            ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-ochre)]'
+                            : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
                         }`}
                       >
                         {t(opt.short)}
@@ -367,18 +399,18 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
 
             {/* Chapter 3 Step 1: 20-Key Key-by-Key Memory Palace Practice */}
             {selectedChapter.id === 3 && (
-              <div className="mt-5 pb-5 border-b border-[#F2EEE6]/8">
+              <div className="mt-5 pb-5 border-b border-[var(--dojo-border)]">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                   <div>
                     <div className="flex items-center gap-2.5">
-                      <h3 className="font-display text-base font-bold text-[#F5F1E8]">
+                      <h3 className="font-display text-base font-bold text-[var(--dojo-text-bright)]">
                         {t('第一步 · 二十宮殿逐鍵巡禮')}
                       </h3>
-                      <span className="font-mono-tabular text-xs font-semibold text-[#7CE5BC]">
+                      <span className="font-mono-tabular text-xs font-semibold text-[var(--dojo-pine-text)]">
                         {t(`已修完 ${clearedChamberCount}/20 鍵`)}
                       </span>
                     </div>
-                    <p className="text-xs text-[#8E98A8] mt-1">
+                    <p className="text-xs text-[var(--dojo-text-muted)] mt-1">
                       {t('點擊下方任一輔音鍵位，依該鍵宮殿 1:1 筆順位置由主根逐一敲遍全部字根；先建牢單鍵宮殿，再進跨鍵混測。')}
                     </p>
                   </div>
@@ -393,8 +425,8 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                       title={t('切換逐鍵巡禮時的預設輔助提示')}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap cursor-pointer ${
                         chamberBlindMode
-                          ? 'bg-[#172824] border-[#2EA87E]/50 text-[#7CE5BC]'
-                          : 'bg-[#0F141E] hover:bg-[#171E2C] border-[#F2EEE6]/10 text-[#9AA3B2]'
+                          ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/50 text-[var(--dojo-pine-text)]'
+                          : 'bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)]'
                       }`}
                     >
                       <EyeOff className="w-3.5 h-3.5" />
@@ -407,7 +439,7 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                         synth.playClick();
                         onLaunchChamberDrill(nextChamberKey, 'root', chamberBlindMode);
                       }}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[#2EA87E] hover:bg-[#36BC8E] text-[#0A1410] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[var(--dojo-pine)] hover:opacity-90 text-white rounded-lg transition-opacity whitespace-nowrap cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
                       <span>
@@ -422,7 +454,7 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                 <div className="flex flex-col gap-3">
                   {PALACE_ROW_GROUPS.map((rowGroup) => (
                     <div key={rowGroup.label} className="flex flex-col gap-1.5">
-                      <div className="text-[11px] font-medium text-[#7D8798]">
+                      <div className="text-[11px] font-medium text-[var(--dojo-text-muted)]">
                         {t(rowGroup.label)}
                       </div>
                       <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-2">
@@ -454,49 +486,47 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                               }}
                               className={`p-2.5 rounded-lg border text-left transition-colors cursor-pointer flex flex-col justify-between gap-1.5 ${
                                 isCleared
-                                  ? 'bg-[#101C19] hover:bg-[#142420] border-[#2EA87E]/40'
+                                  ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/45'
                                   : isNextTarget
-                                    ? 'bg-[#181E2B] hover:bg-[#1F2738] border-[#D89B3C]/65'
-                                    : 'bg-[#0F141E] hover:bg-[#161D2B] border-[#F2EEE6]/10 hover:border-[#F2EEE6]/25'
+                                    ? 'bg-[var(--dojo-ochre-wash)] border-[var(--dojo-ochre)]/65'
+                                    : 'bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)]'
                               }`}
                             >
                               <div className="flex items-center justify-between gap-1">
                                 <span
                                   className={`font-mono-tabular text-xs font-bold ${
                                     isCleared
-                                      ? 'text-[#7CE5BC]'
-                                      : isNextTarget
-                                        ? 'text-[#F2D59B]'
-                                        : 'text-[#D89B3C]'
+                                      ? 'text-[var(--dojo-pine-text)]'
+                                      : 'text-[var(--dojo-ochre)]'
                                   }`}
                                 >
                                   {k.toUpperCase()}
                                 </span>
-                                <span className="font-mono-tabular text-[10px] text-[#7D8696]">
+                                <span className="font-mono-tabular text-[10px] text-[var(--dojo-text-muted)]">
                                   {totalRoots}
                                   {t('根')}
                                 </span>
                               </div>
 
-                              <div className="font-display text-xl font-bold text-[#F5F1E8] leading-none py-0.5 text-center">
+                              <div className="font-display text-xl font-bold text-[var(--dojo-text-bright)] leading-none py-0.5 text-center">
                                 <InlinePrimaryGlyph char={chamber?.primaryAnchor || ''} />
                               </div>
 
                               <div className="flex items-center justify-between text-[10px] font-mono-tabular">
                                 {isCleared && rec ? (
                                   <>
-                                    <span className="inline-flex items-center gap-0.5 text-[#34D399] font-medium">
+                                    <span className="inline-flex items-center gap-0.5 text-[var(--dojo-pine-text)] font-medium">
                                       <Check className="w-3 h-3" />
                                       <span>{rec.bestAccuracy}%</span>
                                     </span>
-                                    <span className="text-[#7D8696] font-sans">
+                                    <span className="text-[var(--dojo-text-muted)] font-sans">
                                       {t(rec.blindCleared ? '默' : `${rec.clears}遍`)}
                                     </span>
                                   </>
                                 ) : (
                                   <span
                                     className={`font-sans ${
-                                      isNextTarget ? 'text-[#E8C078]' : 'text-[#6C7585]'
+                                      isNextTarget ? 'text-[var(--dojo-ochre)]' : 'text-[var(--dojo-text-muted)]'
                                     }`}
                                   >
                                     {t(isNextTarget ? '建議先練' : '待巡禮')}
@@ -515,10 +545,10 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
 
             {selectedChapter.id === 3 && (
               <div className="mt-5 mb-3 flex items-center justify-between">
-                <h3 className="font-display text-base font-bold text-[#F5F1E8]">
+                <h3 className="font-display text-base font-bold text-[var(--dojo-text-bright)]">
                   {t('第二步 · 全宮殿跨鍵分級混測與檢定')}
                 </h3>
-                <span className="text-xs text-[#7E8899]">{t('按字根使用頻率由內向外展開')}</span>
+                <span className="text-xs text-[var(--dojo-text-muted)]">{t('按字根使用頻率由內向外展開')}</span>
               </div>
             )}
 
@@ -535,10 +565,10 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                     key={stage.id}
                     className={`p-4 sm:p-5 rounded-xl border flex flex-col justify-between gap-4 transition-colors ${
                       stage.isBossTrial
-                        ? 'bg-[#17151D] border-[#D94A38]/40 hover:border-[#D94A38]/65'
+                        ? 'bg-[var(--dojo-crimson-wash)]/40 border-[var(--dojo-crimson)]/45 hover:border-[var(--dojo-crimson)]/70'
                         : isRecommended
-                          ? 'bg-[#151D2A] border-[#2EA87E]/50'
-                          : 'bg-[#0F141E] border-[#F2EEE6]/10 hover:border-[#F2EEE6]/22'
+                          ? 'bg-[var(--dojo-pine-wash)]/45 border-[var(--dojo-pine)]/55'
+                          : 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] hover:border-[var(--dojo-border-strong)]'
                     }`}
                   >
                     <div>
@@ -547,26 +577,26 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                           <div className="flex items-center gap-2 text-xs font-mono-tabular">
                             <span
                               className={`font-bold ${
-                                stage.isBossTrial ? 'text-[#F07868]' : 'text-[#D89B3C]'
+                                stage.isBossTrial ? 'text-[var(--dojo-crimson-text)]' : 'text-[var(--dojo-ochre)]'
                               }`}
                             >
                               {t(stage.indexLabel)}
                             </span>
                             {stage.isBossTrial && (
-                              <span className="inline-flex items-center gap-1 text-[#F07868] font-sans">
+                              <span className="inline-flex items-center gap-1 text-[var(--dojo-crimson-text)] font-sans">
                                 <Shield className="w-3 h-3" />
                                 <span>{t('關末檢定')}</span>
                               </span>
                             )}
                             {isRecommended && (
-                              <span className="inline-flex items-center gap-1 text-[#34D399] font-sans font-medium">
+                              <span className="inline-flex items-center gap-1 text-[var(--dojo-pine-text)] font-sans font-medium">
                                 <Sparkles className="w-3 h-3" />
                                 <span>{t('推薦下一節')}</span>
                               </span>
                             )}
                           </div>
 
-                          <h3 className="font-display text-lg font-bold text-[#F5F1E8] mt-1">
+                          <h3 className="font-display text-lg font-bold text-[var(--dojo-text-bright)] mt-1">
                             {t(stage.title)}
                           </h3>
                         </div>
@@ -582,22 +612,22 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                               className={`w-4 h-4 ${
                                 n <= stars
                                   ? stage.isBossTrial
-                                    ? 'fill-[#D94A38] text-[#D94A38]'
-                                    : 'fill-[#D89B3C] text-[#D89B3C]'
-                                  : 'text-[#313949]'
+                                    ? 'fill-[var(--dojo-crimson)] text-[var(--dojo-crimson)]'
+                                    : 'fill-[var(--dojo-ochre)] text-[var(--dojo-ochre)]'
+                                  : 'text-[var(--dojo-border-strong)]'
                               }`}
                             />
                           ))}
                         </div>
                       </div>
 
-                      <p className="mt-2 text-xs text-[#9AA4B4] leading-relaxed">
+                      <p className="mt-2 text-xs text-[var(--dojo-text-sub)] leading-relaxed">
                         {t(stage.subtitle)}
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between gap-3 pt-3 border-t border-[#F2EEE6]/8">
-                      <div className="text-xs font-mono-tabular text-[#848E9F]">
+                    <div className="flex items-center justify-between gap-3 pt-3 border-t border-[var(--dojo-border)]">
+                      <div className="text-xs font-mono-tabular text-[var(--dojo-text-muted)]">
                         {isCleared && rec ? (
                           <span>
                             {t(`最佳 ${rec.bestAccuracy}%`)} ·{' '}
@@ -619,10 +649,10 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                         }}
                         className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                           stage.isBossTrial
-                            ? 'bg-[#D94A38] hover:bg-[#E45643] text-white'
+                            ? 'bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white'
                             : isRecommended
-                              ? 'bg-[#2EA87E] hover:bg-[#36BC8E] text-[#0A1410]'
-                              : 'bg-[#1D2535] hover:bg-[#273247] text-[#F2EEE6]'
+                              ? 'bg-[var(--dojo-pine)] hover:opacity-90 text-white'
+                              : 'bg-[var(--dojo-surface-2)] hover:opacity-90 text-[var(--dojo-text)] border border-[var(--dojo-border)]'
                         }`}
                       >
                         {isCleared ? (
