@@ -476,6 +476,12 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
                   <feMergeNode in="SourceGraphic" />
                 </feMerge>
               </filter>
+
+              <radialGradient id={`washNodePool_${chamberKey}_${variant}`} cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#141413" stopOpacity="0.22" />
+                <stop offset="52%" stopColor="#3A3A36" stopOpacity="0.09" />
+                <stop offset="100%" stopColor="#F3F1EC" stopOpacity="0" />
+              </radialGradient>
             </>
           )}
 
@@ -498,33 +504,13 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
           fill={`url(#palaceGlow_${chamberKey}_${variant})`}
         />
         {isWash && (
-          <>
-            <ellipse
-              cx="42"
-              cy="44"
-              rx="42"
-              ry="34"
-              fill={`url(#palaceMistCloud_${chamberKey}_${variant})`}
-            />
-            <circle
-              cx="50"
-              cy="50"
-              r="45.5"
-              fill="none"
-              stroke="rgba(20, 20, 18, 0.075)"
-              strokeWidth="0.42"
-              strokeDasharray="24 7 6 10"
-            />
-            <circle
-              cx="50.6"
-              cy="49.5"
-              r="44.2"
-              fill="none"
-              stroke="rgba(48, 48, 44, 0.052)"
-              strokeWidth="0.28"
-              strokeDasharray="16 14"
-            />
-          </>
+          <ellipse
+            cx="42"
+            cy="44"
+            rx="44"
+            ry="36"
+            fill={`url(#palaceMistCloud_${chamberKey}_${variant})`}
+          />
         )}
 
         {editMode && (
@@ -558,27 +544,23 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
           }
         >
           {isEcho && isMonumentActive && (
-            <>
-              {isWash && (
-                <circle
-                  cx={monument.cx}
-                  cy={monument.cy}
-                  r={7.8}
-                  fill="rgba(20, 20, 18, 0.055)"
-                  stroke="rgba(20, 20, 18, 0.24)"
-                  strokeWidth="0.22"
-                  strokeDasharray="2.2 1.4"
-                />
-              )}
+            isWash ? (
+              <circle
+                cx={monument.cx}
+                cy={monument.cy}
+                r={9.5}
+                fill={`url(#washNodePool_${chamberKey}_${variant})`}
+              />
+            ) : (
               <circle
                 cx={monument.cx}
                 cy={monument.cy}
                 r={5.8}
-                fill={isWash ? 'rgba(20, 20, 18, 0.10)' : 'rgba(52, 211, 153, 0.07)'}
-                stroke={isWash ? 'rgba(20, 20, 18, 0.55)' : 'rgba(141, 245, 208, 0.45)'}
+                fill="rgba(52, 211, 153, 0.07)"
+                stroke="rgba(141, 245, 208, 0.45)"
                 strokeWidth="0.28"
               />
-            </>
+            )
           )}
           {editMode && isMonumentSelected && (
             <circle
@@ -708,29 +690,21 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
               }
             >
               {(isCurrent || isSelected) && (
-                <>
-                  {isWash && (
-                    <circle
-                      cx={effCx}
-                      cy={effCy}
-                      r={haloRadius * 1.32}
-                      fill={isEcho ? 'rgba(20, 20, 18, 0.055)' : 'rgba(20, 20, 18, 0.065)'}
-                      stroke={isEcho ? 'rgba(20, 20, 18, 0.25)' : 'rgba(20, 20, 18, 0.30)'}
-                      strokeWidth="0.22"
-                      strokeDasharray="2.1 1.3"
-                    />
-                  )}
+                isWash && !(editMode && isSelected) ? (
+                  <circle
+                    cx={effCx}
+                    cy={effCy}
+                    r={haloRadius * 1.45}
+                    fill={`url(#washNodePool_${chamberKey}_${variant})`}
+                  />
+                ) : (
                   <circle
                     cx={effCx}
                     cy={effCy}
                     r={haloRadius}
                     fill={
                       isWash
-                        ? isEcho
-                          ? 'rgba(20, 20, 18, 0.095)'
-                          : isCurrent
-                            ? 'rgba(20, 20, 18, 0.13)'
-                            : 'rgba(20, 20, 18, 0.10)'
+                        ? 'rgba(20, 20, 18, 0.10)'
                         : isEcho
                           ? 'rgba(52, 211, 153, 0.07)'
                           : isCurrent
@@ -739,9 +713,7 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
                     }
                     stroke={
                       isWash
-                        ? isEcho
-                          ? 'rgba(20, 20, 18, 0.55)'
-                          : '#181817'
+                        ? '#181817'
                         : isEcho
                           ? 'rgba(141, 245, 208, 0.45)'
                           : isCurrent
@@ -751,7 +723,7 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
                     strokeWidth={isEcho ? '0.28' : editMode && isSelected ? '0.65' : '0.45'}
                     strokeDasharray={editMode && isSelected ? '1.6 1.1' : undefined}
                   />
-                </>
+                )
               )}
 
               {/* Generous invisible hit circle so thin strokes like 一/丨/丿 are easy to click & drag */}

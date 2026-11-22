@@ -142,15 +142,33 @@
 @keyframes inkAuraFade {
   0% {
     opacity: 0;
-    transform: scale(0.76);
+    transform: scale(0.62);
+    filter: blur(2px);
   }
-  28% {
-    opacity: 0.85;
-    transform: scale(1.04);
+  24% {
+    opacity: 0.92;
+    transform: scale(1.02);
+    filter: blur(5px);
   }
   100% {
     opacity: 0;
-    transform: scale(1.42);
+    transform: scale(1.75);
+    filter: blur(11px);
+  }
+}
+
+@keyframes inkAuraSlow {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  30% {
+    opacity: 0.72;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.05);
   }
 }
 
@@ -195,7 +213,12 @@
 }
 
 .ink-aura-fade {
-  animation: inkAuraFade 620ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: inkAuraFade 680ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity, filter;
+}
+
+.ink-aura-slow {
+  animation: inkAuraSlow 820ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   will-change: transform, opacity;
 }
 

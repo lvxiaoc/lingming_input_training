@@ -320,14 +320,14 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                               : isVowel
                                 ? 'rgba(216, 155, 60, 0.26)'
                                 : 'rgba(242, 238, 230, 0.1)',
-                      borderStyle: isWash && isError ? 'dashed' : 'solid',
+                      borderStyle: 'solid',
                       boxShadow: isWash
                         ? isPressed || isDisabled
                           ? '0 1px 0 #C4C2BA, inset 0 0 8px rgba(20, 20, 18, 0.08)'
                           : isHitCorrect
-                            ? '0 3px 0 #C4C2BA, 0 0 20px rgba(20, 20, 18, 0.24), inset 0 0 10px rgba(20, 20, 18, 0.13)'
+                            ? '0 3px 0 #C4C2BA, 0 0 22px rgba(20, 20, 18, 0.22), inset 0 0 12px rgba(20, 20, 18, 0.14)'
                             : isError
-                              ? '0 3px 0 #C4C2BA, 0 0 22px rgba(20, 20, 18, 0.28), inset 0 0 12px rgba(20, 20, 18, 0.16)'
+                              ? '0 3px 0 #C4C2BA, 0 0 26px rgba(20, 20, 18, 0.30), inset 0 0 14px rgba(20, 20, 18, 0.20)'
                               : '0 3px 0 #C4C2BA, inset 0 1px 0 rgba(255, 255, 252, 0.65)'
                         : isPressed || isDisabled
                           ? '0 1px 0 #080A0E'
@@ -341,25 +341,23 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                     {isWash && (isHitCorrect || isError) && strikeFlash && (
                       <>
                         <span
-                          key={`tactile_aura_${strikeFlash.tick}`}
+                          key={`tactile_aura_outer_${strikeFlash.tick}`}
                           aria-hidden="true"
-                          className="pointer-events-none absolute -inset-3 rounded-full blur-[5px] ink-aura-fade"
+                          className="pointer-events-none absolute -inset-4 rounded-full blur-[7px] ink-aura-slow"
                           style={{
                             background: isError
-                              ? 'radial-gradient(circle, rgba(20, 20, 18, 0.26) 0%, rgba(44, 44, 40, 0.10) 50%, transparent 78%)'
-                              : 'radial-gradient(circle, rgba(20, 20, 18, 0.20) 0%, rgba(56, 56, 52, 0.08) 52%, transparent 78%)',
+                              ? 'radial-gradient(circle, rgba(20, 20, 18, 0.22) 0%, rgba(44, 44, 40, 0.10) 48%, transparent 78%)'
+                              : 'radial-gradient(circle, rgba(20, 20, 18, 0.16) 0%, rgba(56, 56, 52, 0.07) 50%, transparent 78%)',
                           }}
                         />
                         <span
-                          key={`tactile_ripple_${strikeFlash.tick}`}
+                          key={`tactile_aura_core_${strikeFlash.tick}`}
                           aria-hidden="true"
-                          className="pointer-events-none absolute -inset-1 rounded-xl border ink-bloom-ring"
+                          className="pointer-events-none absolute -inset-2 rounded-full blur-[4px] ink-aura-fade"
                           style={{
-                            borderColor: isError ? 'rgba(20, 20, 18, 0.50)' : 'rgba(20, 20, 18, 0.36)',
-                            borderStyle: isError ? 'dashed' : 'solid',
                             background: isError
-                              ? 'radial-gradient(circle, rgba(20, 20, 18, 0.16) 0%, transparent 72%)'
-                              : 'radial-gradient(circle, rgba(20, 20, 18, 0.12) 0%, transparent 72%)',
+                              ? 'radial-gradient(circle, rgba(16, 16, 15, 0.32) 0%, rgba(36, 36, 34, 0.12) 52%, transparent 76%)'
+                              : 'radial-gradient(circle, rgba(20, 20, 18, 0.24) 0%, rgba(48, 48, 44, 0.09) 54%, transparent 76%)',
                           }}
                         />
                       </>

@@ -1617,28 +1617,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             if (curLayout === 'split') {
               const pulseR = 112 + Math.sin(s.ringPhase) * 4;
               if (isWash) {
-                const haloGrad = ctx.createRadialGradient(cx, cy, pulseR * 0.35, cx, cy, pulseR * 1.18);
-                haloGrad.addColorStop(0, 'rgba(20, 20, 18, 0.048)');
-                haloGrad.addColorStop(0.65, 'rgba(56, 56, 52, 0.025)');
+                const haloGrad = ctx.createRadialGradient(cx, cy, pulseR * 0.25, cx, cy, pulseR * 1.32);
+                haloGrad.addColorStop(0, 'rgba(20, 20, 18, 0.055)');
+                haloGrad.addColorStop(0.55, 'rgba(56, 56, 52, 0.028)');
                 haloGrad.addColorStop(1, 'rgba(243, 241, 236, 0)');
                 ctx.fillStyle = haloGrad;
                 ctx.beginPath();
-                ctx.arc(cx, cy, pulseR * 1.18, 0, Math.PI * 2);
+                ctx.arc(cx, cy, pulseR * 1.32, 0, Math.PI * 2);
                 ctx.fill();
-
-                ctx.strokeStyle = 'rgba(20, 20, 18, 0.12)';
-                ctx.lineWidth = 1.1;
-                ctx.setLineDash([14, 6, 4, 8]);
+              } else {
+                ctx.strokeStyle = 'rgba(216, 155, 60, 0.16)';
+                ctx.lineWidth = 1.25;
                 ctx.beginPath();
-                ctx.arc(cx, cy, pulseR + 6, 0, Math.PI * 2);
+                ctx.arc(cx, cy, pulseR, 0, Math.PI * 2);
                 ctx.stroke();
-                ctx.setLineDash([]);
               }
-              ctx.strokeStyle = isWash ? 'rgba(20, 20, 18, 0.22)' : 'rgba(216, 155, 60, 0.16)';
-              ctx.lineWidth = 1.25;
-              ctx.beginPath();
-              ctx.arc(cx, cy, pulseR, 0, Math.PI * 2);
-              ctx.stroke();
             }
           }
 
@@ -1724,12 +1717,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
 
             if (curLayout === 'depth' && isFocusMode) {
-              // Pure minimal sanctuary — subtle ink-settle bloom on spawn/strike, crisp dashed ring on miss
+              // Pure minimal sanctuary — soft ink-in-water tonal pool on strike/error (zero circle outlines)
               if (isWash && tile.flash > 0.04) {
-                const haloR = Math.max(36, Math.round(glyphSize * (1.28 - tile.flash * 0.22)));
+                const haloR = Math.max(42, Math.round(glyphSize * (1.36 - tile.flash * 0.2)));
                 const washGrad = ctx.createRadialGradient(0, glyphY, 4, 0, glyphY, haloR);
-                washGrad.addColorStop(0, `rgba(20, 20, 18, ${(tile.flash * 0.14).toFixed(3)})`);
-                washGrad.addColorStop(0.65, `rgba(56, 56, 52, ${(tile.flash * 0.06).toFixed(3)})`);
+                washGrad.addColorStop(0, `rgba(20, 20, 18, ${(tile.flash * 0.15).toFixed(3)})`);
+                washGrad.addColorStop(0.55, `rgba(56, 56, 52, ${(tile.flash * 0.065).toFixed(3)})`);
                 washGrad.addColorStop(1, 'rgba(243, 241, 236, 0)');
                 ctx.fillStyle = washGrad;
                 ctx.beginPath();
@@ -1737,13 +1730,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 ctx.fill();
               }
               if (tile.shake > 1) {
-                ctx.strokeStyle = isWash ? 'rgba(20, 20, 18, 0.78)' : 'rgba(240, 78, 62, 0.7)';
-                ctx.lineWidth = isWash ? 1.8 : 1.5;
-                if (isWash) ctx.setLineDash([6, 4]);
-                ctx.beginPath();
-                ctx.arc(0, glyphY, Math.max(30, Math.round(glyphSize * 1.05)), 0, Math.PI * 2);
-                ctx.stroke();
-                if (isWash) ctx.setLineDash([]);
+                if (isWash) {
+                  const errStrength = Math.min(1, tile.shake / 12);
+                  const errR = Math.max(46, Math.round(glyphSize * 1.45));
+                  const errGrad = ctx.createRadialGradient(0, glyphY, 2, 0, glyphY, errR);
+                  errGrad.addColorStop(0, `rgba(16, 16, 15, ${(errStrength * 0.24).toFixed(3)})`);
+                  errGrad.addColorStop(0.45, `rgba(38, 38, 36, ${(errStrength * 0.12).toFixed(3)})`);
+                  errGrad.addColorStop(1, 'rgba(243, 241, 236, 0)');
+                  ctx.fillStyle = errGrad;
+                  ctx.beginPath();
+                  ctx.arc(0, glyphY, errR, 0, Math.PI * 2);
+                  ctx.fill();
+                } else {
+                  ctx.strokeStyle = 'rgba(240, 78, 62, 0.7)';
+                  ctx.lineWidth = 1.5;
+                  ctx.beginPath();
+                  ctx.arc(0, glyphY, Math.max(30, Math.round(glyphSize * 1.05)), 0, Math.PI * 2);
+                  ctx.stroke();
+                }
               }
             } else {
               drawRoundedRect(ctx, -cardW / 2, -cardH / 2, cardW, cardH, isFocusMode ? 14 : 11);
@@ -1761,7 +1765,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               ctx.fill();
 
               ctx.lineWidth = isActive ? 1.8 : 1;
-              if (isWash && tile.shake > 1) ctx.setLineDash([6, 4]);
               ctx.strokeStyle =
                 tile.shake > 1
                   ? isWash
@@ -1773,7 +1776,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                       ? 'rgba(20, 20, 18, 0.16)'
                       : 'rgba(242, 238, 230, 0.14)';
               ctx.stroke();
-              if (isWash && tile.shake > 1) ctx.setLineDash([]);
 
               if (tile.flash > 0.02) {
                 ctx.fillStyle = isWash
@@ -2215,30 +2217,25 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
 
-          // Concentric ink-wash strike ripples
+          // Liquid ink-in-water diffusion waves in wash mode / crisp rings in night mode (zero line strokes in wash!)
           for (const rp of s.ripples) {
             if (!rp.active) continue;
             ctx.save();
             const alpha = Math.max(0, rp.alpha);
             if (isWash) {
-              const haloGrad = ctx.createRadialGradient(rp.x, rp.y, Math.max(2, rp.r * 0.52), rp.x, rp.y, rp.r * 1.06);
+              const outerR = rp.r * 1.18;
+              const innerR = Math.max(2, rp.r * 0.28);
+              const haloGrad = ctx.createRadialGradient(rp.x, rp.y, innerR, rp.x, rp.y, outerR);
+              const toneRgb = rp.dashed ? '14, 14, 13' : '24, 24, 22';
               haloGrad.addColorStop(0, 'rgba(243, 241, 236, 0)');
-              haloGrad.addColorStop(0.72, rp.color);
+              haloGrad.addColorStop(0.42, `rgba(${toneRgb}, ${(alpha * 0.22).toFixed(3)})`);
+              haloGrad.addColorStop(0.68, `rgba(${toneRgb}, ${(alpha * 0.36).toFixed(3)})`);
+              haloGrad.addColorStop(0.86, `rgba(68, 68, 62, ${(alpha * 0.14).toFixed(3)})`);
               haloGrad.addColorStop(1, 'rgba(243, 241, 236, 0)');
-              ctx.globalAlpha = alpha * 0.34;
               ctx.fillStyle = haloGrad;
               ctx.beginPath();
-              ctx.arc(rp.x, rp.y, rp.r * 1.06, 0, Math.PI * 2);
+              ctx.arc(rp.x, rp.y, outerR, 0, Math.PI * 2);
               ctx.fill();
-
-              ctx.globalAlpha = alpha * 0.62;
-              ctx.strokeStyle = rp.color;
-              ctx.lineWidth = rp.lineWidth;
-              if (rp.dashed) ctx.setLineDash([7, 5]);
-              ctx.beginPath();
-              ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
-              ctx.stroke();
-              if (rp.dashed) ctx.setLineDash([]);
             } else {
               ctx.globalAlpha = alpha;
               ctx.strokeStyle = rp.color;

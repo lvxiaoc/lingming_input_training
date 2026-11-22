@@ -986,18 +986,18 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                               <>
                                 <span
                                   aria-hidden="true"
-                                  className="pointer-events-none absolute -inset-2.5 rounded-full blur-[4px] ink-aura-fade"
+                                  className="pointer-events-none absolute -inset-3 rounded-full blur-[6px] ink-aura-slow"
                                   style={{
                                     background:
-                                      'radial-gradient(circle, rgba(20, 20, 18, 0.22) 0%, transparent 74%)',
+                                      'radial-gradient(circle, rgba(20, 20, 18, 0.18) 0%, rgba(56, 56, 52, 0.07) 52%, transparent 78%)',
                                   }}
                                 />
                                 <span
                                   aria-hidden="true"
-                                  className="pointer-events-none absolute -inset-1 rounded-xl border border-[#181817]/40 ink-bloom-ring"
+                                  className="pointer-events-none absolute -inset-2 rounded-full blur-[3px] ink-aura-fade"
                                   style={{
                                     background:
-                                      'radial-gradient(circle, rgba(20, 20, 18, 0.12) 0%, transparent 72%)',
+                                      'radial-gradient(circle, rgba(20, 20, 18, 0.24) 0%, transparent 74%)',
                                   }}
                                 />
                               </>

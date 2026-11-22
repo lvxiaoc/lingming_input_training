@@ -244,8 +244,8 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
           backgroundColor: bgStyle,
           backgroundImage: bgImageStyle,
           borderColor: borderStyle,
-          borderStyle: isWash && isHitWrong ? 'dashed' : 'solid',
-          borderWidth: isWash && (isHitWrong || isHitCorrect) ? '1.5px' : '1px',
+          borderStyle: 'solid',
+          borderWidth: '1px',
           transform: scaleTransform,
           boxShadow: glowShadow,
           transition: isWash
@@ -256,25 +256,23 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
         {isWash && (isHitCorrect || isHitWrong) && strikeFlash && (
           <>
             <span
-              key={`aura_${strikeFlash.tick}`}
+              key={`aura_outer_${strikeFlash.tick}`}
               aria-hidden="true"
-              className="pointer-events-none absolute -inset-4 rounded-full blur-[6px] ink-aura-fade"
+              className="pointer-events-none absolute -inset-6 rounded-full blur-[9px] ink-aura-slow"
               style={{
                 background: isHitWrong
-                  ? 'radial-gradient(circle, rgba(20, 20, 18, 0.28) 0%, rgba(44, 44, 40, 0.12) 48%, transparent 76%)'
-                  : 'radial-gradient(circle, rgba(20, 20, 18, 0.22) 0%, rgba(56, 56, 52, 0.09) 50%, transparent 78%)',
+                  ? 'radial-gradient(circle, rgba(20, 20, 18, 0.24) 0%, rgba(44, 44, 40, 0.11) 46%, transparent 76%)'
+                  : 'radial-gradient(circle, rgba(20, 20, 18, 0.18) 0%, rgba(56, 56, 52, 0.08) 48%, transparent 78%)',
               }}
             />
             <span
-              key={`ripple_${strikeFlash.tick}`}
+              key={`aura_core_${strikeFlash.tick}`}
               aria-hidden="true"
-              className="pointer-events-none absolute -inset-1.5 rounded-2xl border ink-bloom-ring"
+              className="pointer-events-none absolute -inset-3 rounded-full blur-[4px] ink-aura-fade"
               style={{
-                borderColor: isHitWrong ? 'rgba(20, 20, 18, 0.52)' : 'rgba(20, 20, 18, 0.38)',
-                borderStyle: isHitWrong ? 'dashed' : 'solid',
                 background: isHitWrong
-                  ? 'radial-gradient(circle, rgba(20, 20, 18, 0.20) 0%, transparent 72%)'
-                  : 'radial-gradient(circle, rgba(20, 20, 18, 0.14) 0%, transparent 72%)',
+                  ? 'radial-gradient(circle, rgba(16, 16, 15, 0.34) 0%, rgba(36, 36, 34, 0.14) 50%, transparent 76%)'
+                  : 'radial-gradient(circle, rgba(20, 20, 18, 0.26) 0%, rgba(48, 48, 44, 0.10) 52%, transparent 76%)',
               }}
             />
           </>
@@ -490,10 +488,10 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
               >
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    isWash ? 'bg-[#181817]' : 'bg-[#34D399]'
+                    isWash ? 'bg-[#181817]/65' : 'bg-[#34D399]'
                   }`}
                 />
-                {t(isWash ? '正確濃墨' : '正確翠綠')}
+                {t(isWash ? '正確淡墨' : '正確翠綠')}
               </span>
               <span
                 className={`inline-flex items-center gap-1 ${
@@ -502,10 +500,10 @@ export const BlurredKeyboardBackdrop: React.FC<BlurredKeyboardBackdropProps> = (
               >
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    isWash ? 'border border-dashed border-[#181817] bg-transparent' : 'bg-[#F04E3E]'
+                    isWash ? 'bg-[#141413]' : 'bg-[#F04E3E]'
                   }`}
                 />
-                {t(isWash ? '誤擊碎墨' : '錯誤硃砂')}
+                {t(isWash ? '誤擊濃墨' : '錯誤硃砂')}
               </span>
               <span
                 aria-hidden="true"
