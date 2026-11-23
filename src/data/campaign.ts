@@ -1027,3 +1027,122 @@ export function buildWeakSpotDrillDeck(weakEntries: GlyphEntry[], count = 12): G
   }));
   return buildNonAdjacentDeck(cleanPool, count, 'weak_drill');
 }
+
+export interface ChamberXrayStats {
+  carrierCount: number;
+  radicalCount: number;
+}
+
+/**
+ * Counts how many distinct carrier Hanzi and radicals exist in XRAY_HANZI_ENTRIES
+ * for a given Memory Palace consonant key (respecting scriptMode, falling back to all if empty).
+ */
+export function getChamberXrayStats(
+  chamberKey: string,
+  scriptMode: ScriptMode = 'trad'
+): ChamberXrayStats {
+  const key = chamberKey.toLowerCase();
+  const collect = (filterScript: boolean) => {
+    const carriers = new Set<string>();
+    const radicals = new Set<string>();
+    for (const h of XRAY_HANZI_ENTRIES) {
+      if (filterScript && !matchesScript(getLingmingCharScript(h.char), scriptMode)) continue;
+      for (const spec of h.targets) {
+        const info = LINGMING_ROOT_MAP.get(spec.radical);
+        if (info && info.chamberKey === key) {
+          carriers.add(h.char);
+          radicals.add(spec.radical);
+        }
+      }
+    }
+    return { carrierCount: carriers.size, radicalCount: radicals.size };
+  };
+  const filtered = collect(true);
+  return filtered.carrierCount >= 6 ? filtered : collect(false);
+}
+
+/**
+ * Builds a randomized in-character root-highlighting challenge deck for either:
+ * - a specific Memory Palace consonant key (`chamberKey`), OR
+ * - across ALL 20 Memory Palace keys (`chamberKey === null`).
+ *
+ * Every invocation shuffles radicals and picks fresh, different carrier Hanzi per radical
+ * so users master recognizing deformed/contextual radical shapes inside real characters.
+ */
+export function buildChamberXrayDeck(
+  chamberKey: string | null,
+  scriptMode: ScriptMode = 'trad',
+  targetCount = 20
+): GlyphEntry[] {
+  const normalizedKey = chamberKey ? chamberKey.toLowerCase() : null;
+
+  const gatherByRadical = (filterScript: boolean) => {
+    const byRadical = new Map<string, Array<{ hanzi: XrayHanziEntry; targetIdx: number }>>();
+    for (const h of XRAY_HANZI_ENTRIES) {
+      if (filterScript && !matchesScript(getLingmingCharScript(h.char), scriptMode)) continue;
+      h.targets.forEach((spec, targetIdx) => {
+        const info = LINGMING_ROOT_MAP.get(spec.radical);
+        if (!info) return;
+        if (normalizedKey && info.chamberKey !== normalizedKey) return;
+        const list = byRadical.get(spec.radical) || [];
+        list.push({ hanzi: h, targetIdx });
+        byRadical.set(spec.radical, list);
+      });
+    }
+    return byRadical;
+  };
+
+  let byRadical = gatherByRadical(true);
+  // Ensure rich carrier variety even if a specific chamber skews toward shared/simplified chars
+  const totalCarriers = Array.from(byRadical.values()).reduce((s, arr) => s + arr.length, 0);
+  if (totalCarriers < 10) {
+    byRadical = gatherByRadical(false);
+  }
+  if (byRadical.size === 0) return [];
+
+  // Shuffle each radical's carrier Hanzi queue so every run shows different real Hanzi
+  const radicalKeys = shuffleArray(Array.from(byRadical.keys()));
+  const carrierQueues = new Map<string, Array<{ hanzi: XrayHanziEntry; targetIdx: number }>>();
+  for (const r of radicalKeys) {
+    carrierQueues.set(r, shuffleArray(byRadical.get(r)!));
+  }
+
+  const deck: GlyphEntry[] = [];
+  let seq = 0;
+  let lastChar = '';
+  let lastRadical = '';
+  const cyclePointers = new Map<string, number>();
+
+  // Round-robin across radicals in this palace, pulling a DIFFERENT carrier Hanzi on each pass
+  let guard = 0;
+  while (deck.length < targetCount && guard < targetCount * 8) {
+    guard++;
+    const passOrder = shuffleArray([...radicalKeys]);
+    for (const rad of passOrder) {
+      if (deck.length >= targetCount) break;
+      if (rad === lastRadical && radicalKeys.length > 1) continue;
+      const queue = carrierQueues.get(rad)!;
+      const ptr = cyclePointers.get(rad) ?? 0;
+      let picked = queue[ptr % queue.length];
+      // Avoid repeating the exact same carrier Hanzi back-to-back if another exists
+      if (picked.hanzi.char === lastChar && queue.length > 1) {
+        picked = queue[(ptr + 1) % queue.length];
+        cyclePointers.set(rad, ptr + 2);
+      } else {
+        cyclePointers.set(rad, ptr + 1);
+      }
+      const entry = buildXrayGlyphEntry(picked.hanzi, picked.targetIdx, [], seq++);
+      if (entry) {
+        deck.push({
+          ...entry,
+          id: `palace_xray_${normalizedKey ?? 'all'}_${picked.hanzi.char}_${rad}_${seq}`,
+        });
+        lastChar = picked.hanzi.char;
+        lastRadical = rad;
+      }
+    }
+  }
+
+  return deck;
+}
+

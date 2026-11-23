@@ -684,7 +684,7 @@ function registerDrillEntry(
     roles: encoded.roles,
     script,
     isHardSplit: isHardSplit || roots.length >= 3,
-    xray: XRAY_HANZI_BY_CHAR[char],
+    xray: XRAY_HANZI_BY_CHAR.get(char),
     rootDetails,
   });
 }

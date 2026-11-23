@@ -6,6 +6,7 @@ import {
   EyeOff,
   Play,
   RotateCcw,
+  ScanSearch,
   Shield,
   Sparkles,
   Star,
@@ -16,6 +17,7 @@ import {
   CampaignProgressStore,
   CampaignStage,
   getCampaignSummary,
+  getChamberXrayStats,
   getNextUnclearPalaceKey,
   PALACE_GUIDED_KEYS,
   PALACE_ROW_GROUPS,
@@ -67,6 +69,7 @@ interface CampaignMapViewProps {
   onOpenPalaceCloud: () => void;
   onLaunchStage: (stage: CampaignStage) => void;
   onLaunchChamberDrill: (chamberKey: string, scope: 'da' | 'root', blind?: boolean) => void;
+  onLaunchChamberXrayDrill?: (chamberKey: string | null, blind?: boolean) => void;
 }
 
 export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
@@ -79,6 +82,7 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
   onOpenPalaceCloud,
   onLaunchStage,
   onLaunchChamberDrill,
+  onLaunchChamberXrayDrill,
 }) => {
   const t = useUiText();
   const themeMode = useThemeMode();
@@ -87,6 +91,7 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
     initialChapterId ?? summary.nextRecommendedStage.chapterId
   );
   const [chamberBlindMode, setChamberBlindMode] = useState(false);
+  const [chamberDrillStyle, setChamberDrillStyle] = useState<'isolated' | 'xray'>('isolated');
 
   const clearedChamberCount = useMemo(
     () =>
@@ -411,11 +416,53 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                       </span>
                     </div>
                     <p className="text-xs text-[var(--dojo-text-muted)] mt-1">
-                      {t('點擊下方任一輔音鍵位，依該鍵宮殿 1:1 筆順位置由主根逐一敲遍全部字根；先建牢單鍵宮殿，再進跨鍵混測。')}
+                      {t(
+                        chamberDrillStyle === 'xray'
+                          ? '點擊任一輔音鍵，每次隨機抽取該鍵字根所在的真實漢字並高亮其變形筆畫，在語境中徹底練透單鍵記憶宮殿。'
+                          : '點擊下方任一輔音鍵位，依該鍵宮殿 1:1 筆順位置由主根逐一敲遍全部字根；先建牢單鍵宮殿，再進跨鍵混測。'
+                      )}
                     </p>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {onLaunchChamberXrayDrill && (
+                      <div
+                        className="inline-flex items-center p-0.5 bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] rounded-lg"
+                        role="group"
+                        aria-label={t('單鍵宮殿訓練方式')}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            synth.playClick();
+                            setChamberDrillStyle('isolated');
+                          }}
+                          className={`px-2.5 py-1 text-xs rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                            chamberDrillStyle === 'isolated'
+                              ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)] font-semibold'
+                              : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
+                          }`}
+                        >
+                          {t('孤立字根')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            synth.playClick();
+                            setChamberDrillStyle('xray');
+                          }}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                            chamberDrillStyle === 'xray'
+                              ? 'bg-[var(--dojo-pine)] text-white font-semibold'
+                              : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
+                          }`}
+                        >
+                          <ScanSearch className="w-3 h-3" />
+                          <span>{t('字中辨根（隨機漢字）')}</span>
+                        </button>
+                      </div>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => {
@@ -437,13 +484,17 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                       type="button"
                       onClick={() => {
                         synth.playClick();
-                        onLaunchChamberDrill(nextChamberKey, 'root', chamberBlindMode);
+                        if (chamberDrillStyle === 'xray' && onLaunchChamberXrayDrill) {
+                          onLaunchChamberXrayDrill(nextChamberKey, chamberBlindMode);
+                        } else {
+                          onLaunchChamberDrill(nextChamberKey, 'root', chamberBlindMode);
+                        }
                       }}
                       className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[var(--dojo-pine)] hover:opacity-90 text-white rounded-lg transition-opacity whitespace-nowrap cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
                       <span>
-                        {t('練習下一鍵：')}
+                        {t(chamberDrillStyle === 'xray' ? '字中辨根下一鍵：' : '練習下一鍵：')}
                         {nextChamberKey.toUpperCase()}（
                         <InlinePrimaryGlyph char={nextChamberAnchor} />）
                       </span>
@@ -475,6 +526,10 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                           const rec = progress.chambers?.[k];
                           const isCleared = (rec?.clears ?? 0) > 0;
                           const isNextTarget = k === nextChamberKey && !isCleared;
+                          const xrayStats =
+                            chamberDrillStyle === 'xray'
+                              ? getChamberXrayStats(k, scriptMode)
+                              : null;
 
                           return (
                             <button
@@ -482,7 +537,11 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                               type="button"
                               onClick={() => {
                                 synth.playClick();
-                                onLaunchChamberDrill(k, 'root', chamberBlindMode);
+                                if (chamberDrillStyle === 'xray' && onLaunchChamberXrayDrill) {
+                                  onLaunchChamberXrayDrill(k, chamberBlindMode);
+                                } else {
+                                  onLaunchChamberDrill(k, 'root', chamberBlindMode);
+                                }
                               }}
                               className={`p-2.5 rounded-lg border text-left transition-colors cursor-pointer flex flex-col justify-between gap-1.5 ${
                                 isCleared
@@ -503,8 +562,9 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                                   {k.toUpperCase()}
                                 </span>
                                 <span className="font-mono-tabular text-[10px] text-[var(--dojo-text-muted)]">
-                                  {totalRoots}
-                                  {t('根')}
+                                  {xrayStats
+                                    ? `${xrayStats.carrierCount}${t('字')}`
+                                    : `${totalRoots}${t('根')}`}
                                 </span>
                               </div>
 
@@ -539,6 +599,59 @@ export const CampaignMapView: React.FC<CampaignMapViewProps> = ({
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {selectedChapter.id === 4 && onLaunchChamberXrayDrill && (
+              <div className="mt-5 pb-5 border-b border-[var(--dojo-border)]">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                  <div>
+                    <h3 className="font-display text-base font-bold text-[var(--dojo-text-bright)]">
+                      {t('單鍵宮殿 · 隨機字中辨根挑戰')}
+                    </h3>
+                    <p className="text-xs text-[var(--dojo-text-muted)] mt-0.5">
+                      {t('選擇任一記憶宮殿鍵位，每輪隨機更換不同承載漢字並高亮該鍵小字根在字中的真實變形，告別孤立死背。')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      synth.playClick();
+                      onLaunchChamberXrayDrill(null, false);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[var(--dojo-pine)] hover:opacity-90 text-white rounded-lg transition-opacity whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    <ScanSearch className="w-3.5 h-3.5" />
+                    <span>{t('全宮殿隨機字中辨根 (24題)')}</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
+                  {PALACE_GUIDED_KEYS.map((k) => {
+                    const chamber = LINGMING_CHAMBER_BY_KEY[k];
+                    const stats = getChamberXrayStats(k, scriptMode);
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => {
+                          synth.playClick();
+                          onLaunchChamberXrayDrill(k, false);
+                        }}
+                        title={t(`${k.toUpperCase()} 鍵宮殿 · ${stats.carrierCount} 個隨機承載漢字`)}
+                        className="p-2 rounded-lg border bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] hover:border-[var(--dojo-pine)]/60 border-[var(--dojo-border)] transition-colors cursor-pointer flex flex-col items-center gap-0.5"
+                      >
+                        <div className="w-full flex items-center justify-between text-[10px] font-mono-tabular">
+                          <span className="font-bold text-[var(--dojo-ochre)]">{k.toUpperCase()}</span>
+                          <span className="text-[var(--dojo-text-muted)]">{stats.carrierCount}{t('字')}</span>
+                        </div>
+                        <span className="font-display text-base font-bold text-[var(--dojo-text-bright)] leading-none">
+                          <InlinePrimaryGlyph char={chamber?.primaryAnchor || ''} />
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -19,6 +19,9 @@ import {
   Shield,
   Flame,
   BookOpen,
+  Zap,
+  ScrollText,
+  ScanSearch,
 } from 'lucide-react';
 import {
   BUILTIN_SCHEMES,
@@ -29,6 +32,7 @@ import { LINGMING_CHAMBER_BY_KEY } from './data/lingming';
 import { getNextPalaceKey } from './data/palaceStrokes';
 import {
   buildCampaignStageDeck,
+  buildChamberXrayDeck,
   buildWeakSpotDrillDeck,
   CAMPAIGN_STAGE_BY_ID,
   CampaignProgressStore,
@@ -84,6 +88,8 @@ import { StrokeCloudStage } from './components/StrokeCloudStage';
 import { MemoryPalaceCloud } from './components/MemoryPalaceCloud';
 import { CampaignMapView } from './components/CampaignMapView';
 import { ExtremeDrillStudio } from './components/ExtremeDrillStudio';
+import { ShortCodeDojo } from './components/ShortCodeDojo';
+import { HuangtingDojo } from './components/HuangtingDojo';
 import { HomeTutorialModal, TutorialTabId } from './components/HomeTutorialModal';
 import { synth } from './audio/synth';
 import { speech } from './audio/speech';
@@ -93,6 +99,8 @@ type GameState =
   | 'CAMPAIGN_MAP'
   | 'PALACE_CLOUD'
   | 'DRILL_STUDIO'
+  | 'SHORT_CODE_DOJO'
+  | 'HUANGTING_DOJO'
   | 'PLAYING'
   | 'PAUSED'
   | 'ROUND_SUMMARY'
@@ -186,6 +194,10 @@ export default function App() {
 
   const [focusKeys, setFocusKeys] = useState<string[] | null>(null);
   const [chamberReturnTo, setChamberReturnTo] = useState<'CAMPAIGN_MAP' | 'PALACE_CLOUD'>('PALACE_CLOUD');
+  const [chamberXrayMode, setChamberXrayMode] = useState<{
+    active: boolean;
+    key: string | null;
+  } | null>(null);
   const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState<boolean>(() => {
     try {
       return localStorage.getItem('inkkey_auto_advance') !== 'false';
@@ -320,6 +332,7 @@ export default function App() {
       synth.playClick();
       setActiveStage(null);
       setActiveCustomDeck(null);
+      setChamberXrayMode(null);
       setIsWeakDrill(false);
       setLastStageBadge(null);
       setMode(selectedMode);
@@ -356,6 +369,7 @@ export default function App() {
       const effectiveScript = overrideScriptMode ?? scriptMode;
       const deck = buildCampaignStageDeck(stage, lingming, storeForDeck, effectiveScript);
       setActiveStage(stage);
+      setChamberXrayMode(null);
       setIsWeakDrill(false);
       setLastStageBadge(null);
       setFocusKeys(null);
@@ -382,13 +396,24 @@ export default function App() {
       if (restartPlayingIfNeeded && (gameState === 'PAUSED' || gameState === 'PLAYING')) {
         if (activeStage) {
           launchCampaignStage(activeStage, next);
+        } else if (chamberXrayMode?.active) {
+          const deck = buildChamberXrayDeck(
+            chamberXrayMode.key,
+            next,
+            chamberXrayMode.key ? 20 : 24
+          );
+          setActiveCustomDeck(deck.length > 0 ? deck : null);
+          setCompletedChars(new Set());
+          setRoundResult(null);
+          setResetSignal((n) => n + 1);
+          setGameState('PLAYING');
         } else {
           setResetSignal((n) => n + 1);
           setGameState('PLAYING');
         }
       }
     },
-    [activeStage, gameState, launchCampaignStage]
+    [activeStage, chamberXrayMode, gameState, launchCampaignStage]
   );
 
   const launchWeakDrill = useCallback((weakEntries: WeakEntryInfo[]) => {
@@ -398,6 +423,7 @@ export default function App() {
       12
     );
     if (deck.length === 0) return;
+    setChamberXrayMode(null);
     setIsWeakDrill(true);
     setLastStageBadge(null);
     setFocusKeys(null);
@@ -547,6 +573,7 @@ export default function App() {
         switchScheme(BUILTIN_SCHEMES[0]);
       }
       setChamberReturnTo(from);
+      setChamberXrayMode(null);
       startPlay(
         'reflex',
         chamberKey ? [chamberKey] : [],
@@ -555,6 +582,39 @@ export default function App() {
       );
     },
     [activeScheme.isLingming, startPlay, switchScheme]
+  );
+
+  const handleLaunchChamberXrayDrill = useCallback(
+    (
+      chamberKey: string | null,
+      blind = false,
+      from: 'CAMPAIGN_MAP' | 'PALACE_CLOUD' = 'CAMPAIGN_MAP'
+    ) => {
+      synth.playClick();
+      if (!activeScheme.isLingming) {
+        switchScheme(BUILTIN_SCHEMES[0]);
+      }
+      const deck = buildChamberXrayDeck(
+        chamberKey,
+        scriptMode,
+        chamberKey ? 20 : 24
+      );
+      setActiveStage(null);
+      setIsWeakDrill(false);
+      setLastStageBadge(null);
+      setChamberReturnTo(from);
+      setChamberXrayMode({ active: true, key: chamberKey });
+      setFocusKeys(chamberKey ? [chamberKey] : null);
+      setMode('reflex');
+      setTrainingScope('root');
+      setScaffoldMode(blind ? 'blind' : 'adaptive');
+      setActiveCustomDeck(deck.length > 0 ? deck : null);
+      setCompletedChars(new Set());
+      setRoundResult(null);
+      setResetSignal((n) => n + 1);
+      setGameState('PLAYING');
+    },
+    [activeScheme.isLingming, scriptMode, switchScheme]
   );
 
   const singleChamberKey =
@@ -628,6 +688,19 @@ export default function App() {
         label: `${t('下一節：')}${t(nextStage.indexLabel)}`,
         isBoss: nextStage.isBossTrial,
         run: () => launchCampaignStage(nextStage),
+      };
+    }
+
+    // 2.5 Memory Palace In-Character X-Ray Challenge cleared
+    if (chamberXrayMode?.active) {
+      return {
+        label: t('換一批隨機漢字再練'),
+        run: () =>
+          handleLaunchChamberXrayDrill(
+            chamberXrayMode.key,
+            scaffoldMode === 'blind',
+            chamberReturnTo
+          ),
       };
     }
 
@@ -708,9 +781,11 @@ export default function App() {
     campaignProgress.chambers,
     campaignProgress.stages,
     chamberReturnTo,
+    chamberXrayMode,
     focusKeys,
     gameState,
     handleLaunchChamberDrill,
+    handleLaunchChamberXrayDrill,
     isWeakDrill,
     launchCampaignStage,
     mode,
@@ -1072,11 +1147,11 @@ export default function App() {
             </div>
           </div>
 
-          {/* Center-left Hero Lockup — Brand + 3 Primary Entries */}
+          {/* Center-left Hero Lockup — Brand + Primary & Specialized Entries */}
           <div className="relative z-10 px-6 sm:px-10 my-auto max-w-2xl wash-enter">
             <svg
               viewBox="0 0 430 92"
-              className="w-full max-w-[400px] h-auto mb-8"
+              className="w-full max-w-[380px] h-auto mb-6"
               aria-label={t('墨鍵道場 · 靈明記憶宮殿')}
             >
               <rect
@@ -1205,9 +1280,60 @@ export default function App() {
               </button>
             </div>
 
+            {/* Two Specialized Training Spaces: Short-Code Dojo & Huangting Scripture Dojo */}
+            <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 items-stretch gap-2.5 max-w-2xl wash-enter-soft">
+              <button
+                type="button"
+                onClick={() => {
+                  synth.playClick();
+                  setGameState('SHORT_CODE_DOJO');
+                }}
+                className={`flex items-center justify-between gap-3 px-4 py-3 active:scale-[0.99] border rounded-xl transition-all cursor-pointer text-left ${
+                  isWash
+                    ? 'bg-[#F9F8F5]/92 hover:bg-[#FFFFFF] border-[#141413]/18 text-[#141413] shadow-xs'
+                    : 'bg-[#151D2B]/90 hover:bg-[#1D2739] border-[#4A9468]/32 text-[#F2EEE6]'
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-bold whitespace-nowrap">
+                    <Zap className="w-4 h-4 text-[var(--dojo-pine)] shrink-0" />
+                    <span>{t('簡碼速成')}</span>
+                  </div>
+                  <div className="text-[11px] text-[var(--dojo-text-sub)] mt-0.5 truncate">
+                    {t('一二三碼直出 · 常用字均長提速')}
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-[var(--dojo-text-muted)] shrink-0" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  synth.playClick();
+                  setGameState('HUANGTING_DOJO');
+                }}
+                className={`flex items-center justify-between gap-3 px-4 py-3 active:scale-[0.99] border rounded-xl transition-all cursor-pointer text-left ${
+                  isWash
+                    ? 'bg-[#F9F8F5]/92 hover:bg-[#FFFFFF] border-[#141413]/22 text-[#141413] shadow-xs'
+                    : 'bg-[#151D2B]/90 hover:bg-[#1D2739] border-[#D89B3C]/35 text-[#F2EEE6]'
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-bold whitespace-nowrap">
+                    <ScrollText className="w-4 h-4 text-[var(--dojo-ochre)] shrink-0" />
+                    <span>{t('黃庭抄經閣')}</span>
+                  </div>
+                  <div className="text-[11px] text-[var(--dojo-text-sub)] mt-0.5 truncate">
+                    {t('三十六章誦抄 · 熟度漸隱分色拆解')}
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-[var(--dojo-text-muted)] shrink-0" />
+              </button>
+            </div>
+
             {/* Homepage Tutorial & Interactive Memory Palace Example Strip */}
             <div
-              className={`mt-5 max-w-2xl rounded-xl border px-4 py-3.5 backdrop-blur-sm wash-enter-soft ${
+              className={`mt-4 max-w-2xl rounded-xl border px-4 py-3 backdrop-blur-sm wash-enter-soft ${
                 isWash
                   ? 'bg-[#F9F8F5]/88 border-[#141413]/14 text-[#141413]'
                   : 'bg-[#121824]/86 border-[#F2EEE6]/12 text-[#F2EEE6]'
@@ -1351,6 +1477,9 @@ export default function App() {
           onLaunchChamberDrill={(key, scope, blind) =>
             handleLaunchChamberDrill(key, scope, blind, 'CAMPAIGN_MAP')
           }
+          onLaunchChamberXrayDrill={(key, blind) =>
+            handleLaunchChamberXrayDrill(key, blind, 'CAMPAIGN_MAP')
+          }
         />
       )}
 
@@ -1367,6 +1496,9 @@ export default function App() {
           onBack={() => setGameState(returnStateFromPalace)}
           onLaunchChamberDrill={(key, scope, blind) =>
             handleLaunchChamberDrill(key, scope, blind, 'PALACE_CLOUD')
+          }
+          onLaunchChamberXrayDrill={(key, blind) =>
+            handleLaunchChamberXrayDrill(key, blind, 'PALACE_CLOUD')
           }
         />
       )}
@@ -1386,11 +1518,40 @@ export default function App() {
         />
       )}
 
+      {/* ==================== LINGMING SHORT-CODE DOJO ==================== */}
+      {gameState === 'SHORT_CODE_DOJO' && (
+        <ShortCodeDojo
+          mastery={mastery}
+          onMasteryChange={handleMasteryChange}
+          scriptMode={scriptMode}
+          onChangeScriptMode={(next) => handleChangeScriptMode(next)}
+          onChangeThemeMode={handleChangeThemeMode}
+          muted={muted}
+          onToggleMute={toggleMute}
+          onBack={() => setGameState('TITLE_MENU')}
+        />
+      )}
+
+      {/* ==================== HUANGTING JING SCRIPTURE TRANSCRIPTION DOJO ==================== */}
+      {gameState === 'HUANGTING_DOJO' && (
+        <HuangtingDojo
+          mastery={mastery}
+          onMasteryChange={handleMasteryChange}
+          defaultScript={scriptMode === 'simp' ? 'simp' : 'trad'}
+          onChangeThemeMode={handleChangeThemeMode}
+          muted={muted}
+          onToggleMute={toggleMute}
+          onBack={() => setGameState('TITLE_MENU')}
+        />
+      )}
+
       {/* ==================== ACTIVE PLAY SHELL ==================== */}
       {gameState !== 'TITLE_MENU' &&
         gameState !== 'CAMPAIGN_MAP' &&
         gameState !== 'PALACE_CLOUD' &&
-        gameState !== 'DRILL_STUDIO' && (
+        gameState !== 'DRILL_STUDIO' &&
+        gameState !== 'SHORT_CODE_DOJO' &&
+        gameState !== 'HUANGTING_DOJO' && (
         <div className="relative z-10 w-full h-full flex flex-col">
           {/* Compact low-occlusion perimeter HUD */}
           <header className="shrink-0 h-12 px-4 sm:px-6 bg-[var(--dojo-header)] wash:bg-[var(--dojo-header)]/88 wash:backdrop-blur-sm border-b border-[var(--dojo-border)] flex items-center justify-between gap-3 z-30">
@@ -1427,6 +1588,20 @@ export default function App() {
                       </span>
                     </>
                   )}
+                </>
+              ) : chamberXrayMode?.active ? (
+                <>
+                  <span className="font-display text-sm font-bold text-[var(--dojo-text-bright)] whitespace-nowrap">
+                    {chamberXrayMode.key
+                      ? `${chamberXrayMode.key.toUpperCase()} ${t('鍵宮殿')}（${
+                          LINGMING_CHAMBER_BY_KEY[chamberXrayMode.key]?.primaryAnchor || ''
+                        }）· ${t('字中辨根')}`
+                      : t('全宮殿隨機字中辨根')}
+                  </span>
+                  <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
+                  <span className="text-[var(--dojo-ochre)] truncate">
+                    {t('僅輸入高亮筆畫字根全碼')} · {t(SCRIPT_MODE_LABELS[scriptMode])}
+                  </span>
                 </>
               ) : (
                 <>
@@ -1833,7 +2008,7 @@ export default function App() {
               </div>
             </div>
 
-            {!activeStage && !singleChamberKey && (
+            {!activeStage && !singleChamberKey && !chamberXrayMode?.active && (
               <div className="mb-4">
                 <div className="text-xs text-[var(--dojo-text-sub)] mb-2">{t('切換鍛煉模式')}</div>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -1855,7 +2030,7 @@ export default function App() {
               </div>
             )}
 
-            {activeScheme.isLingming && !activeStage && !singleChamberKey && (
+            {activeScheme.isLingming && !activeStage && !singleChamberKey && !chamberXrayMode?.active && (
               <div className="mb-4">
                 <div className="text-xs text-[var(--dojo-text-sub)] mb-2">{t('切換靈明訓練層級')}</div>
                 <div className="grid grid-cols-2 gap-1.5">
@@ -1922,13 +2097,27 @@ export default function App() {
               <button
                 type="button"
                 onClick={() =>
-                  activeStage ? launchCampaignStage(activeStage) : startPlay(mode, focusKeys)
+                  activeStage
+                    ? launchCampaignStage(activeStage)
+                    : chamberXrayMode?.active
+                      ? handleLaunchChamberXrayDrill(
+                          chamberXrayMode.key,
+                          scaffoldMode === 'blind',
+                          chamberReturnTo
+                        )
+                      : startPlay(mode, focusKeys)
                 }
                 className="w-full py-2.5 text-sm font-medium bg-[var(--dojo-surface-2)] hover:brightness-105 text-[var(--dojo-text)] rounded-lg transition-colors cursor-pointer"
               >
-                {t(activeStage ? '重新開始本節' : '重新開始本局')}
+                {t(
+                  activeStage
+                    ? '重新開始本節'
+                    : chamberXrayMode?.active
+                      ? '換一批隨機漢字重練'
+                      : '重新開始本局'
+                )}
               </button>
-              {(activeStage || singleChamberKey) && (
+              {(activeStage || singleChamberKey || chamberXrayMode?.active) && (
                 <button
                   type="button"
                   onClick={() => setGameState(activeStage ? 'CAMPAIGN_MAP' : chamberReturnTo)}
@@ -1938,7 +2127,9 @@ export default function App() {
                     activeStage
                       ? '返回五重關卡卷軸'
                       : chamberReturnTo === 'CAMPAIGN_MAP'
-                        ? '返回第三關逐鍵巡禮'
+                        ? chamberXrayMode?.active
+                          ? '返回五重關卡卷軸'
+                          : '返回第三關逐鍵巡禮'
                         : '返回記憶宮殿雲圖'
                   )}
                 </button>
@@ -2012,22 +2203,28 @@ export default function App() {
                         : activeStage.isBossTrial
                           ? `${t(activeStage.title)} · ${t('檢定通過')}`
                           : `${t(activeStage.indexLabel)} · ${t(activeStage.title)} ${t('完成')}`
-                    : singleChamberKey
-                      ? `${singleChamberKey.toUpperCase()} ${t('鍵宮殿第')} ${
-                          campaignProgress.chambers[singleChamberKey]?.clears || 1
-                        } ${t('遍完成')}`
-                      : gameState === 'GAME_OVER'
-                        ? t('墨印耗盡 · 本陣結束')
-                        : t('鍛煉完成 · 肌肉記憶已記錄')}
+                    : chamberXrayMode?.active
+                      ? chamberXrayMode.key
+                        ? `${chamberXrayMode.key.toUpperCase()} ${t('鍵宮殿 · 字中辨根完成')}`
+                        : t('全宮殿隨機字中辨根完成')
+                      : singleChamberKey
+                        ? `${singleChamberKey.toUpperCase()} ${t('鍵宮殿第')} ${
+                            campaignProgress.chambers[singleChamberKey]?.clears || 1
+                          } ${t('遍完成')}`
+                        : gameState === 'GAME_OVER'
+                          ? t('墨印耗盡 · 本陣結束')
+                          : t('鍛煉完成 · 肌肉記憶已記錄')}
                 </h2>
                 <p className="text-xs text-[var(--dojo-text-sub)] mt-1 font-mono-tabular">
                   {activeStage
                     ? `${roundResult.cleared} ${t('題')} · ${t('耗時')} ${roundResult.durationSec} ${t('秒')}${
                         lastStageBadge?.isNewRecord ? ` · ${t('刷新紀錄')}` : ''
                       }`
-                    : singleChamberKey
-                      ? `${roundResult.cleared} ${t('個字根')} · ${t('準確率')} ${roundResult.accuracy}% · ${t('均速')} ${roundResult.avgKeyMs || '--'}ms`
-                      : `${t(activeScheme.shortName)} · ${t('耗時')} ${roundResult.durationSec} ${t('秒')}`}
+                    : chamberXrayMode?.active
+                      ? `${roundResult.cleared} ${t('個隨機載體漢字')} · ${t('準確率')} ${roundResult.accuracy}% · ${t('均速')} ${roundResult.avgKeyMs || '--'}ms`
+                      : singleChamberKey
+                        ? `${roundResult.cleared} ${t('個字根')} · ${t('準確率')} ${roundResult.accuracy}% · ${t('均速')} ${roundResult.avgKeyMs || '--'}ms`
+                        : `${t(activeScheme.shortName)} · ${t('耗時')} ${roundResult.durationSec} ${t('秒')}`}
                 </p>
               </div>
 
@@ -2056,8 +2253,8 @@ export default function App() {
               )}
             </div>
 
-            {/* When finishing a single Palace Chamber, render the full completed Stroke Cloud right inside the summary! */}
-            {singleChamberKey ? (
+            {/* When finishing a single Palace Chamber (isolated root mode), render the completed Stroke Cloud */}
+            {singleChamberKey && !chamberXrayMode?.active ? (
               <div className="my-4 h-52 bg-[var(--dojo-surface-inset)] rounded-xl border border-[var(--dojo-border)] flex items-center justify-center p-2">
                 <StrokeCloudStage
                   chamberKey={singleChamberKey}
@@ -2093,15 +2290,21 @@ export default function App() {
                   </div>
                 </div>
 
-                {activeStage ? (
+                {activeStage || chamberXrayMode?.active ? (
                   <div className="mb-6">
                     <div className="flex items-center justify-between text-xs mb-2.5">
                       <span className="font-medium text-[var(--dojo-text-sub)]">
-                        {t('本節錯題與慢鍵診斷')}
+                        {t(chamberXrayMode?.active ? '本輪易錯與慢反應字根' : '本節錯題與慢鍵診斷')}
                       </span>
-                      <span className="font-mono-tabular text-[var(--dojo-text-muted)]">
-                        {t('三星條件')} ≥{activeStage.threeStarAccuracy}% · ≤{activeStage.threeStarAvgMs}ms
-                      </span>
+                      {activeStage ? (
+                        <span className="font-mono-tabular text-[var(--dojo-text-muted)]">
+                          {t('三星條件')} ≥{activeStage.threeStarAccuracy}% · ≤{activeStage.threeStarAvgMs}ms
+                        </span>
+                      ) : (
+                        <span className="font-mono-tabular text-[var(--dojo-text-muted)]">
+                          {t('每次重練隨機抽取不同漢字載體')}
+                        </span>
+                      )}
                     </div>
 
                     {roundResult.weakEntries && roundResult.weakEntries.length > 0 ? (
@@ -2226,6 +2429,79 @@ export default function App() {
                       className="py-2.5 px-3 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors whitespace-nowrap cursor-pointer"
                     >
                       {t('返回卷軸地圖')}
+                    </button>
+                  </div>
+                );
+              })()
+            ) : chamberXrayMode?.active ? (
+              (() => {
+                const countdownSuffix =
+                  nextProgression && autoAdvanceEnabled && !autoAdvancePaused && autoAdvanceSec > 0
+                    ? `（${autoAdvanceSec}s）`
+                    : '';
+                const nextAnchor = nextPalaceKey
+                  ? LINGMING_CHAMBER_BY_KEY[nextPalaceKey]?.primaryAnchor || ''
+                  : '';
+                return (
+                  <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleLaunchChamberXrayDrill(
+                          chamberXrayMode.key,
+                          scaffoldMode === 'blind',
+                          chamberReturnTo
+                        )
+                      }
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                    >
+                      <ScanSearch className="w-4 h-4" />
+                      <span>
+                        {t('換一批隨機漢字再練')}
+                        {countdownSuffix}
+                      </span>
+                    </button>
+
+                    {chamberXrayMode.key && nextPalaceKey && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleLaunchChamberXrayDrill(
+                            nextPalaceKey,
+                            scaffoldMode === 'blind',
+                            chamberReturnTo
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-semibold bg-[var(--dojo-pine)] hover:brightness-110 text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                      >
+                        <span>
+                          {t('下一鍵：')}{nextPalaceKey.toUpperCase()}（{nextAnchor}）
+                        </span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleLaunchChamberXrayDrill(
+                          chamberXrayMode.key,
+                          scaffoldMode !== 'blind',
+                          chamberReturnTo
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-sm font-medium bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border)] text-[var(--dojo-text)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                    >
+                      <EyeOff className="w-4 h-4 text-[var(--dojo-ochre)]" />
+                      <span>{t(scaffoldMode === 'blind' ? '切回漸隱提示' : '換成盲打辨根')}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setGameState(chamberReturnTo)}
+                      className="py-2.5 px-3 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors whitespace-nowrap cursor-pointer"
+                    >
+                      {t(chamberReturnTo === 'CAMPAIGN_MAP' ? '返回關卡卷軸' : '返回雲圖')}
                     </button>
                   </div>
                 );

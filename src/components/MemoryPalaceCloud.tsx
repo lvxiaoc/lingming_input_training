@@ -12,6 +12,7 @@ import {
   Check,
   X,
   Route,
+  ScanSearch,
 } from 'lucide-react';
 import {
   getLingmingRadicalScript,
@@ -39,7 +40,7 @@ import {
 } from '../data/palaceEditor';
 import { buildChamberStrokeFlow } from '../data/palaceStrokePaths';
 import { FrequencyTier } from '../data/palaceStrokes';
-import { ChamberPassRecord } from '../data/campaign';
+import { ChamberPassRecord, getChamberXrayStats } from '../data/campaign';
 import { SchemeMasteryStore } from '../engine/mastery';
 import {
   FREQUENCY_TIER_COLORS,
@@ -75,6 +76,7 @@ interface MemoryPalaceCloudProps {
     scope: 'da' | 'root',
     blind?: boolean
   ) => void;
+  onLaunchChamberXrayDrill?: (chamberKey: string | null, blind?: boolean) => void;
 }
 
 const VOWEL_POSTER_META: Record<string, { shortWord: string; note: string }> = {
@@ -134,6 +136,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
   onToggleSpeech,
   onBack,
   onLaunchChamberDrill,
+  onLaunchChamberXrayDrill,
 }) => {
   const t = useUiText();
   const uiScript = useUiScript();
@@ -1106,17 +1109,40 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                 <button
                   type="button"
                   onClick={() => onLaunchChamberDrill(activeChamber.key, 'root', false)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                 >
                   <Target className="w-3.5 h-3.5" />
                   <span>
                     {t('跟打')} {activeChamber.key.toUpperCase()} {t('宮殿字根')}
                   </span>
                 </button>
+                {onLaunchChamberXrayDrill && (() => {
+                  const xrayStats = getChamberXrayStats(activeChamber.key, scriptMode);
+                  if (xrayStats.carrierCount === 0) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        synth.playClick();
+                        onLaunchChamberXrayDrill(activeChamber.key, false);
+                      }}
+                      title={t('每次隨機從漢字庫抽取不同承載漢字，僅點亮本宮殿字根真實筆畫以強化實戰形感')}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[var(--dojo-pine)] hover:opacity-90 text-white rounded-lg transition-opacity whitespace-nowrap cursor-pointer"
+                    >
+                      <ScanSearch className="w-3.5 h-3.5" />
+                      <span>
+                        {t('字中辨根')} {activeChamber.key.toUpperCase()}
+                      </span>
+                      <span className="font-mono-tabular text-[10px] opacity-85">
+                        {xrayStats.carrierCount}{t('字')}
+                      </span>
+                    </button>
+                  );
+                })()}
                 <button
                   type="button"
                   onClick={() => onLaunchChamberDrill(activeChamber.key, 'root', true)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-[var(--dojo-surface-2)] hover:opacity-90 border border-[var(--dojo-border-strong)] text-[var(--dojo-text)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium bg-[var(--dojo-surface-2)] hover:opacity-90 border border-[var(--dojo-border-strong)] text-[var(--dojo-text)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                 >
                   <EyeOff className="w-3.5 h-3.5 text-[var(--dojo-pine)]" />
                   <span>
