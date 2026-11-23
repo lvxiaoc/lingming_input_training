@@ -531,6 +531,10 @@ const CHAR_MAP: Record<string, string> = {
   齡: '龄',
   龍: '龙',
   龜: '龟',
+  糾: '纠',
+  審: '审',
+  帳: '帐',
+  員: '员',
 };
 
 const MNEMONIC_PROSE_TOKENS: Array<[string, string]> = [

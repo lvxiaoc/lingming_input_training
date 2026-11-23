@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
   Check,
+  CloudUpload,
   Copy,
   Download,
   Plus,
@@ -20,6 +21,7 @@ import { ThemeMode } from '../data/theme';
 import { useUiText } from '../data/uiScript';
 import { synth } from '../audio/synth';
 import { ColorSplitGlyph, getRootColor, RadicalSymbol } from './ColorSplitGlyph';
+import { auth, signInWithGoogle, submitCorrectionReport } from '../firebase';
 
 interface CharOverrideModalProps {
   char: string;
@@ -80,6 +82,7 @@ export const CharOverrideModal: React.FC<CharOverrideModalProps> = ({
   const [hoveredStrokeIdx, setHoveredStrokeIdx] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [cloudSubmitting, setCloudSubmitting] = useState(false);
 
   const hasStrokes = Boolean(effectiveInfo.strokes && effectiveInfo.strokes.length > 0);
   const totalUserCount = Object.keys(allUserOverrides).length;
@@ -199,6 +202,47 @@ export const CharOverrideModal: React.FC<CharOverrideModalProps> = ({
     synth.playKeyHit(2, true);
     onSave(char, override);
     onClose();
+  };
+
+  const handleReportToCloud = async () => {
+    const override = buildCurrentOverride();
+    if (!override) return;
+    setErrorMsg(null);
+    setCloudSubmitting(true);
+    try {
+      if (!auth.currentUser) {
+        await signInWithGoogle();
+      }
+      const codeChanged = override.code !== defaultInfo.code;
+      const rootsChanged =
+        (override.roots || []).join(' ') !== defaultInfo.roots.join(' ');
+      const issueType = codeChanged
+        ? 'code_error'
+        : rootsChanged
+          ? 'radical_split'
+          : 'stroke_color';
+      const indicesStr = override.strokeRootIndices
+        ? override.strokeRootIndices.join(',')
+        : '';
+      await submitCorrectionReport({
+        char,
+        issueType,
+        currentCode: defaultInfo.code,
+        suggestedCode: override.code || defaultInfo.code,
+        currentRoots: defaultInfo.roots.join(' '),
+        suggestedRoots: (override.roots || defaultInfo.roots).join(' '),
+        suggestedStrokeIndices: indicesStr,
+        description: `來自黃庭抄經閣逐筆校訂：碼 ${defaultInfo.code} → ${override.code || defaultInfo.code}；根 ${(override.roots || defaultInfo.roots).join(' ')}`,
+        source: 'huangting',
+      });
+      synth.playKeyHit(2, true);
+      onSave(char, override);
+      flashFeedback(t('已儲存並上報至雲端糾錯庫'));
+    } catch {
+      setErrorMsg(t('雲端上報未完成，請確認已登入 Google 帳號'));
+    } finally {
+      setCloudSubmitting(false);
+    }
   };
 
   // Export all overrides (including unsaved edit for current char if valid)
@@ -580,7 +624,7 @@ export const CharOverrideModal: React.FC<CharOverrideModalProps> = ({
               </div>
               <p>
                 {t(
-                  '① 點「儲存校訂」即自動寫入本機瀏覽器並跨章節生效；② 點「匯出 JSON」可隨時備份或跨裝置匯入；③ 點「複製補丁」可直接貼入專案源碼永久入庫。'
+                  '① 點「儲存校訂」即時寫入本機瀏覽器；② 點「上報雲端」可同步寫入 Firebase 糾錯報告，供日後統一修正碼表；③ 亦可匯出 JSON 備份或複製補丁。'
                 )}
               </p>
             </div>
@@ -658,6 +702,15 @@ export const CharOverrideModal: React.FC<CharOverrideModalProps> = ({
               className="px-3.5 py-1.5 rounded-lg border border-[var(--dojo-border)] text-xs text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors cursor-pointer"
             >
               {t('取消')}
+            </button>
+            <button
+              type="button"
+              disabled={cloudSubmitting}
+              onClick={handleReportToCloud}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--dojo-ochre)]/45 bg-[var(--dojo-ochre)]/12 hover:bg-[var(--dojo-ochre)]/22 text-[var(--dojo-ochre)] text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <CloudUpload className="w-3.5 h-3.5" />
+              <span>{t(cloudSubmitting ? '上報中…' : '上報雲端')}</span>
             </button>
             <button
               type="button"

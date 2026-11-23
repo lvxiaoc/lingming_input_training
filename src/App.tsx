@@ -92,6 +92,8 @@ import { ShortCodeDojo } from './components/ShortCodeDojo';
 import { HuangtingDojo } from './components/HuangtingDojo';
 import { HomeTutorialModal, TutorialTabId } from './components/HomeTutorialModal';
 import { WeakKeyRadarCard } from './components/WeakKeyRadarCard';
+import { CorrectionReportCard } from './components/CorrectionReportCard';
+import { FirebaseErrorBoundary } from './components/FirebaseErrorBoundary';
 import { synth } from './audio/synth';
 import { speech } from './audio/speech';
 
@@ -902,6 +904,16 @@ export default function App() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (gameState === 'TITLE_MENU') {
         if (tutorialModal.open) return;
+        const targetEl = e.target as HTMLElement | null;
+        if (
+          targetEl &&
+          (targetEl.tagName === 'INPUT' ||
+            targetEl.tagName === 'TEXTAREA' ||
+            targetEl.tagName === 'SELECT' ||
+            targetEl.isContentEditable)
+        ) {
+          return;
+        }
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           synth.playClick();
@@ -962,6 +974,7 @@ export default function App() {
   ]);
 
   return (
+    <FirebaseErrorBoundary>
     <UiScriptContext.Provider value={uiScript}>
     <ThemeContext.Provider value={themeMode}>
     <div className="relative w-screen h-screen overflow-hidden bg-[var(--dojo-canvas)] text-[var(--dojo-text)] flex flex-col">
@@ -1429,15 +1442,18 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right Compact Weak-Key Radar Chart (Lowest-Mastery 5 Palace Chambers) */}
-          <WeakKeyRadarCard
-            weakestKeys={weakestKeys}
-            hasPracticedData={Object.values(mastery.keys).some((k) => k.attempts > 0)}
-            onStartWeakKeyDrill={(keys) => startPlay('weakkey', keys, 'root')}
-            onLaunchChamberDrill={(key) =>
-              handleLaunchChamberDrill(key, 'root', false, 'PALACE_CLOUD')
-            }
-          />
+          {/* Right Column: Weak-Key Radar Chart + Cloud Correction Report Card */}
+          <div className="flex flex-col gap-3 w-full lg:w-[318px] xl:w-[332px] shrink-0">
+            <WeakKeyRadarCard
+              weakestKeys={weakestKeys}
+              hasPracticedData={Object.values(mastery.keys).some((k) => k.attempts > 0)}
+              onStartWeakKeyDrill={(keys) => startPlay('weakkey', keys, 'root')}
+              onLaunchChamberDrill={(key) =>
+                handleLaunchChamberDrill(key, 'root', false, 'PALACE_CLOUD')
+              }
+            />
+            <CorrectionReportCard />
+          </div>
           </div>
 
           {/* Quiet bottom line */}
@@ -2691,5 +2707,6 @@ export default function App() {
     </div>
     </ThemeContext.Provider>
     </UiScriptContext.Provider>
+    </FirebaseErrorBoundary>
   );
 }
