@@ -1266,7 +1266,7 @@ export default function App() {
         <div className="relative z-10 w-full h-full flex flex-col">
           {/* Compact low-occlusion perimeter HUD */}
           <header className="shrink-0 h-12 px-4 sm:px-6 bg-[var(--dojo-header)] wash:bg-[var(--dojo-header)]/88 wash:backdrop-blur-sm border-b border-[var(--dojo-border)] flex items-center justify-between gap-3 z-30">
-            <div className="flex items-center gap-2 text-xs min-w-0">
+            <div className="flex items-center gap-2 text-xs min-w-0 overflow-hidden">
               {activeStage ? (
                 <>
                   <span className="font-display text-sm font-bold text-[var(--dojo-text-bright)] whitespace-nowrap">
@@ -1323,12 +1323,12 @@ export default function App() {
                   )}
                   {activeScheme.isLingming && !singleChamberKey && (
                     <>
-                      <span aria-hidden="true" className="hidden md:inline text-[var(--dojo-text-muted)]">·</span>
-                      <span className="hidden md:inline text-[var(--dojo-ochre)] whitespace-nowrap">
+                      <span aria-hidden="true" className="hidden md:inline shrink-0 text-[var(--dojo-text-muted)]">·</span>
+                      <span className="hidden md:inline text-[var(--dojo-ochre)] truncate">
                         {t(SCOPE_OPTIONS.find((s) => s.id === trainingScope)?.label ?? '')}
                       </span>
-                      <span aria-hidden="true" className="hidden lg:inline text-[var(--dojo-text-muted)]">·</span>
-                      <span className="hidden lg:inline text-[var(--dojo-pine-text)] whitespace-nowrap">
+                      <span aria-hidden="true" className="hidden xl:inline shrink-0 text-[var(--dojo-text-muted)]">·</span>
+                      <span className="hidden xl:inline shrink-0 text-[var(--dojo-pine-text)] whitespace-nowrap">
                         {t(SCRIPT_MODE_LABELS[scriptMode])}
                       </span>
                     </>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Play,
@@ -11,6 +11,7 @@ import {
   Upload,
   Check,
   X,
+  Route,
 } from 'lucide-react';
 import {
   getLingmingRadicalScript,
@@ -28,6 +29,7 @@ import {
 import { PALACE_PDF_CHAMBERS } from '../data/palacePdfData';
 import {
   exportPalacePositionsJson,
+  hasUserChamberOverrides,
   importPalacePositionsJson,
   loadPalaceOverrides,
   PalaceOverridesMap,
@@ -35,11 +37,14 @@ import {
   resetPalaceNodeOverride,
   updatePalaceNodeOverride,
 } from '../data/palaceEditor';
+import { buildChamberStrokeFlow } from '../data/palaceStrokePaths';
 import { FrequencyTier } from '../data/palaceStrokes';
 import { ChamberPassRecord } from '../data/campaign';
 import { SchemeMasteryStore } from '../engine/mastery';
 import {
   FREQUENCY_TIER_COLORS,
+  getStrokeFlowTone,
+  PalaceStrokeFlowOverlay,
   PDF_TIER_COLORS,
   StrokeCloudSelection,
   StrokeCloudStage,
@@ -139,10 +144,15 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
   const [selectedKey, setSelectedKey] = useState<string>('q');
   const [selectedNode, setSelectedNode] = useState<StrokeCloudSelection | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [showStrokeFlow, setShowStrokeFlow] = useState(false);
   const [overrides, setOverrides] = useState<PalaceOverridesMap>(() => loadPalaceOverrides());
   const [jsonPanelOpen, setJsonPanelOpen] = useState(false);
   const [jsonDraft, setJsonDraft] = useState('');
   const [jsonStatus, setJsonStatus] = useState<string | null>(null);
+  const [hoveredKeyInfo, setHoveredKeyInfo] = useState<{
+    key: string;
+    rect: { left: number; top: number; right: number; bottom: number; width: number; height: number };
+  } | null>(null);
 
   const activeChamber: PalaceChamber =
     LINGMING_CHAMBER_BY_KEY[selectedKey] || LINGMING_CHAMBERS[0];
@@ -199,12 +209,41 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
   ).length;
   const totalPdfGlyphs = activePdfChamber ? 1 + activePdfChamber.nodes.length : totalRadicals;
 
-  const hasChamberEdits = Object.keys(overrides).some((id) =>
-    id.startsWith(`${activeChamber.key}_`)
+  const hasChamberEdits = useMemo(
+    () => hasUserChamberOverrides(activeChamber.key),
+    [activeChamber.key, overrides]
   );
   const selectedOverride = selectedNode
     ? overrides[selectedNode.id] || { dx: 0, dy: 0, scale: 1 }
     : null;
+
+  const hoverPreviewData = useMemo(() => {
+    if (!hoveredKeyInfo) return null;
+    const key = hoveredKeyInfo.key;
+    const chamber = LINGMING_CHAMBER_BY_KEY[key];
+    const pdf = PALACE_PDF_CHAMBERS[key];
+    const flow = buildChamberStrokeFlow(key, overrides);
+    if (!chamber || !pdf || !flow) return null;
+    return { key, rect: hoveredKeyInfo.rect, chamber, pdf, flow };
+  }, [hoveredKeyInfo, overrides]);
+
+  const handleKeyHoverStart = (
+    key: string,
+    el: HTMLElement
+  ) => {
+    const r = el.getBoundingClientRect();
+    setHoveredKeyInfo({
+      key,
+      rect: {
+        left: r.left,
+        top: r.top,
+        right: r.right,
+        bottom: r.bottom,
+        width: r.width,
+        height: r.height,
+      },
+    });
+  };
 
   const handleOpenExport = () => {
     setJsonDraft(exportPalacePositionsJson());
@@ -340,7 +379,12 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 flex flex-col gap-4 max-w-6xl w-full mx-auto">
+      <div
+        className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 flex flex-col gap-4 max-w-6xl w-full mx-auto"
+        onScroll={() => {
+          if (hoveredKeyInfo) setHoveredKeyInfo(null);
+        }}
+      >
         {/* Section 1: Spatial 25-Key Memory Palace Map */}
         <section aria-label={t('靈明25鍵空間記憶宮殿')}>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2 text-xs text-[var(--dojo-text-sub)]">
@@ -360,7 +404,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
               <span className="text-[var(--dojo-text-muted)]">{t('Z 鍵不用（z/zh→V · q→K · 零聲母→J）')}</span>
             </div>
             <span className="font-mono-tabular text-[var(--dojo-text-muted)]">
-              {t('敲擊實體鍵切換宮殿')}
+              {t('懸停鍵位預覽筆畫路徑 · 敲擊實體鍵切換宮殿')}
             </span>
           </div>
 
@@ -451,6 +495,15 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                     <button
                       key={k}
                       type="button"
+                      data-palace-key={k}
+                      onMouseEnter={(e) => handleKeyHoverStart(k, e.currentTarget)}
+                      onMouseLeave={() =>
+                        setHoveredKeyInfo((prev) => (prev?.key === k ? null : prev))
+                      }
+                      onFocus={(e) => handleKeyHoverStart(k, e.currentTarget)}
+                      onBlur={() =>
+                        setHoveredKeyInfo((prev) => (prev?.key === k ? null : prev))
+                      }
                       onClick={() => {
                         synth.playClick();
                         setSelectedKey(k);
@@ -584,8 +637,8 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                   <span className="text-[var(--dojo-text-sub)] truncate">{t(fingerLabel)}</span>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-mono-tabular text-[var(--dojo-text-muted)]">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="font-mono-tabular text-[var(--dojo-text-muted)] mr-0.5">
                     {activeRadicals < totalRadicals ? `${activeRadicals}/${totalRadicals}` : totalRadicals}
                     {t('根')} · {totalPdfGlyphs}
                     {t('形')}
@@ -594,10 +647,26 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                     type="button"
                     onClick={() => {
                       synth.playClick();
+                      setShowStrokeFlow((v) => !v);
+                    }}
+                    title={t('顯示或隱藏主根筆畫關聯路徑')}
+                    className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border transition-colors whitespace-nowrap cursor-pointer ${
+                      showStrokeFlow
+                        ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/55 text-[var(--dojo-pine-text)]'
+                        : 'bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
+                    }`}
+                  >
+                    <Route className="w-3 h-3" />
+                    <span>{t('筆畫路徑')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      synth.playClick();
                       setEditMode((v) => !v);
                     }}
                     title={t('拖曳調整字根位置、大小或匯出雲圖座標 JSON')}
-                    className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border transition-colors cursor-pointer ${
+                    className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border transition-colors whitespace-nowrap cursor-pointer ${
                       editMode
                         ? 'bg-[var(--dojo-ochre-wash)] border-[var(--dojo-ochre)]/65 text-[var(--dojo-ochre)]'
                         : 'bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
@@ -661,6 +730,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                 chamberKey={activeChamber.key}
                 variant="palace"
                 scriptMode={scriptMode}
+                showStrokeFlow={showStrokeFlow}
                 selectedChar={selectedNode?.char || null}
                 selectedNodeId={selectedNode?.id || null}
                 overrides={overrides}
@@ -1058,6 +1128,178 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
           </div>
         </section>
       </div>
+
+      {/* Floating Memory Palace Stroke-Association Hover Tooltip (viewport-clamped, non-blocking) */}
+      {hoverPreviewData && (() => {
+        const { key, rect, chamber, pdf, flow } = hoverPreviewData;
+        const tooltipWidth = 344;
+        const estimatedHeight = Math.min(340, 185 + flow.strokes.length * 28);
+        const margin = 12;
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+
+        const keyCenterX = rect.left + rect.width / 2;
+        const left = Math.max(margin, Math.min(vw - tooltipWidth - margin, keyCenterX - tooltipWidth / 2));
+        const showAbove = rect.bottom + 10 + estimatedHeight > vh - margin && rect.top - 10 - estimatedHeight >= margin;
+        const top = showAbove
+          ? Math.max(margin, rect.top - estimatedHeight - 10)
+          : Math.min(vh - estimatedHeight - margin, rect.bottom + 10);
+        const caretLeft = Math.max(20, Math.min(tooltipWidth - 20, keyCenterX - left));
+
+        const mOv = overrides[pdf.monument.id];
+        const buildMiniTransform = (cx: number, cy: number, ov?: { dx: number; dy: number; scale: number }) => {
+          if (!ov) return undefined;
+          if (Math.abs(ov.dx) <= 0.01 && Math.abs(ov.dy) <= 0.01 && Math.abs(ov.scale - 1) <= 0.01) {
+            return undefined;
+          }
+          return `translate(${(cx + ov.dx).toFixed(2)} ${(cy + ov.dy).toFixed(2)}) scale(${ov.scale.toFixed(3)}) translate(${(-cx).toFixed(2)} ${(-cy).toFixed(2)})`;
+        };
+
+        return (
+          <div
+            key={`palace_tooltip_${key}`}
+            role="tooltip"
+            data-palace-tooltip={key}
+            className="palace-tooltip-enter fixed z-50 pointer-events-none rounded-xl border p-3.5"
+            style={{
+              left: `${left}px`,
+              top: `${top}px`,
+              width: `${tooltipWidth}px`,
+              backgroundColor: isWash ? 'rgba(250, 249, 245, 0.97)' : 'rgba(14, 19, 29, 0.96)',
+              borderColor: isWash ? 'rgba(24, 24, 22, 0.20)' : 'rgba(242, 238, 230, 0.16)',
+              boxShadow: isWash
+                ? '0 14px 36px rgba(20, 20, 18, 0.14), 0 2px 6px rgba(20, 20, 18, 0.06)'
+                : '0 16px 40px rgba(0, 0, 0, 0.56), 0 0 0 1px rgba(255, 255, 255, 0.04)',
+              backdropFilter: 'blur(10px)',
+            }}
+          >
+            {/* Subtle directional anchor caret */}
+            <div
+              aria-hidden="true"
+              className="absolute w-2.5 h-2.5 rotate-45"
+              style={{
+                left: `${caretLeft - 5}px`,
+                ...(showAbove ? { bottom: '-6px' } : { top: '-6px' }),
+                backgroundColor: isWash ? '#FAF9F5' : '#0E131D',
+                borderRight: showAbove
+                  ? `1px solid ${isWash ? 'rgba(24, 24, 22, 0.20)' : 'rgba(242, 238, 230, 0.16)'}`
+                  : 'none',
+                borderBottom: showAbove
+                  ? `1px solid ${isWash ? 'rgba(24, 24, 22, 0.20)' : 'rgba(242, 238, 230, 0.16)'}`
+                  : 'none',
+                borderLeft: !showAbove
+                  ? `1px solid ${isWash ? 'rgba(24, 24, 22, 0.20)' : 'rgba(242, 238, 230, 0.16)'}`
+                  : 'none',
+                borderTop: !showAbove
+                  ? `1px solid ${isWash ? 'rgba(24, 24, 22, 0.20)' : 'rgba(242, 238, 230, 0.16)'}`
+                  : 'none',
+              }}
+            />
+
+            {/* Header: Key + Monument + Stroke Formula */}
+            <div className="flex items-center justify-between gap-2 pb-2 mb-2.5 border-b border-[var(--dojo-border)]">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-mono-tabular text-xs font-bold text-[var(--dojo-text-bright)]">
+                  {key.toUpperCase()} {t('鍵')}
+                </span>
+                <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
+                <span className="text-xs font-semibold text-[var(--dojo-text)] whitespace-nowrap">
+                  {t('主根')}「<InlineGlyph char={chamber.primaryAnchor} />」
+                </span>
+              </div>
+              <span className="text-[11px] font-medium text-[var(--dojo-text-sub)] truncate">
+                {t(flow.schema.strokeFormula)}
+              </span>
+            </div>
+
+            {/* Body: Mini Stroke-Association Spatial Map + Ordered Stroke Breakdown */}
+            <div className="grid grid-cols-12 gap-3 items-center">
+              <div
+                className="col-span-6 aspect-square rounded-lg border flex items-center justify-center p-1"
+                style={{
+                  backgroundColor: isWash ? 'rgba(243, 241, 236, 0.92)' : 'rgba(9, 13, 20, 0.85)',
+                  borderColor: isWash ? 'rgba(24, 24, 22, 0.10)' : 'rgba(242, 238, 230, 0.08)',
+                }}
+              >
+                <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible">
+                  {/* Monument silhouette */}
+                  <g transform={buildMiniTransform(pdf.monument.cx, pdf.monument.cy, mOv)}>
+                    <path
+                      d={pdf.monument.path}
+                      fill={isWash ? '#161614' : '#DCE8E3'}
+                      fillOpacity={isWash ? 0.18 : 0.20}
+                      shapeRendering="geometricPrecision"
+                    />
+                  </g>
+
+                  {/* Calligraphic Memory Palace Stroke-Association Path */}
+                  <PalaceStrokeFlowOverlay flow={flow} isWash={isWash} compact animate />
+
+                  {/* Harmonized radical nodes along the strokes */}
+                  {pdf.nodes.map((node) => {
+                    const ov = overrides[node.id];
+                    const fill = isWash
+                      ? WASH_PDF_TIER_COLORS[node.tier]
+                      : PDF_TIER_COLORS[node.tier];
+                    return (
+                      <g key={node.id} transform={buildMiniTransform(node.cx, node.cy, ov)}>
+                        <path
+                          d={node.path}
+                          fill={fill}
+                          fillOpacity={node.isVariant ? 0.72 : 0.92}
+                          shapeRendering="geometricPrecision"
+                        />
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+
+              <div className="col-span-6 flex flex-col gap-1.5 min-w-0">
+                <div className="text-[10px] font-semibold tracking-wider text-[var(--dojo-text-muted)]">
+                  {t('記憶宮殿 · 筆畫關聯路徑')}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {flow.strokes.map((st, idx) => {
+                    const tone = getStrokeFlowTone(idx, isWash);
+                    return (
+                      <div key={st.index} className="flex items-start gap-1.5 min-w-0">
+                        <span
+                          className="mt-0.5 w-3.5 h-3.5 rounded-sm shrink-0 inline-flex items-center justify-center font-mono-tabular text-[9px] font-bold"
+                          style={{
+                            backgroundColor: isWash ? 'rgba(20, 20, 18, 0.08)' : 'rgba(255, 255, 255, 0.07)',
+                            color: tone,
+                          }}
+                        >
+                          {st.index}
+                        </span>
+                        <div className="flex flex-col min-w-0 leading-tight">
+                          <span className="text-[11px] font-semibold text-[var(--dojo-text)] truncate">
+                            {t(st.label)}
+                          </span>
+                          {st.sampleChars.length > 0 && (
+                            <span className="text-[10px] text-[var(--dojo-text-sub)] truncate">
+                              {st.sampleChars.join(' ')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] leading-snug text-[var(--dojo-text-muted)] pt-1 border-t border-[var(--dojo-border)]">
+                  {t(flow.schema.spatialLogic)}
+                </p>
+              </div>
+            </div>
+
+            {/* Footer: Concise mnemonic cue */}
+            <div className="mt-2.5 pt-2 border-t border-[var(--dojo-border)] text-[10px] text-[var(--dojo-text-sub)] truncate">
+              {uiMnemonic(chamber.mnemonic, uiScript)}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

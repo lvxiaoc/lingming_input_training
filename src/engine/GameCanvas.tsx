@@ -17,6 +17,7 @@ import { matchesScript, ScriptMode } from '../data/scriptFilter';
 import { uiText, useUiScript } from '../data/uiScript';
 import { useThemeMode } from '../data/theme';
 import type { CampaignStageKind } from '../data/campaign';
+import { InkWashParticleLayer } from './InkWashLayer';
 
 export type GameMode = 'reflex' | 'arcade' | 'weakkey';
 export type LayoutMode = 'depth' | 'split';
@@ -222,6 +223,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const themeMode = useThemeMode();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const inkCanvasRef = useRef<HTMLCanvasElement>(null);
+  const inkLayerRef = useRef<InkWashParticleLayer | null>(null);
   const pathCacheRef = useRef<Map<string, Path2D>>(new Map());
 
   const propsRef = useRef({
@@ -805,6 +808,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     s.plumes.forEach((pl) => (pl.active = false));
     s.dissolves.forEach((d) => (d.active = false));
     s.floats.forEach((f) => (f.active = false));
+    inkLayerRef.current?.clear();
 
     // Priority 1: Explicit campaign or weak-spot deck
     if (mode !== 'arcade' && customDeck && customDeck.length > 0) {
@@ -931,8 +935,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       active.typed += key;
       active.consecutiveErrors = 0;
       active.lastKeyAt = nowMs;
-      active.scale = isWashInput ? 1.02 : 1.14;
-      active.flash = 0.85;
+      active.scale = isWashInput ? 1.01 : 1.03;
+      active.flash = 0.35;
       s.lastErrorKey = null;
       s.lastStrikeKey = key;
       s.lastStrikeCorrect = true;
@@ -1005,25 +1009,39 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ? s.height * depthMetricsNow.centerYRatio
             : active.y;
         const isWash = propsRef.current.themeMode === 'wash';
+        const dissolveSize =
+          propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
+            ? propsRef.current.scheme.isLingming
+              ? depthMetricsNow.glyphSize
+              : Math.max(48, Math.round(depthMetricsNow.glyphSize * 1.35))
+            : propsRef.current.mode !== 'arcade'
+              ? 72
+              : 40;
+        const dissolveYOff =
+          propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
+            ? depthMetricsNow.glyphYOffset
+            : propsRef.current.mode !== 'arcade'
+              ? -16
+              : -15;
+        emitDissolveGlyph(active.entry.char, px, py, dissolveSize, dissolveYOff);
+
+        // Trigger dedicated WebGL/Canvas organic "暈入淡出" ink-wash splash from the completed radical's strokes
+        inkLayerRef.current?.emitGlyphSplash({
+          x: px,
+          y: py,
+          char: active.entry.char,
+          glyphSize: dissolveSize,
+          glyphYOffset: dissolveYOff,
+          themeMode: propsRef.current.themeMode,
+          accentHex: zoneColor,
+          intensity: s.combo % 10 === 0 ? 'milestone' : 'complete',
+          xrayStrokes: active.entry.xray?.strokes,
+          xrayActiveIndices: active.entry.xray?.activeIndices,
+        });
+
         if (isWash) {
-          const dissolveSize =
-            propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
-              ? propsRef.current.scheme.isLingming
-                ? depthMetricsNow.glyphSize
-                : Math.max(48, Math.round(depthMetricsNow.glyphSize * 1.35))
-              : propsRef.current.mode !== 'arcade'
-                ? 72
-                : 40;
-          const dissolveYOff =
-            propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
-              ? depthMetricsNow.glyphYOffset
-              : propsRef.current.mode !== 'arcade'
-                ? -16
-                : -15;
-          emitDissolveGlyph(active.entry.char, px, py, dissolveSize, dissolveYOff);
+          emitInkPlumes(px, py + dissolveYOff, s.combo % 10 === 0 ? 4 : 3, s.combo % 10 === 0 ? 94 : 74, 0.14, false);
         }
-        emitParticles(px, py, isWash ? '#141413' : zoneColor, s.combo % 10 === 0 ? 38 : 22);
-        emitInkRipples(px, py, isWash ? '#141413' : zoneColor, s.combo % 10 === 0 ? 3 : 2, isWash ? 96 : 68, false);
 
         const floatStartY =
           propsRef.current.mode !== 'arcade'
@@ -1144,8 +1162,39 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
             ? s.height * dm.centerYRatio
             : active.y;
-        emitParticles(active.x * s.width, hitY + (isWash ? 0 : 18), isWash ? '#484844' : '#D89B3C', 7);
-        emitInkRipples(active.x * s.width, hitY, isWash ? '#181817' : '#D89B3C', 1, isWash ? 66 : 56, false);
+        const hitGlyphSize =
+          propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
+            ? propsRef.current.scheme.isLingming
+              ? dm.glyphSize
+              : Math.max(48, Math.round(dm.glyphSize * 1.35))
+            : propsRef.current.mode !== 'arcade'
+              ? 72
+              : 40;
+        const hitGlyphYOff =
+          propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
+            ? dm.glyphYOffset
+            : propsRef.current.mode !== 'arcade'
+              ? -16
+              : -15;
+        const hitZoneId = propsRef.current.scheme.keyMap[expectedKey]?.zoneId;
+        const hitZoneColor =
+          propsRef.current.scheme.zones.find((z) => z.id === hitZoneId)?.color || '#D89B3C';
+
+        inkLayerRef.current?.emitGlyphSplash({
+          x: active.x * s.width,
+          y: hitY,
+          char: active.entry.char,
+          glyphSize: hitGlyphSize,
+          glyphYOffset: hitGlyphYOff,
+          themeMode: propsRef.current.themeMode,
+          accentHex: hitZoneColor,
+          intensity: 'key',
+          xrayStrokes: active.entry.xray?.strokes,
+          xrayActiveIndices: active.entry.xray?.activeIndices,
+        });
+        if (isWash) {
+          emitInkPlumes(active.x * s.width, hitY + hitGlyphYOff, 2, 54, 0.11, false);
+        }
         propsRef.current.onMasteryChange(masteryRef.current);
       }
     } else {
@@ -1296,6 +1345,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     let rafId = 0;
     let lastTime = performance.now();
 
+    const inkLayer = inkCanvasRef.current ? new InkWashParticleLayer(inkCanvasRef.current) : null;
+    inkLayerRef.current = inkLayer;
+
     const resize = () => {
       const container = containerRef.current;
       const canvas = canvasRef.current;
@@ -1304,6 +1356,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.max(1, Math.floor(rect.width * dpr));
       canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      inkLayer?.resize(rect.width, rect.height, dpr);
       simRef.current.width = rect.width;
       simRef.current.height = rect.height;
 
@@ -2171,39 +2224,43 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.restore();
           }
 
-          // Completed glyph ink-dissolve afterimages in wash mode (擴散淡出)
-          if (isWash) {
-            for (const d of s.dissolves) {
-              if (!d.active) continue;
-              const tNorm = Math.min(1, d.age / d.duration);
-              const ease = 1 - Math.pow(1 - tNorm, 2);
-              const scale = 1 + ease * 0.14;
-              const fade = Math.pow(1 - tNorm, 1.55);
-              ctx.save();
-              ctx.translate(d.x, d.y);
-              ctx.scale(scale, scale);
+          // Completed glyph ink-dissolve afterimages across both themes (水墨暈入淡出殘影)
+          for (const d of s.dissolves) {
+            if (!d.active) continue;
+            const tNorm = Math.min(1, d.age / d.duration);
+            const ease = 1 - Math.pow(1 - tNorm, 2);
+            const scale = 1 + ease * 0.16;
+            const fade = Math.pow(1 - tNorm, 1.5);
+            ctx.save();
+            ctx.translate(d.x, d.y);
+            ctx.scale(scale, scale);
 
-              // Soft absorbing ink mist behind fading glyph
-              const haloR = d.glyphSize * (0.95 + ease * 0.55);
-              const dGrad = ctx.createRadialGradient(0, d.glyphY, 2, 0, d.glyphY, haloR);
-              dGrad.addColorStop(0, `rgba(20, 20, 18, ${(fade * 0.16).toFixed(3)})`);
-              dGrad.addColorStop(0.55, `rgba(56, 56, 52, ${(fade * 0.065).toFixed(3)})`);
+            // Soft absorbing ink mist behind fading glyph
+            const haloR = d.glyphSize * (0.95 + ease * 0.58);
+            const dGrad = ctx.createRadialGradient(0, d.glyphY, 0, 0, d.glyphY, haloR);
+            if (isWash) {
+              dGrad.addColorStop(0, `rgba(20, 20, 18, ${(fade * 0.15).toFixed(3)})`);
+              dGrad.addColorStop(0.55, `rgba(56, 56, 52, ${(fade * 0.06).toFixed(3)})`);
               dGrad.addColorStop(1, 'rgba(243, 241, 236, 0)');
-              ctx.fillStyle = dGrad;
-              ctx.beginPath();
-              ctx.arc(0, d.glyphY, haloR, 0, Math.PI * 2);
-              ctx.fill();
-
-              if (d.char !== '𠂇') {
-                ctx.globalAlpha = fade * 0.42;
-                ctx.fillStyle = '#141413';
-                ctx.font = `700 ${d.glyphSize}px "Noto Serif TC", serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(d.char, 0, d.glyphY);
-              }
-              ctx.restore();
+            } else {
+              dGrad.addColorStop(0, `rgba(124, 229, 188, ${(fade * 0.16).toFixed(3)})`);
+              dGrad.addColorStop(0.55, `rgba(46, 168, 126, ${(fade * 0.06).toFixed(3)})`);
+              dGrad.addColorStop(1, 'rgba(11, 15, 23, 0)');
             }
+            ctx.fillStyle = dGrad;
+            ctx.beginPath();
+            ctx.arc(0, d.glyphY, haloR, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (d.char !== '𠂇') {
+              ctx.globalAlpha = fade * (isWash ? 0.40 : 0.48);
+              ctx.fillStyle = isWash ? '#141413' : '#E7F5EE';
+              ctx.font = `700 ${d.glyphSize}px "Noto Serif TC", serif`;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(d.char, 0, d.glyphY);
+            }
+            ctx.restore();
           }
 
           // Organic sumi ink-in-water diffusion plumes in wash mode (水墨滴入水中濃淡暈散)
@@ -2290,6 +2347,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
+      if (!isPaused) {
+        inkLayer?.updateAndRender(dt);
+      }
+
       rafId = requestAnimationFrame(tick);
     };
 
@@ -2297,6 +2358,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     return () => {
       cancelAnimationFrame(rafId);
       ro.disconnect();
+      inkLayer?.dispose();
+      inkLayerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2309,6 +2372,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }`}
     >
       <canvas ref={canvasRef} className="block w-full h-full" />
+      <canvas
+        ref={inkCanvasRef}
+        aria-hidden="true"
+        data-ink-layer="true"
+        className="pointer-events-none absolute inset-0 block w-full h-full"
+      />
     </div>
   );
 };

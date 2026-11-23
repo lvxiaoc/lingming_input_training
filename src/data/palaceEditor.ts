@@ -1,7 +1,9 @@
 // Persistence & import/export utilities for the Memory Palace Cloud Editor (雲圖位置與縮放微調)
-// Default state is empty ({}), meaning 100% 1:1 faithful to the original A4 PDF coordinates & brush paths.
+// Layers user customizations cleanly on top of DEFAULT_PALACE_LAYOUT_REFINEMENTS
+// (zero-overlap, stroke-curve-harmonized coordinates across all 20 chambers).
 
 import { PALACE_PDF_CHAMBERS } from './palacePdfData';
+import { DEFAULT_PALACE_LAYOUT_REFINEMENTS } from './palaceLayoutRefinements';
 
 export interface PalaceNodeOverride {
   dx: number; // Offset in 0..100 SVG viewBox coordinates
@@ -22,7 +24,20 @@ function round2(val: number): number {
   return Math.round(val * 100) / 100;
 }
 
-export function loadPalaceOverrides(): PalaceOverridesMap {
+function getBaselineOverride(nodeId: string): PalaceNodeOverride {
+  return DEFAULT_PALACE_LAYOUT_REFINEMENTS[nodeId] || { dx: 0, dy: 0, scale: 1 };
+}
+
+function isSameOverride(a: PalaceNodeOverride, b: PalaceNodeOverride): boolean {
+  return (
+    Math.abs(a.dx - b.dx) <= 0.01 &&
+    Math.abs(a.dy - b.dy) <= 0.01 &&
+    Math.abs(a.scale - b.scale) <= 0.01
+  );
+}
+
+/** Loads ONLY user-customized overrides stored in localStorage */
+export function loadUserPalaceOverrides(): PalaceOverridesMap {
   if (typeof window === 'undefined') return {};
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -39,8 +54,9 @@ export function loadPalaceOverrides(): PalaceOverridesMap {
           typeof rec.scale === 'number' && Number.isFinite(rec.scale)
             ? clamp(rec.scale, 0.4, 2.2)
             : 1;
-        if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01 || Math.abs(scale - 1) > 0.01) {
-          clean[k] = { dx: round2(dx), dy: round2(dy), scale: round2(scale) };
+        const normalized = { dx: round2(dx), dy: round2(dy), scale: round2(scale) };
+        if (!isSameOverride(normalized, getBaselineOverride(k))) {
+          clean[k] = normalized;
         }
       }
     }
@@ -50,10 +66,24 @@ export function loadPalaceOverrides(): PalaceOverridesMap {
   }
 }
 
-export function savePalaceOverrides(map: PalaceOverridesMap): void {
+/** Loads effective overrides = curated stroke-curve baseline + user customizations */
+export function loadPalaceOverrides(): PalaceOverridesMap {
+  return {
+    ...DEFAULT_PALACE_LAYOUT_REFINEMENTS,
+    ...loadUserPalaceOverrides(),
+  };
+}
+
+export function hasUserChamberOverrides(chamberKey: string): boolean {
+  const prefix = `${chamberKey.toLowerCase()}_`;
+  const userMap = loadUserPalaceOverrides();
+  return Object.keys(userMap).some((id) => id.startsWith(prefix));
+}
+
+export function savePalaceOverrides(userMap: PalaceOverridesMap): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(userMap));
     window.dispatchEvent(new CustomEvent(PALACE_OVERRIDES_EVENT));
   } catch {
     // Ignore storage quota errors
@@ -64,53 +94,51 @@ export function updatePalaceNodeOverride(
   nodeId: string,
   patch: Partial<PalaceNodeOverride>
 ): PalaceOverridesMap {
-  const current = loadPalaceOverrides();
-  const prev = current[nodeId] || { dx: 0, dy: 0, scale: 1 };
+  const userMap = loadUserPalaceOverrides();
+  const prev = userMap[nodeId] || getBaselineOverride(nodeId);
   const nextItem: PalaceNodeOverride = {
     dx: round2(clamp(patch.dx ?? prev.dx, -45, 45)),
     dy: round2(clamp(patch.dy ?? prev.dy, -45, 45)),
     scale: round2(clamp(patch.scale ?? prev.scale, 0.4, 2.2)),
   };
 
-  const next = { ...current };
-  if (
-    Math.abs(nextItem.dx) <= 0.01 &&
-    Math.abs(nextItem.dy) <= 0.01 &&
-    Math.abs(nextItem.scale - 1) <= 0.01
-  ) {
-    delete next[nodeId];
+  const nextUser = { ...userMap };
+  if (isSameOverride(nextItem, getBaselineOverride(nodeId))) {
+    delete nextUser[nodeId];
   } else {
-    next[nodeId] = nextItem;
+    nextUser[nodeId] = nextItem;
   }
-  savePalaceOverrides(next);
-  return next;
+  savePalaceOverrides(nextUser);
+  return { ...DEFAULT_PALACE_LAYOUT_REFINEMENTS, ...nextUser };
 }
 
 export function resetPalaceNodeOverride(nodeId: string): PalaceOverridesMap {
-  const current = loadPalaceOverrides();
-  if (!(nodeId in current)) return current;
-  const next = { ...current };
-  delete next[nodeId];
-  savePalaceOverrides(next);
-  return next;
+  const userMap = loadUserPalaceOverrides();
+  if (!(nodeId in userMap)) {
+    return { ...DEFAULT_PALACE_LAYOUT_REFINEMENTS, ...userMap };
+  }
+  const nextUser = { ...userMap };
+  delete nextUser[nodeId];
+  savePalaceOverrides(nextUser);
+  return { ...DEFAULT_PALACE_LAYOUT_REFINEMENTS, ...nextUser };
 }
 
 export function resetChamberOverrides(chamberKey: string): PalaceOverridesMap {
   const prefix = `${chamberKey.toLowerCase()}_`;
-  const current = loadPalaceOverrides();
-  const next: PalaceOverridesMap = {};
-  for (const [k, v] of Object.entries(current)) {
+  const userMap = loadUserPalaceOverrides();
+  const nextUser: PalaceOverridesMap = {};
+  for (const [k, v] of Object.entries(userMap)) {
     if (!k.startsWith(prefix)) {
-      next[k] = v;
+      nextUser[k] = v;
     }
   }
-  savePalaceOverrides(next);
-  return next;
+  savePalaceOverrides(nextUser);
+  return { ...DEFAULT_PALACE_LAYOUT_REFINEMENTS, ...nextUser };
 }
 
 export function resetAllPalaceOverrides(): PalaceOverridesMap {
   savePalaceOverrides({});
-  return {};
+  return { ...DEFAULT_PALACE_LAYOUT_REFINEMENTS };
 }
 
 export function exportPalacePositionsJson(): string {

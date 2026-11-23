@@ -14,6 +14,7 @@ import {
 import { getLingmingRadicalScript, LINGMING_ROOT_MAP } from '../data/lingming';
 import { FrequencyTier } from '../data/palaceStrokes';
 import { matchesScript, ScriptMode } from '../data/scriptFilter';
+import { buildChamberStrokeFlow, ChamberStrokeFlow } from '../data/palaceStrokePaths';
 import { useUiText } from '../data/uiScript';
 import { useThemeMode } from '../data/theme';
 
@@ -60,6 +61,8 @@ interface StrokeCloudStageProps {
   anchorOnActive?: boolean;
   /** Active Trad/Simp script mode; out-of-script radicals are visually dimmed rather than removed */
   scriptMode?: ScriptMode;
+  /** Overlay the Memory Palace calligraphic stroke-association path tracing brush order */
+  showStrokeFlow?: boolean;
 }
 
 // 4 core frequency-tier colors exported for cluster cards & legend swatches
@@ -121,6 +124,103 @@ const WASH_ECHO_PDF_TIER_COLORS: Record<PdfStrokeTier, string> = {
   rest: '#9C9B94',
 };
 
+const NIGHT_STROKE_FLOW_TONES = ['#5CE1B8', '#38BDF8', '#E8A94B', '#D67DD4', '#F07A8B'];
+const WASH_STROKE_FLOW_TONES = ['#151513', '#2F2F2C', '#4B4B46', '#676760', '#7E7D76'];
+
+export function getStrokeFlowTone(strokeIndex0: number, isWash: boolean): string {
+  const palette = isWash ? WASH_STROKE_FLOW_TONES : NIGHT_STROKE_FLOW_TONES;
+  return palette[strokeIndex0 % palette.length];
+}
+
+export const PalaceStrokeFlowOverlay: React.FC<{
+  flow: ChamberStrokeFlow;
+  isWash: boolean;
+  compact?: boolean;
+  animate?: boolean;
+}> = ({ flow, isWash, compact = false, animate = false }) => {
+  const ribbonWidth = compact ? 3.1 : 2.5;
+  const lineWidth = compact ? 1.25 : 0.95;
+  const arrowWidth = compact ? 1.3 : 1.0;
+  const numSize = compact ? 5.6 : 4.6;
+  const haloColor = isWash ? '#F7F5EE' : '#0E131D';
+
+  return (
+    <g className="pointer-events-none" aria-hidden="true">
+      {/* Subtle brush-lift transitions connecting end of stroke N to start of stroke N+1 */}
+      {flow.bridges.map((b) => (
+        <path
+          key={`bridge_${b.fromIndex}_${b.toIndex}`}
+          d={b.d}
+          fill="none"
+          stroke={isWash ? '#2E2E2A' : '#94A3B8'}
+          strokeWidth={compact ? 0.65 : 0.52}
+          strokeOpacity={isWash ? 0.22 : 0.28}
+          strokeLinecap="round"
+        />
+      ))}
+
+      {/* Ordered calligraphic stroke-association curves */}
+      {flow.strokes.map((st, idx) => {
+        const tone = getStrokeFlowTone(idx, isWash);
+        const delayMs = animate ? idx * 95 : 0;
+        return (
+          <g key={`stroke_flow_${st.index}`}>
+            {/* Soft ink-wash / glow aura ribbon */}
+            <path
+              d={st.d}
+              fill="none"
+              stroke={tone}
+              strokeWidth={ribbonWidth}
+              strokeOpacity={isWash ? 0.11 : 0.17}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {/* Core directional brush-flow trace */}
+            <path
+              d={st.d}
+              pathLength={animate ? 1 : undefined}
+              fill="none"
+              stroke={tone}
+              strokeWidth={lineWidth}
+              strokeOpacity={isWash ? 0.72 : 0.86}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={animate ? 'palace-stroke-draw' : undefined}
+              style={animate ? { animationDelay: `${delayMs}ms` } : undefined}
+            />
+            {/* Calligraphic brush-nib directional arrowhead */}
+            <path
+              d={st.arrowPath}
+              fill="none"
+              stroke={tone}
+              strokeWidth={arrowWidth}
+              strokeOpacity={isWash ? 0.78 : 0.92}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {/* Clean typographic stroke-order numeral at stroke origin (zero artificial circle ring) */}
+            <text
+              x={st.start.x - (compact ? 2.4 : 2.1)}
+              y={st.start.y - (compact ? 2.2 : 1.9)}
+              fontSize={numSize}
+              fontWeight={700}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill={tone}
+              stroke={haloColor}
+              strokeWidth={compact ? 2.4 : 2.1}
+              paintOrder="stroke"
+              style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+            >
+              {st.index}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+};
+
 function buildNodeTransform(
   cx: number,
   cy: number,
@@ -148,6 +248,7 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
   onDragNode,
   anchorOnActive,
   scriptMode = 'both',
+  showStrokeFlow = false,
 }) => {
   const t = useUiText();
   const isWash = useThemeMode() === 'wash';
@@ -172,6 +273,11 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
   const pdfChamber = useMemo(
     () => PALACE_PDF_CHAMBERS[chamberKey.toLowerCase()],
     [chamberKey]
+  );
+
+  const strokeFlow = useMemo(
+    () => (showStrokeFlow ? buildChamberStrokeFlow(chamberKey, overrides) : null),
+    [showStrokeFlow, chamberKey, overrides]
   );
 
   const [dragState, setDragState] = useState<{
@@ -588,7 +694,12 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
           />
         </g>
 
-        {/* ALL 379 Non-Primary Radicals & 变体 Variants in Exact 1:1 PDF Positions & Brush Outlines */}
+        {/* Optional Memory Palace calligraphic stroke-association path overlay */}
+        {strokeFlow && (
+          <PalaceStrokeFlowOverlay flow={strokeFlow} isWash={isWash} animate />
+        )}
+
+        {/* ALL 379 Non-Primary Radicals & 变体 Variants in Harmonized Positions & Brush Outlines */}
         {pdfChamber.nodes.map((node) => {
           const ov = overrides[node.id];
           const dx = ov?.dx ?? 0;
