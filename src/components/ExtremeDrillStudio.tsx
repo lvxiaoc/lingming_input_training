@@ -39,8 +39,7 @@ import {
 import { synth } from '../audio/synth';
 import { THEME_OPTIONS, ThemeMode } from '../data/theme';
 import {
-  isPalaceChamberKey,
-  resolveRadicalForChamberKey,
+  resolveDaSlotFromRoles,
   useKeystrokeCloud,
   useKeystrokeCloudPulse,
 } from '../data/keystrokeCloud';
@@ -316,6 +315,12 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
       if (!expected) return;
 
       const isCorrect = letter === expected;
+      const daSlot = resolveDaSlotFromRoles(
+        activeEntry.code,
+        activeEntry.parts,
+        activeEntry.roles,
+        typed.length
+      );
       let nextStore = recordKeyResult(masteryRef.current, expected, isCorrect, keyDelta);
 
       if (!isCorrect) {
@@ -329,16 +334,8 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
             ? `${t('應按')} ${expected.toUpperCase()}（${palaceInfo.primaryAnchor}）`
             : `${t('應按')} ${expected.toUpperCase()}`
         );
-        if (isPalaceChamberKey(expected)) {
-          triggerCloud(
-            expected,
-            resolveRadicalForChamberKey(activeEntry.parts, expected, typed.length),
-            'miss',
-            letter,
-            2600
-          );
-        } else if (isPalaceChamberKey(letter)) {
-          triggerCloud(letter, null, 'pressed_only', letter, 1600);
+        if (daSlot) {
+          triggerCloud(daSlot.chamberKey, daSlot.radical, 'miss', letter, 2600);
         }
         onMasteryChange(nextStore);
         return;
@@ -347,10 +344,10 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
       // Correct keystroke
       const nextTyped = typed + letter;
       const isComplete = nextTyped.length >= activeEntry.code.length;
-      if (isPalaceChamberKey(letter)) {
+      if (daSlot) {
         triggerCloud(
-          letter,
-          resolveRadicalForChamberKey(activeEntry.parts, letter, typed.length),
+          daSlot.chamberKey,
+          daSlot.radical,
           'hit',
           letter,
           isComplete ? 1650 : 2200
@@ -927,29 +924,11 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
           )}
 
           {/* CENTRAL FOCUS STAGE: Target Glyph + Latency Bar + In-Place X-Ray Rescue */}
-          <div className="relative flex-1 flex flex-col items-center justify-center py-6 min-h-[280px]">
-            {!isFinished && keystrokeCloudEnabled && (
-              <>
-                <KeystrokePalaceCloud
-                  pulse={cloudPulse.pulse}
-                  visible={cloudPulse.visible}
-                  scriptMode={scriptMode}
-                  size="md"
-                  className="hidden xl:flex absolute left-2 top-1/2 -translate-y-1/2 z-20"
-                />
-                <KeystrokePalaceCloud
-                  pulse={cloudPulse.pulse}
-                  visible={cloudPulse.visible}
-                  scriptMode={scriptMode}
-                  size="sm"
-                  className="xl:hidden fixed bottom-5 right-5 z-30"
-                />
-              </>
-            )}
+          <div className="relative flex-1 flex flex-col items-center justify-center py-8 min-h-[360px]">
             {!isFinished && activeEntry ? (
               <div className="w-full max-w-2xl flex flex-col items-center">
                 {/* Latency Bar & Explicit State Text (Dual-Coded) */}
-                <div className="w-full max-w-sm mb-5">
+                <div className="relative z-20 w-full max-w-sm mb-6">
                   <div className="flex items-center justify-between text-xs font-mono-tabular mb-1.5">
                     <span
                       className={
@@ -981,41 +960,63 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                   </div>
                 </div>
 
-                {/* Target Character + Side-by-Side In-Place X-Ray Breakdown */}
+                {/* Natural Writing-Scale Target Character + 100% Target-Coincident Palace Cloud */}
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-8 sm:gap-12">
                   <div className="flex flex-col items-center">
-                    <div
-                      key={`${activeEntry.char}_${cursor}`}
-                      className={`wash-enter relative font-display text-8xl sm:text-[112px] leading-none font-bold select-none transition-transform duration-150 ${
-                        errorCue ? 'text-[var(--dojo-crimson-text)]' : 'text-[var(--dojo-text-bright)]'
-                      }`}
-                    >
-                      {isWash && (
+                    <div className="relative flex items-center justify-center my-2">
+                      {keystrokeCloudEnabled && (
                         <>
-                          <span
-                            aria-hidden="true"
-                            className="pointer-events-none absolute -inset-6 rounded-full -z-10"
-                            style={{
-                              background: errorCue
-                                ? 'radial-gradient(circle, rgba(20, 20, 18, 0.14) 0%, transparent 70%)'
-                                : 'radial-gradient(circle, rgba(20, 20, 18, 0.075) 0%, rgba(48, 48, 44, 0.035) 45%, transparent 72%)',
-                            }}
+                          <KeystrokePalaceCloud
+                            pulse={cloudPulse.pulse}
+                            visible={cloudPulse.visible}
+                            scriptMode={scriptMode}
+                            placement="coincident"
+                            size="coincident"
+                            className="hidden sm:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
                           />
-                          <span
-                            aria-hidden="true"
-                            className="pointer-events-none absolute -inset-8 rounded-full -z-10 blur-[6px] ink-aura-fade"
-                            style={{
-                              background:
-                                'radial-gradient(circle, rgba(20, 20, 18, 0.15) 0%, rgba(56, 56, 52, 0.05) 50%, transparent 76%)',
-                            }}
+                          <KeystrokePalaceCloud
+                            pulse={cloudPulse.pulse}
+                            visible={cloudPulse.visible}
+                            scriptMode={scriptMode}
+                            placement="coincident"
+                            size="coincident-sm"
+                            className="sm:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
                           />
                         </>
                       )}
-                      {activeEntry.char}
+                      <div
+                        key={`${activeEntry.char}_${cursor}`}
+                        className={`wash-enter relative z-20 font-display text-[52px] sm:text-[62px] leading-none font-bold select-none transition-transform duration-150 ${
+                          errorCue ? 'text-[var(--dojo-crimson-text)]' : 'text-[var(--dojo-text-bright)]'
+                        }`}
+                      >
+                        {isWash && (
+                          <>
+                            <span
+                              aria-hidden="true"
+                              className="pointer-events-none absolute -inset-5 rounded-full -z-10"
+                              style={{
+                                background: errorCue
+                                  ? 'radial-gradient(circle, rgba(20, 20, 18, 0.14) 0%, transparent 70%)'
+                                  : 'radial-gradient(circle, rgba(20, 20, 18, 0.075) 0%, rgba(48, 48, 44, 0.035) 45%, transparent 72%)',
+                              }}
+                            />
+                            <span
+                              aria-hidden="true"
+                              className="pointer-events-none absolute -inset-6 rounded-full -z-10 blur-[6px] ink-aura-fade"
+                              style={{
+                                background:
+                                  'radial-gradient(circle, rgba(20, 20, 18, 0.15) 0%, rgba(56, 56, 52, 0.05) 50%, transparent 76%)',
+                              }}
+                            />
+                          </>
+                        )}
+                        {activeEntry.char}
+                      </div>
                     </div>
 
                     {/* Blind Keycode Slots */}
-                    <div className="flex items-center gap-2.5 mt-6">
+                    <div className="relative z-20 flex items-center gap-2.5 mt-6">
                       {Array.from(activeEntry.code).map((targetChar, idx) => {
                         const typedChar = typed[idx];
                         const isFilled = idx < typed.length;

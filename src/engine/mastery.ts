@@ -25,10 +25,21 @@ export interface SlowGlyphRecord {
   updatedAt: number;
 }
 
+export interface DailyPracticeStat {
+  date: string; // Local YYYY-MM-DD
+  charsCleared: number;
+  totalCharMs: number;
+  keySamples: number;
+  totalKeyMs: number;
+  correctKeys: number;
+  bestCpm?: number;
+}
+
 export interface SchemeMasteryStore {
   keys: Record<string, KeyMasteryStat>;
   glyphs: Record<string, GlyphMasteryStat>;
   slowGlyphs?: Record<string, SlowGlyphRecord>;
+  dailyStats?: Record<string, DailyPracticeStat>;
   totalCleared: number;
   bestScore: number;
 }
@@ -37,12 +48,45 @@ export type ScaffoldMode = 'adaptive' | 'full' | 'blind';
 export type TrainingScope = 'all' | EntryKind;
 
 const MASTERY_PREFIX = 'inkkey_mastery_v2_';
+const MAX_DAILY_HISTORY_DAYS = 30;
+
+export function getLocalDateKey(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function createEmptyDailyStat(dateKey: string): DailyPracticeStat {
+  return {
+    date: dateKey,
+    charsCleared: 0,
+    totalCharMs: 0,
+    keySamples: 0,
+    totalKeyMs: 0,
+    correctKeys: 0,
+  };
+}
+
+function pruneDailyStats(
+  stats: Record<string, DailyPracticeStat>
+): Record<string, DailyPracticeStat> {
+  const keys = Object.keys(stats);
+  if (keys.length <= MAX_DAILY_HISTORY_DAYS) return stats;
+  const kept = keys.sort().slice(-MAX_DAILY_HISTORY_DAYS);
+  const next: Record<string, DailyPracticeStat> = {};
+  for (const k of kept) {
+    next[k] = stats[k];
+  }
+  return next;
+}
 
 export function createEmptyStore(): SchemeMasteryStore {
   return {
     keys: {},
     glyphs: {},
     slowGlyphs: {},
+    dailyStats: {},
     totalCleared: 0,
     bestScore: 0,
   };
@@ -57,6 +101,7 @@ export function loadMasteryStore(schemeId: string): SchemeMasteryStore {
       keys: parsed.keys || {},
       glyphs: parsed.glyphs || {},
       slowGlyphs: parsed.slowGlyphs || {},
+      dailyStats: parsed.dailyStats || {},
       totalCleared: parsed.totalCleared || 0,
       bestScore: parsed.bestScore || 0,
     };
@@ -87,8 +132,22 @@ export function recordKeyResult(
       ? clampedMs
       : Math.round(prev.emaLatencyMs * 0.72 + clampedMs * 0.28);
 
+  const todayKey = getLocalDateKey();
+  const prevDailyMap = store.dailyStats || {};
+  const prevToday = prevDailyMap[todayKey] || createEmptyDailyStat(todayKey);
+  const nextDailyMap = pruneDailyStats({
+    ...prevDailyMap,
+    [todayKey]: {
+      ...prevToday,
+      keySamples: prevToday.keySamples + 1,
+      totalKeyMs: prevToday.totalKeyMs + Math.round(clampedMs),
+      correctKeys: prevToday.correctKeys + (correct ? 1 : 0),
+    },
+  });
+
   return {
     ...store,
+    dailyStats: nextDailyMap,
     keys: {
       ...store.keys,
       [k]: {
@@ -124,12 +183,27 @@ export function recordGlyphCompletion(
 
   const promoted = nextLevel > prev.level;
 
+  // Clamp per-char duration (140ms..12s) so idle pauses don't distort daily CPM
+  const clampedCharMs = Math.min(12000, Math.max(140, Math.round(totalMs)));
+  const todayKey = getLocalDateKey();
+  const prevDailyMap = store.dailyStats || {};
+  const prevToday = prevDailyMap[todayKey] || createEmptyDailyStat(todayKey);
+  const nextDailyMap = pruneDailyStats({
+    ...prevDailyMap,
+    [todayKey]: {
+      ...prevToday,
+      charsCleared: prevToday.charsCleared + 1,
+      totalCharMs: prevToday.totalCharMs + clampedCharMs,
+    },
+  });
+
   return {
     promoted,
     level: nextLevel,
     nextStore: {
       ...store,
       totalCleared: store.totalCleared + 1,
+      dailyStats: nextDailyMap,
       glyphs: {
         ...store.glyphs,
         [glyphId]: {
@@ -139,6 +213,142 @@ export function recordGlyphCompletion(
         },
       },
     },
+  };
+}
+
+export function recordDailyBestCpm(
+  store: SchemeMasteryStore,
+  roundCpm: number
+): SchemeMasteryStore {
+  if (!Number.isFinite(roundCpm) || roundCpm <= 0) return store;
+  const rounded = Math.min(300, Math.round(roundCpm));
+  const todayKey = getLocalDateKey();
+  const prevDailyMap = store.dailyStats || {};
+  const prevToday = prevDailyMap[todayKey] || createEmptyDailyStat(todayKey);
+  if ((prevToday.bestCpm || 0) >= rounded) return store;
+  return {
+    ...store,
+    dailyStats: pruneDailyStats({
+      ...prevDailyMap,
+      [todayKey]: {
+        ...prevToday,
+        bestCpm: rounded,
+      },
+    }),
+  };
+}
+
+export interface GrowthDayPoint {
+  date: string;
+  label: string;
+  shortDate: string;
+  isToday: boolean;
+  cpm: number | null;
+  avgLatencyMs: number | null;
+  charsCleared: number;
+  keySamples: number;
+  accuracyPct: number | null;
+  bestCpm: number | null;
+}
+
+export interface GrowthAnalyticsSeries {
+  days: GrowthDayPoint[];
+  activeDays: number;
+  totalChars7d: number;
+  totalKeys7d: number;
+  latestCpm: number | null;
+  avgCpm7d: number | null;
+  peakCpm7d: number | null;
+  cpmDelta: number | null;
+  latestLatencyMs: number | null;
+  avgLatency7d: number | null;
+  latencyDeltaMs: number | null;
+}
+
+export function getLast7DaysGrowthSeries(
+  store: SchemeMasteryStore,
+  now: Date = new Date()
+): GrowthAnalyticsSeries {
+  const dailyMap = store.dailyStats || {};
+  const days: GrowthDayPoint[] = [];
+
+  for (let offset = 6; offset >= 0; offset--) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
+    const key = getLocalDateKey(d);
+    const shortDate = `${d.getMonth() + 1}/${d.getDate()}`;
+    const isToday = offset === 0;
+    const stat = dailyMap[key];
+
+    const cpm =
+      stat && stat.charsCleared > 0 && stat.totalCharMs > 0
+        ? Math.min(300, Math.max(1, Math.round((stat.charsCleared * 60000) / stat.totalCharMs)))
+        : null;
+    const avgLatencyMs =
+      stat && stat.keySamples > 0
+        ? Math.round(stat.totalKeyMs / stat.keySamples)
+        : null;
+    const accuracyPct =
+      stat && stat.keySamples > 0
+        ? Math.round((stat.correctKeys / stat.keySamples) * 100)
+        : null;
+
+    days.push({
+      date: key,
+      label: isToday ? '今日' : shortDate,
+      shortDate,
+      isToday,
+      cpm,
+      avgLatencyMs,
+      charsCleared: stat?.charsCleared ?? 0,
+      keySamples: stat?.keySamples ?? 0,
+      accuracyPct,
+      bestCpm: stat?.bestCpm ?? null,
+    });
+  }
+
+  const cpmDays = days.filter((d): d is GrowthDayPoint & { cpm: number } => d.cpm !== null);
+  const latencyDays = days.filter(
+    (d): d is GrowthDayPoint & { avgLatencyMs: number } => d.avgLatencyMs !== null
+  );
+  const activeDays = days.filter((d) => d.cpm !== null || d.avgLatencyMs !== null).length;
+  const totalChars7d = days.reduce((sum, d) => sum + d.charsCleared, 0);
+  const totalKeys7d = days.reduce((sum, d) => sum + d.keySamples, 0);
+
+  const latestCpm = cpmDays.length > 0 ? cpmDays[cpmDays.length - 1].cpm : null;
+  const avgCpm7d =
+    cpmDays.length > 0
+      ? Math.round(cpmDays.reduce((sum, d) => sum + d.cpm, 0) / cpmDays.length)
+      : null;
+  const peakCpm7d =
+    cpmDays.length > 0
+      ? Math.max(...cpmDays.map((d) => Math.max(d.cpm, d.bestCpm ?? 0)))
+      : null;
+  const cpmDelta =
+    cpmDays.length >= 2 ? cpmDays[cpmDays.length - 1].cpm - cpmDays[0].cpm : null;
+
+  const latestLatencyMs =
+    latencyDays.length > 0 ? latencyDays[latencyDays.length - 1].avgLatencyMs : null;
+  const avgLatency7d =
+    latencyDays.length > 0
+      ? Math.round(latencyDays.reduce((sum, d) => sum + d.avgLatencyMs, 0) / latencyDays.length)
+      : null;
+  const latencyDeltaMs =
+    latencyDays.length >= 2
+      ? latencyDays[latencyDays.length - 1].avgLatencyMs - latencyDays[0].avgLatencyMs
+      : null;
+
+  return {
+    days,
+    activeDays,
+    totalChars7d,
+    totalKeys7d,
+    latestCpm,
+    avgCpm7d,
+    peakCpm7d,
+    cpmDelta,
+    latestLatencyMs,
+    avgLatency7d,
+    latencyDeltaMs,
   };
 }
 

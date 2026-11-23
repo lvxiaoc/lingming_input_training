@@ -64,10 +64,9 @@ import {
   ThemeMode,
 } from './data/theme';
 import {
-  isPalaceChamberKey,
   KeystrokeCloudContext,
   loadKeystrokeCloudEnabled,
-  resolveRadicalForChamberKey,
+  resolveDaSlotFromRoles,
   saveKeystrokeCloudEnabled,
   useKeystrokeCloudPulse,
 } from './data/keystrokeCloud';
@@ -85,6 +84,7 @@ import {
   getMasterySummary,
   getWeakestKeys,
   loadMasteryStore,
+  recordDailyBestCpm,
   saveMasteryStore,
   ScaffoldMode,
   SchemeMasteryStore,
@@ -101,6 +101,7 @@ import { HuangtingDojo } from './components/HuangtingDojo';
 import { HomeTutorialModal, TutorialTabId } from './components/HomeTutorialModal';
 import { WeakKeyRadarCard } from './components/WeakKeyRadarCard';
 import { CorrectionReportCard } from './components/CorrectionReportCard';
+import { GrowthAnalyticsPanel } from './components/GrowthAnalyticsPanel';
 import { FirebaseErrorBoundary } from './components/FirebaseErrorBoundary';
 import { KeystrokeCloudToggle, KeystrokePalaceCloud } from './components/KeystrokePalaceCloud';
 import { synth } from './audio/synth';
@@ -220,6 +221,10 @@ export default function App() {
   );
   const playingCloudPulse = useKeystrokeCloudPulse(keystrokeCloudEnabled);
   const { trigger: triggerPlayingCloud, clear: clearPlayingCloud } = playingCloudPulse;
+  const [arcadeCloudPos, setArcadeCloudPos] = useState<{ xPct: number; yPct: number }>({
+    xPct: 50,
+    yPct: 45,
+  });
   const [activeStage, setActiveStage] = useState<CampaignStage | null>(null);
   const [activeCustomDeck, setActiveCustomDeck] = useState<GlyphEntry[] | null>(null);
   const [isWeakDrill, setIsWeakDrill] = useState(false);
@@ -512,12 +517,26 @@ export default function App() {
       } else {
         setLastStageBadge(null);
       }
+      if (result.cpm > 0) {
+        const withPeakCpm = recordDailyBestCpm(masteryRef.current, result.cpm);
+        if (withPeakCpm !== masteryRef.current) {
+          handleMasteryChange(withPeakCpm);
+        }
+      }
       setRoundResult(result);
       setAutoAdvancePaused(false);
       setAutoAdvanceSec(result.weakEntries && result.weakEntries.length > 0 ? 6 : 4);
       setGameState(result.reason === 'gameover' ? 'GAME_OVER' : 'ROUND_SUMMARY');
     },
-    [activeScheme.isLingming, activeStage, campaignProgress, focusKeys, isWeakDrill, scaffoldMode]
+    [
+      activeScheme.isLingming,
+      activeStage,
+      campaignProgress,
+      focusKeys,
+      handleMasteryChange,
+      isWeakDrill,
+      scaffoldMode,
+    ]
   );
 
   const toggleMute = () => {
@@ -911,26 +930,36 @@ export default function App() {
     const onFlankKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (!/^[a-zA-Z]$/.test(e.key)) return;
+      if (!target) return;
       const letter = e.key.toLowerCase();
-      if (!target) {
-        if (isPalaceChamberKey(letter)) {
-          triggerPlayingCloud(letter, null, 'pressed_only', letter, 1600);
-        }
-        return;
-      }
       const pos = target.typed.length;
       const expected = target.code[pos];
-      if (expected && letter === expected) {
-        if (isPalaceChamberKey(letter)) {
-          const matched = resolveRadicalForChamberKey(target.parts, letter, pos);
-          const isComplete = pos + 1 >= target.code.length;
-          triggerPlayingCloud(letter, matched, 'hit', letter, isComplete ? 1650 : 2100);
-        }
-      } else if (expected && isPalaceChamberKey(expected)) {
-        const matched = resolveRadicalForChamberKey(target.parts, expected, pos);
-        triggerPlayingCloud(expected, matched, 'miss', letter, 2600);
-      } else if (isPalaceChamberKey(letter)) {
-        triggerPlayingCloud(letter, null, 'pressed_only', letter, 1600);
+      if (!expected) return;
+
+      // Only trigger radical palace cloud for 大碼 (the 1st key of a radical); never for 聲碼 or 韻碼
+      const daSlot = resolveDaSlotFromRoles(target.code, target.parts, target.roles, pos);
+      if (!daSlot) return;
+
+      if (mode === 'arcade') {
+        const rawX = (target.stageXRatio ?? 0.5) * 100;
+        const rawY = (target.stageYRatio ?? 0.45) * 100;
+        setArcadeCloudPos({
+          xPct: Math.max(18, Math.min(82, rawX)),
+          yPct: Math.max(20, Math.min(78, rawY)),
+        });
+      }
+
+      if (letter === expected) {
+        const isComplete = pos + 1 >= target.code.length;
+        triggerPlayingCloud(
+          daSlot.chamberKey,
+          daSlot.radical,
+          'hit',
+          letter,
+          isComplete ? 1650 : 2100
+        );
+      } else {
+        triggerPlayingCloud(daSlot.chamberKey, daSlot.radical, 'miss', letter, 2600);
       }
     };
 
@@ -1150,7 +1179,8 @@ export default function App() {
 
       {/* ==================== TITLE SCREEN ==================== */}
       {gameState === 'TITLE_MENU' && (
-        <div className="relative z-10 w-full h-full flex flex-col justify-between overflow-y-auto overflow-x-hidden">
+        <div className="relative z-10 w-full h-full overflow-y-auto overflow-x-hidden">
+          <div className="relative min-h-full w-full flex flex-col justify-between">
           {!heroImgFailed ? (
             <img
               src={TITLE_ART_URL}
@@ -1556,6 +1586,14 @@ export default function App() {
           </div>
           </div>
 
+          {/* Weekly Growth Visualization Panel (Recharts: 7-Day CPM & Radical Latency) */}
+          <div className="relative z-10 w-full max-w-6xl mx-auto px-6 sm:px-10 pb-6">
+            <GrowthAnalyticsPanel
+              mastery={mastery}
+              onStartQuickPractice={() => startPlay(mode)}
+            />
+          </div>
+
           {/* Quiet bottom line */}
           <div className="relative z-10 px-6 sm:px-10 pb-5 flex items-center justify-between text-xs text-[var(--dojo-text-muted)]">
             <span>{t('Enter / Space 進入五重道場')}</span>
@@ -1586,6 +1624,7 @@ export default function App() {
               }
             />
           )}
+          </div>
         </div>
       )}
 
@@ -1992,8 +2031,8 @@ export default function App() {
                     layoutMode === 'depth'
                       ? `calc(${depthMetrics.centerYRatio * 100}% + ${depthMetrics.glyphYOffset}px)`
                       : 'calc(48% - 16px)',
-                  width: layoutMode === 'depth' ? `${depthMetrics.echoBoxSize}px` : '900px',
-                  height: layoutMode === 'depth' ? `${depthMetrics.echoBoxSize}px` : '900px',
+                  width: layoutMode === 'depth' ? `${depthMetrics.echoBoxSize}px` : '560px',
+                  height: layoutMode === 'depth' ? `${depthMetrics.echoBoxSize}px` : '560px',
                   opacity: !showCloudEcho ? 0 : echoPose.settled ? 1 : cloudEchoMotion === 'keyzoom' ? 0.08 : 0,
                   filter: isWash
                     ? !showCloudEcho
@@ -2031,17 +2070,34 @@ export default function App() {
               </div>
             )}
 
-            {/* Layer 1B: Proportionally Bounded Left-Flank Palace Cloud for Multi-Root Characters & Arcade */}
+            {/* Layer 1B: 100% Target-Coincident Palace Cloud for Multi-Root Characters & Arcade */}
             {activeScheme.isLingming && keystrokeCloudEnabled && (
               <KeystrokePalaceCloud
                 pulse={playingCloudPulse.pulse}
                 visible={playingCloudPulse.visible && gameState === 'PLAYING'}
                 scriptMode={scriptMode}
-                size={mode === 'arcade' ? 'md' : 'lg'}
-                className={
+                placement="coincident"
+                boxPx={
                   mode === 'arcade'
-                    ? 'hidden md:flex absolute left-5 bottom-8 z-[18]'
-                    : 'hidden md:flex absolute left-6 xl:left-12 top-1/2 -translate-y-1/2 z-[18]'
+                    ? 340
+                    : layoutMode === 'depth'
+                      ? depthMetrics.echoBoxSize
+                      : 460
+                }
+                className="absolute -translate-x-1/2 -translate-y-1/2 z-[16]"
+                style={
+                  mode === 'arcade'
+                    ? {
+                        left: `${arcadeCloudPos.xPct.toFixed(1)}%`,
+                        top: `${arcadeCloudPos.yPct.toFixed(1)}%`,
+                      }
+                    : {
+                        left: '50%',
+                        top:
+                          layoutMode === 'depth'
+                            ? `calc(${depthMetrics.centerYRatio * 100}% + ${depthMetrics.glyphYOffset}px)`
+                            : 'calc(48% - 16px)',
+                      }
                 }
               />
             )}

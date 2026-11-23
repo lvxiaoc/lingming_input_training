@@ -150,15 +150,20 @@ export const ColorSplitGlyph: React.FC<ColorSplitGlyphProps> = ({
         className={`${sizeClass} relative flex items-center justify-center select-none`}
         aria-label={char}
       >
-        <span
-          className="font-display font-bold leading-none transition-colors duration-300"
-          style={{
-            fontSize: '7.5rem',
-            color: errorFlash ? (isWash ? '#B83B2A' : '#EE6B5A') : inkColor,
-          }}
-        >
-          {char}
-        </span>
+        <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible" role="img" aria-label={char}>
+          <text
+            x="50"
+            y="78"
+            textAnchor="middle"
+            fontSize="76"
+            fontWeight="700"
+            fontFamily="'Noto Serif TC', serif"
+            fill={errorFlash ? (isWash ? '#B83B2A' : '#EE6B5A') : inkColor}
+            style={{ transition: 'fill 260ms ease' }}
+          >
+            {char}
+          </text>
+        </svg>
       </div>
     );
   }

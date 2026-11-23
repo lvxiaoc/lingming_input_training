@@ -41,8 +41,8 @@ import { THEME_OPTIONS, ThemeMode, useThemeMode } from '../data/theme';
 import { useUiText } from '../data/uiScript';
 import { synth } from '../audio/synth';
 import {
-  isPalaceChamberKey,
-  resolveRadicalForChamberKey,
+  computeTakenRootSpans,
+  resolveDaSlotFromRootCodes,
   useKeystrokeCloud,
   useKeystrokeCloudPulse,
 } from '../data/keystrokeCloud';
@@ -187,94 +187,7 @@ function groupIntoLines(tokens: VerseToken[]): VerseToken[][] {
   return lines;
 }
 
-interface TakenRootSpan {
-  /** Index range [start, end) inside `rootCode` that is actually taken into the full character code */
-  matchStart: number;
-  matchEnd: number;
-  /** Index range [codeStart, codeEnd) inside the character's full `code` */
-  codeStart: number;
-  codeEnd: number;
-}
-
-/**
- * Computes which exact letters of each root's own code (`rootCodes[i]`) are taken
- * into the character's official Lingming full `code` (e.g. 玉: 王 ya -> Y, 丶 tu -> TU => YTU).
- */
-function computeTakenRootSpans(code: string, rootCodes: string[]): TakenRootSpan[] {
-  const n = rootCodes.length;
-  if (n === 0) return [];
-  const r = rootCodes.map((x) => (x || '').toLowerCase());
-  const c = (code || '').toLowerCase();
-
-  type Candidate = Array<{ start: number; end: number }>;
-  const buildFromLens = (lens: number[]): Candidate =>
-    lens.map((len, i) => ({ start: 0, end: Math.min(len, r[i].length) }));
-
-  const candidates: Candidate[] = [];
-  if (n === 1) {
-    candidates.push(buildFromLens([r[0].length]));
-  } else if (n === 2) {
-    candidates.push(buildFromLens([1, r[1].length]));
-    candidates.push(buildFromLens([2, 2]));
-    candidates.push(buildFromLens([2, 1]));
-  } else if (n === 3) {
-    candidates.push(buildFromLens([1, 1, 2]));
-    candidates.push(buildFromLens([2, 1, 1]));
-    candidates.push(buildFromLens([1, 2, 1]));
-    // Edge case where 3rd root contributes its final vowel (e.g. 暉 hrbe: hri + bi + kce)
-    if (r[2].length >= 1) {
-      candidates.push([
-        { start: 0, end: Math.min(2, r[0].length) },
-        { start: 0, end: Math.min(1, r[1].length) },
-        { start: r[2].length - 1, end: r[2].length },
-      ]);
-    }
-  } else {
-    const last = n - 1;
-    // 1st root 2 consonants + 2nd root 1st + last root 1st
-    candidates.push(
-      r.map((rc, i) => ({
-        start: 0,
-        end: i === 0 ? Math.min(2, rc.length) : i === 1 || i === last ? Math.min(1, rc.length) : 0,
-      }))
-    );
-    // 1st, 2nd, 3rd, last each 1st key
-    candidates.push(
-      r.map((rc, i) => ({
-        start: 0,
-        end: i <= 2 || i === last ? Math.min(1, rc.length) : 0,
-      }))
-    );
-    // 1st 1, 2nd 2, last 1
-    candidates.push(
-      r.map((rc, i) => ({
-        start: 0,
-        end: i === 1 ? Math.min(2, rc.length) : i === 0 || i === last ? Math.min(1, rc.length) : 0,
-      }))
-    );
-  }
-
-  for (const cand of candidates) {
-    const joined = cand.map((sp, i) => r[i].slice(sp.start, sp.end)).join('');
-    if (joined === c) {
-      let offset = 0;
-      return cand.map((sp) => {
-        const len = sp.end - sp.start;
-        const out: TakenRootSpan = {
-          matchStart: sp.start,
-          matchEnd: sp.end,
-          codeStart: offset,
-          codeEnd: offset + len,
-        };
-        offset += len;
-        return out;
-      });
-    }
-  }
-
-  // Safe fallback if a rare override doesn't match standard templates
-  return r.map((rc) => ({ matchStart: 0, matchEnd: rc.length, codeStart: -1, codeEnd: -1 }));
-}
+// TakenRootSpan & computeTakenRootSpans are imported from ../data/keystrokeCloud
 
 interface HuangtingDojoProps {
   mastery: SchemeMasteryStore;
@@ -759,28 +672,21 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
       const isExactFull = candidate === fullCode;
       const isExactShort = Boolean(shortCode && candidate === shortCode);
 
-      const findRootForKeyPos = (pos: number, chamberKey: string): string | null => {
-        const spanIdx = takenRootSpans.findIndex(
-          (sp) => sp.codeStart >= 0 && pos >= sp.codeStart && pos < sp.codeEnd
-        );
-        return resolveRadicalForChamberKey(
-          currentItem.info.roots,
-          chamberKey,
-          spanIdx >= 0 ? spanIdx : pos
-        );
-      };
+      // Only trigger radical palace cloud when this keystroke slot is a radical's 1st key (大碼),
+      // never for secondary phonetic keys (聲碼) or final vowels (韻碼)
+      const daSlot = resolveDaSlotFromRootCodes(
+        fullCode,
+        currentItem.info.roots,
+        currentItem.info.rootCodes,
+        typed.length,
+        takenRootSpans
+      );
 
       setTotalKeys((n) => n + 1);
 
       if (isExactFull || isExactShort) {
-        if (isPalaceChamberKey(key)) {
-          triggerCloud(
-            key,
-            findRootForKeyPos(typed.length, key),
-            'hit',
-            key,
-            1750
-          );
+        if (daSlot && key === daSlot.chamberKey) {
+          triggerCloud(daSlot.chamberKey, daSlot.radical, 'hit', key, 1750);
         }
         setCorrectKeys((n) => n + 1);
         setErrorFlash(false);
@@ -836,14 +742,8 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
           charStartRef.current = performance.now();
         }
       } else if (matchesFullPrefix || matchesShortPrefix) {
-        if (isPalaceChamberKey(key)) {
-          triggerCloud(
-            key,
-            findRootForKeyPos(typed.length, key),
-            'hit',
-            key,
-            2400
-          );
+        if (daSlot && key === daSlot.chamberKey) {
+          triggerCloud(daSlot.chamberKey, daSlot.radical, 'hit', key, 2400);
         }
         setCorrectKeys((n) => n + 1);
         setErrorFlash(false);
@@ -865,16 +765,8 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
           return next;
         });
         const expected = fullCode[typed.length] || fullCode[0];
-        if (isPalaceChamberKey(expected)) {
-          triggerCloud(
-            expected,
-            findRootForKeyPos(typed.length, expected),
-            'miss',
-            key,
-            2800
-          );
-        } else if (isPalaceChamberKey(key)) {
-          triggerCloud(key, null, 'pressed_only', key, 1800);
+        if (daSlot) {
+          triggerCloud(daSlot.chamberKey, daSlot.radical, 'miss', key, 2800);
         }
         const nextStore = recordKeyResult(masteryRef.current, expected, false, 950);
         onMasteryChange(nextStore);
@@ -1131,9 +1023,9 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
             >
-              {/* Anchored to exact vertical center of the lowered foreground target glyph (238px mobile / 270px desktop from viewport bottom) */}
+              {/* Anchored to exact vertical center of the lowered foreground target glyph (202px mobile / 238px desktop from viewport bottom) */}
               <div
-                className="absolute left-1/2 bottom-[238px] sm:bottom-[270px]"
+                className="absolute left-1/2 bottom-[202px] sm:bottom-[238px]"
                 style={{
                   transform: `translate3d(${-(activeGridPos.col * DEPTH_CELL_PX + DEPTH_CELL_PX / 2)}px, ${-(activeGridPos.row * DEPTH_ROW_PX + DEPTH_ROW_PX / 2)}px, 0)`,
                   transition: 'transform 380ms cubic-bezier(0.22, 1, 0.36, 1)',
@@ -1219,8 +1111,8 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                         } else if (rowDelta === 0) {
                           const absCol = Math.abs(colDelta);
                           if (absCol === 1) {
-                            // Soft breathing clearance immediately flanking the giant center character
-                            charOpacity = colDelta > 0 ? 0.24 : 0.18;
+                            // Soft breathing clearance immediately flanking the focused center character
+                            charOpacity = colDelta > 0 ? 0.36 : 0.26;
                           } else if (colDelta > 1) {
                             // Upcoming text glides clearly in from the right for peripheral look-ahead
                             charOpacity =
@@ -1270,7 +1162,7 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
 
               {/* Optical Halo Scrim locked to the lowered target glyph so contrast stays crisp */}
               <div
-                className="absolute left-1/2 bottom-[238px] sm:bottom-[270px] -translate-x-1/2 translate-y-1/2 w-[540px] sm:w-[680px] h-[340px] sm:h-[420px]"
+                className="absolute left-1/2 bottom-[202px] sm:bottom-[238px] -translate-x-1/2 translate-y-1/2 w-[520px] sm:w-[660px] h-[340px] sm:h-[420px]"
                 style={{
                   background: isWash
                     ? 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(243,241,236,0.92) 0%, rgba(243,241,236,0.62) 48%, rgba(243,241,236,0) 76%)'
@@ -1296,30 +1188,10 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
               />
             </div>
 
-            {/* Layer 1.5: Harmoniously Proportioned Keystroke Radical Palace Cloud (Left Flank on Desktop, Above on Mobile) */}
-            {!chapterDone && keystrokeCloudEnabled && (
-              <>
-                <KeystrokePalaceCloud
-                  pulse={cloudPulse.pulse}
-                  visible={cloudPulse.visible}
-                  scriptMode={script}
-                  size="lg"
-                  className="hidden md:flex absolute bottom-[238px] sm:bottom-[270px] translate-y-1/2 right-[calc(50%+126px)] lg:right-[calc(50%+148px)] z-[22]"
-                />
-                <KeystrokePalaceCloud
-                  pulse={cloudPulse.pulse}
-                  visible={cloudPulse.visible}
-                  scriptMode={script}
-                  size="sm"
-                  className="md:hidden absolute left-1/2 -translate-x-1/2 bottom-[366px] z-[22]"
-                />
-              </>
-            )}
-
-            {/* Layer 2 (Foreground Focal Plane): Ergonomically Lowered Target Glyph for Comfortable Downward Gaze */}
+            {/* Layer 2 (Foreground Focal Plane): Ergonomically Lowered Target Glyph + Target-Coincident Palace Cloud */}
             <div
               className={`relative z-20 h-full w-full flex flex-col items-center px-4 ${
-                chapterDone ? 'justify-center py-6' : 'justify-end pb-11'
+                chapterDone ? 'justify-center py-6' : 'justify-end pb-14 sm:pb-20'
               }`}
             >
               {chapterDone ? (
@@ -1390,46 +1262,68 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                   </div>
                 </div>
               ) : currentItem ? (
-                <div className="flex flex-col items-center gap-2.5">
-                  {/* Giant Permanently-Centered, Lower-Anchored Calligraphic Focal Target (Click directly to correct decomposition) */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.currentTarget.blur();
-                      synth.playClick();
-                      setOverrideModalOpen(true);
-                    }}
-                    title={t('點擊直接校訂此字拆解與筆畫顏色')}
-                    aria-label={`${currentItem.char} · ${t('點擊校訂拆字')}`}
-                    className="group relative rounded-2xl cursor-pointer focus:outline-none"
-                  >
-                    <ColorSplitGlyph
-                      char={currentItem.char}
-                      strokes={currentItem.info.strokes}
-                      strokeRootIndices={currentItem.info.strokeRootIndices}
-                      themeMode={themeMode}
-                      colorMix={colorMix}
-                      activeRootIdx={activeRootIdx}
-                      errorFlash={errorFlash}
-                      sizeClass="w-44 h-44 sm:w-56 sm:h-56"
-                    />
-                    <span
-                      aria-hidden="true"
-                      className={`pointer-events-none absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 backdrop-blur-xs ${
-                        isWash
-                          ? 'bg-[#F6F4EE]/92 border-[#141413]/18 text-[#2C2C29]'
-                          : 'bg-[#121824]/90 border-[#F2EEE6]/16 text-[#E6E1D8]'
-                      }`}
+                <div className="flex flex-col items-center gap-3">
+                  {/* Natural Writing-Scale Calligraphic Target with 100% Target-Coincident Memory Palace Cloud */}
+                  <div className="relative flex items-center justify-center">
+                    {keystrokeCloudEnabled && (
+                      <>
+                        <KeystrokePalaceCloud
+                          pulse={cloudPulse.pulse}
+                          visible={cloudPulse.visible}
+                          scriptMode={script}
+                          placement="coincident"
+                          size="coincident-lg"
+                          className="hidden sm:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+                        />
+                        <KeystrokePalaceCloud
+                          pulse={cloudPulse.pulse}
+                          visible={cloudPulse.visible}
+                          scriptMode={script}
+                          placement="coincident"
+                          size="coincident-sm"
+                          className="sm:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+                        />
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.currentTarget.blur();
+                        synth.playClick();
+                        setOverrideModalOpen(true);
+                      }}
+                      title={t('點擊直接校訂此字拆解與筆畫顏色')}
+                      aria-label={`${currentItem.char} · ${t('點擊校訂拆字')}`}
+                      className="group relative z-20 rounded-xl cursor-pointer focus:outline-none"
                     >
-                      <Pencil className="w-2.5 h-2.5 text-[var(--dojo-ochre)]" />
-                      <span>{t('點擊校訂')}</span>
-                    </span>
-                  </button>
+                      <ColorSplitGlyph
+                        char={currentItem.char}
+                        strokes={currentItem.info.strokes}
+                        strokeRootIndices={currentItem.info.strokeRootIndices}
+                        themeMode={themeMode}
+                        colorMix={colorMix}
+                        activeRootIdx={activeRootIdx}
+                        errorFlash={errorFlash}
+                        sizeClass="w-[68px] h-[68px] sm:w-[76px] sm:h-[76px]"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none absolute -top-2 -right-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 backdrop-blur-xs whitespace-nowrap ${
+                          isWash
+                            ? 'bg-[#F6F4EE]/92 border-[#141413]/18 text-[#2C2C29]'
+                            : 'bg-[#121824]/90 border-[#F2EEE6]/16 text-[#E6E1D8]'
+                        }`}
+                      >
+                        <Pencil className="w-2.5 h-2.5 text-[var(--dojo-ochre)]" />
+                        <span>{t('校訂')}</span>
+                      </span>
+                    </button>
+                  </div>
 
                   {/* Fixed-Height Hint Cushion: Hidden by default in adaptive/blind modes; gently fades in after hesitation */}
                   <div
                     aria-hidden={!depthHintsVisible}
-                    className={`h-[96px] sm:h-[104px] flex flex-col items-center justify-start gap-1.5 ${
+                    className={`relative z-20 h-[100px] sm:h-[108px] flex flex-col items-center justify-start gap-1.5 ${
                       depthHintsVisible
                         ? isImmediateRescue || fadeMode === 'always'
                           ? 'opacity-100 translate-y-0 transition-all duration-200 ease-out'
@@ -2012,61 +1906,55 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                 </div>
               </div>
             ) : currentItem ? (
-              <div className="relative py-5 flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10">
-                {keystrokeCloudEnabled && (
-                  <>
-                    <KeystrokePalaceCloud
-                      pulse={cloudPulse.pulse}
-                      visible={cloudPulse.visible}
-                      scriptMode={script}
-                      size="md"
-                      className="hidden xl:flex absolute left-2 top-1/2 -translate-y-1/2 z-20"
-                    />
-                    <KeystrokePalaceCloud
-                      pulse={cloudPulse.pulse}
-                      visible={cloudPulse.visible}
-                      scriptMode={script}
-                      size="sm"
-                      className="xl:hidden fixed bottom-5 right-5 z-30"
-                    />
-                  </>
-                )}
-                {/* Large Color-Decomposed Calligraphic Character */}
-                <div className="flex flex-col items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.currentTarget.blur();
-                      synth.playClick();
-                      setOverrideModalOpen(true);
-                    }}
-                    title={t('點擊直接校訂此字拆解與筆畫顏色')}
-                    aria-label={`${currentItem.char} · ${t('點擊校訂拆字')}`}
-                    className="group relative rounded-2xl cursor-pointer focus:outline-none"
-                  >
-                    <ColorSplitGlyph
-                      char={currentItem.char}
-                      strokes={currentItem.info.strokes}
-                      strokeRootIndices={currentItem.info.strokeRootIndices}
-                      themeMode={themeMode}
-                      colorMix={colorMix}
-                      activeRootIdx={activeRootIdx}
-                      errorFlash={errorFlash}
-                      sizeClass="w-36 h-36 sm:w-44 sm:h-44"
-                    />
-                    <span
-                      aria-hidden="true"
-                      className={`pointer-events-none absolute top-1.5 right-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 backdrop-blur-xs ${
-                        isWash
-                          ? 'bg-[#F6F4EE]/92 border-[#141413]/18 text-[#2C2C29]'
-                          : 'bg-[#121824]/90 border-[#F2EEE6]/16 text-[#E6E1D8]'
-                      }`}
+              <div className="relative py-12 sm:py-16 min-h-[300px] sm:min-h-[340px] flex flex-col sm:flex-row items-center justify-center gap-8 sm:gap-12 overflow-visible">
+                {/* Natural Writing-Scale Color-Decomposed Calligraphic Character + Coincident Memory Palace Cloud */}
+                <div className="flex flex-col items-center gap-2.5">
+                  <div className="relative flex items-center justify-center">
+                    {keystrokeCloudEnabled && (
+                      <KeystrokePalaceCloud
+                        pulse={cloudPulse.pulse}
+                        visible={cloudPulse.visible}
+                        scriptMode={script}
+                        placement="coincident"
+                        size="coincident-sm"
+                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.currentTarget.blur();
+                        synth.playClick();
+                        setOverrideModalOpen(true);
+                      }}
+                      title={t('點擊直接校訂此字拆解與筆畫顏色')}
+                      aria-label={`${currentItem.char} · ${t('點擊校訂拆字')}`}
+                      className="group relative z-20 rounded-xl cursor-pointer focus:outline-none"
                     >
-                      <Pencil className="w-2.5 h-2.5 text-[var(--dojo-ochre)]" />
-                      <span>{t('校訂')}</span>
-                    </span>
-                  </button>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--dojo-text-muted)]">
+                      <ColorSplitGlyph
+                        char={currentItem.char}
+                        strokes={currentItem.info.strokes}
+                        strokeRootIndices={currentItem.info.strokeRootIndices}
+                        themeMode={themeMode}
+                        colorMix={colorMix}
+                        activeRootIdx={activeRootIdx}
+                        errorFlash={errorFlash}
+                        sizeClass="w-[68px] h-[68px] sm:w-[76px] sm:h-[76px]"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none absolute -top-2 -right-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 backdrop-blur-xs whitespace-nowrap ${
+                          isWash
+                            ? 'bg-[#F6F4EE]/92 border-[#141413]/18 text-[#2C2C29]'
+                            : 'bg-[#121824]/90 border-[#F2EEE6]/16 text-[#E6E1D8]'
+                        }`}
+                      >
+                        <Pencil className="w-2.5 h-2.5 text-[var(--dojo-ochre)]" />
+                        <span>{t('校訂')}</span>
+                      </span>
+                    </button>
+                  </div>
+                  <div className="relative z-20 flex items-center gap-1.5 text-[11px] text-[var(--dojo-text-muted)]">
                     <span
                       className="w-2 h-2 rounded-full"
                       style={{

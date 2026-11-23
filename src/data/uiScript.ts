@@ -535,6 +535,9 @@ const CHAR_MAP: Record<string, string> = {
   審: '审',
   帳: '帐',
   員: '员',
+  週: '周',
+  繪: '绘',
+  跡: '迹',
 };
 
 const MNEMONIC_PROSE_TOKENS: Array<[string, string]> = [

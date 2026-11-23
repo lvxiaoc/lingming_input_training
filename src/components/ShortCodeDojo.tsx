@@ -34,8 +34,7 @@ import { THEME_OPTIONS, ThemeMode, useThemeMode } from '../data/theme';
 import { useUiText } from '../data/uiScript';
 import { synth } from '../audio/synth';
 import {
-  isPalaceChamberKey,
-  resolveRadicalForChamberKey,
+  resolveDaSlotForShortCode,
   useKeystrokeCloud,
   useKeystrokeCloudPulse,
 } from '../data/keystrokeCloud';
@@ -287,15 +286,22 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
 
       const key = e.key.toLowerCase();
       const expected = currentItem.shortCode[typed.length];
+      const daSlot = resolveDaSlotForShortCode(
+        currentItem.shortCode,
+        currentItem.fullCode,
+        currentItem.roots,
+        currentItem.rootCodes,
+        typed.length
+      );
       setTotalKeys((n) => n + 1);
 
       if (key === expected) {
         const nextTyped = typed + key;
         const isComplete = nextTyped === currentItem.shortCode;
-        if (isPalaceChamberKey(key)) {
+        if (daSlot) {
           triggerCloud(
-            key,
-            resolveRadicalForChamberKey(currentItem.roots, key, typed.length),
+            daSlot.chamberKey,
+            daSlot.radical,
             'hit',
             key,
             isComplete ? 1650 : 2200
@@ -360,16 +366,8 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
         setRescueActive(true);
         setErrorFlash(true);
         window.setTimeout(() => setErrorFlash(false), 260);
-        if (isPalaceChamberKey(expected)) {
-          triggerCloud(
-            expected,
-            resolveRadicalForChamberKey(currentItem.roots, expected, typed.length),
-            'miss',
-            key,
-            2600
-          );
-        } else if (isPalaceChamberKey(key)) {
-          triggerCloud(key, null, 'pressed_only', key, 1600);
+        if (daSlot) {
+          triggerCloud(daSlot.chamberKey, daSlot.radical, 'miss', key, 2600);
         }
         const nextStore = recordKeyResult(masteryRef.current, expected, false, 900);
         onMasteryChange(nextStore);
@@ -677,27 +675,9 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
               </div>
             </div>
           ) : currentItem ? (
-            <div className="relative flex-1 flex flex-col items-center justify-center py-6 gap-5">
-              {keystrokeCloudEnabled && (
-                <>
-                  <KeystrokePalaceCloud
-                    pulse={cloudPulse.pulse}
-                    visible={cloudPulse.visible}
-                    scriptMode={scriptMode}
-                    size="md"
-                    className="hidden xl:flex absolute left-2 top-1/2 -translate-y-1/2 z-20"
-                  />
-                  <KeystrokePalaceCloud
-                    pulse={cloudPulse.pulse}
-                    visible={cloudPulse.visible}
-                    scriptMode={scriptMode}
-                    size="sm"
-                    className="xl:hidden fixed bottom-5 right-5 z-30"
-                  />
-                </>
-              )}
+            <div className="relative flex-1 flex flex-col items-center justify-center py-8 gap-6 min-h-[380px]">
               {/* Mastery & Tier Meta Line */}
-              <div className="flex items-center gap-2 text-xs text-[var(--dojo-text-muted)]">
+              <div className="relative z-20 flex items-center gap-2 text-xs text-[var(--dojo-text-muted)]">
                 <span className="text-[var(--dojo-ochre)] font-medium">
                   {currentItem.level === 1
                     ? t('一碼直上')
@@ -727,19 +707,43 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
                 )}
               </div>
 
-              {/* Main Calligraphic Color-Decomposed Character */}
-              <ColorSplitGlyph
-                char={currentItem.char}
-                strokes={currentItem.strokes}
-                strokeRootIndices={currentItem.strokeRootIndices}
-                themeMode={themeMode}
-                colorMix={colorMix}
-                errorFlash={errorFlash}
-                sizeClass="w-40 h-40 sm:w-48 sm:h-48"
-              />
+              {/* Natural Writing-Scale Color-Decomposed Character + 100% Target-Coincident Palace Cloud */}
+              <div className="relative flex items-center justify-center my-3">
+                {keystrokeCloudEnabled && (
+                  <>
+                    <KeystrokePalaceCloud
+                      pulse={cloudPulse.pulse}
+                      visible={cloudPulse.visible}
+                      scriptMode={scriptMode}
+                      placement="coincident"
+                      size="coincident"
+                      className="hidden sm:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+                    />
+                    <KeystrokePalaceCloud
+                      pulse={cloudPulse.pulse}
+                      visible={cloudPulse.visible}
+                      scriptMode={scriptMode}
+                      placement="coincident"
+                      size="coincident-sm"
+                      className="sm:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+                    />
+                  </>
+                )}
+                <div className="relative z-20">
+                  <ColorSplitGlyph
+                    char={currentItem.char}
+                    strokes={currentItem.strokes}
+                    strokeRootIndices={currentItem.strokeRootIndices}
+                    themeMode={themeMode}
+                    colorMix={colorMix}
+                    errorFlash={errorFlash}
+                    sizeClass="w-[68px] h-[68px] sm:w-[76px] sm:h-[76px]"
+                  />
+                </div>
+              </div>
 
               {/* Short-Code Key Slots */}
-              <div className="flex items-center gap-3">
+              <div className="relative z-20 flex items-center gap-3">
                 {currentItem.shortCode.split('').map((ch, idx) => {
                   const isTyped = idx < typed.length;
                   const isCurrent = idx === typed.length;

@@ -31,8 +31,8 @@ export const KeystrokeCloudToggle: React.FC<KeystrokeCloudToggleProps> = ({
       }}
       title={t(
         enabled
-          ? '擊鍵字根雲圖：已開啟（每次擊鍵自動浮現對應鍵位記憶宮殿雲圖，點擊關閉）'
-          : '擊鍵字根雲圖：已關閉（點擊開啟，全站練習擊鍵即顯對應鍵位雲圖）'
+          ? '擊鍵字根雲圖：已開啟（僅輸入字根首碼／大碼時在目標重合位浮現記憶宮殿雲圖，聲碼與韻碼不干擾；點擊關閉）'
+          : '擊鍵字根雲圖：已關閉（點擊開啟，擊鍵輸入字根首碼時於目標重合位顯影宮殿雲圖）'
       )}
       aria-pressed={enabled}
       className={`inline-flex items-center gap-1.5 rounded-lg border font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
@@ -48,7 +48,7 @@ export const KeystrokeCloudToggle: React.FC<KeystrokeCloudToggleProps> = ({
       ) : (
         <CloudOff className="w-3.5 h-3.5 shrink-0 opacity-75" />
       )}
-      <span className={compact ? 'hidden sm:inline' : 'hidden sm:inline'}>
+      <span className="hidden sm:inline">
         {compact
           ? t(enabled ? '擊鍵雲圖' : '雲圖已關')
           : t(enabled ? '擊鍵雲圖：開' : '擊鍵雲圖：關')}
@@ -62,26 +62,36 @@ interface KeystrokePalaceCloudProps {
   visible: boolean;
   scriptMode?: ScriptMode;
   /**
-   * Proportionally bounded cloud diameters so large target characters are never dwarfed or collided:
-   * - sm: 184px (mobile / tight panels)
-   * - md: 224px (ShortCodeDojo, ExtremeDrillStudio, Arcade, Desk Mode)
-   * - lg: 256px (Huangting Depth Mode left flank)
+   * - 'coincident': 100% target-overlapping Memory Palace cloud (anchorOnActive=true, variant="echo")
+   *   centered mathematically on the target glyph so gaze never drifts away from the character.
+   * - 'flank': Compact side-mounted preview (kept only as an optional fallback).
    */
-  size?: 'sm' | 'md' | 'lg';
+  placement?: 'coincident' | 'flank';
+  /** Preset diameter or explicit px override (`boxPx`) */
+  size?: 'sm' | 'md' | 'lg' | 'coincident-sm' | 'coincident' | 'coincident-lg';
+  boxPx?: number;
+  /** Optional style overrides for exact coordinate centering (e.g. GameCanvas stage) */
+  style?: React.CSSProperties;
   className?: string;
 }
 
-const SIZE_MAP: Record<'sm' | 'md' | 'lg', number> = {
+const SIZE_MAP: Record<NonNullable<KeystrokePalaceCloudProps['size']>, number> = {
   sm: 184,
   md: 224,
   lg: 256,
+  'coincident-sm': 320,
+  coincident: 400,
+  'coincident-lg': 460,
 };
 
 export const KeystrokePalaceCloud: React.FC<KeystrokePalaceCloudProps> = ({
   pulse,
   visible,
   scriptMode = 'both',
-  size = 'md',
+  placement = 'coincident',
+  size = 'coincident',
+  boxPx,
+  style,
   className = '',
 }) => {
   const t = useUiText();
@@ -89,12 +99,97 @@ export const KeystrokePalaceCloud: React.FC<KeystrokePalaceCloudProps> = ({
 
   if (!pulse) return null;
 
-  const px = SIZE_MAP[size];
   const chamber = LINGMING_CHAMBER_BY_KEY[pulse.chamberKey];
   if (!chamber) return null;
 
+  const isCoincident = placement === 'coincident';
+  const px = boxPx ?? SIZE_MAP[size];
   const isMiss = pulse.status === 'miss';
   const keyUpper = pulse.chamberKey.toUpperCase();
+
+  if (isCoincident) {
+    // Pure zero-offset coincident wrapper: outer box is strictly the cloud square
+    // so `left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2` locks the active radical dead-center on the target glyph.
+    return (
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none select-none ${className}`}
+        style={{
+          width: `${px}px`,
+          height: `${px}px`,
+          ...style,
+        }}
+      >
+        <div
+          className="relative w-full h-full flex items-center justify-center rounded-full"
+          style={{
+            opacity: visible ? 1 : 0,
+            transform: visible ? 'scale(1)' : 'scale(0.95)',
+            filter: isWash ? (visible ? 'blur(0px)' : 'blur(4px)') : 'none',
+            transition: visible
+              ? 'opacity 180ms cubic-bezier(0.16, 1, 0.3, 1), transform 220ms cubic-bezier(0.16, 1, 0.3, 1), filter 220ms ease-out'
+              : 'opacity 320ms ease-out, transform 320ms ease-out, filter 280ms ease-out',
+            background: isWash
+              ? isMiss
+                ? 'radial-gradient(circle at 50% 50%, rgba(184,59,42,0.06) 0%, rgba(243,241,236,0.42) 44%, rgba(243,241,236,0) 74%)'
+                : 'radial-gradient(circle at 50% 50%, rgba(243,241,236,0.46) 0%, rgba(243,241,236,0.24) 48%, rgba(243,241,236,0) 74%)'
+              : isMiss
+                ? 'radial-gradient(circle at 50% 50%, rgba(201,62,45,0.10) 0%, rgba(11,15,23,0.48) 44%, rgba(11,15,23,0) 74%)'
+                : 'radial-gradient(circle at 50% 50%, rgba(15,22,34,0.44) 0%, rgba(11,15,23,0.22) 48%, rgba(11,15,23,0) 74%)',
+          }}
+        >
+          <div className="w-full h-full">
+            <StrokeCloudStage
+              key={`${pulse.chamberKey}_${pulse.tick}`}
+              chamberKey={pulse.chamberKey}
+              activeChar={pulse.activeChar}
+              variant="echo"
+              anchorOnActive
+              scriptMode={scriptMode}
+            />
+          </div>
+
+          {/* Whisper-quiet Palace Chamber Seal floating at upper rim without shifting geometric center */}
+          <div
+            className={`absolute top-2.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] whitespace-nowrap backdrop-blur-xs ${
+              isMiss
+                ? isWash
+                  ? 'bg-[#FDF6F5]/92 border-[#B83B2A]/35 text-[#B83B2A]'
+                  : 'bg-[#251318]/90 border-[#E25A48]/40 text-[#F28B7D]'
+                : isWash
+                  ? 'bg-[#F8F6F0]/86 border-[#141413]/14 text-[#2E2E2A]'
+                  : 'bg-[#121927]/84 border-[#F2EEE6]/12 text-[#D6DCE8]'
+            }`}
+          >
+            {isMiss && pulse.pressedKey && (
+              <>
+                <span className="font-mono-tabular opacity-75">
+                  {t('誤')} {pulse.pressedKey.toUpperCase()}
+                </span>
+                <span aria-hidden="true" className="opacity-45">→</span>
+              </>
+            )}
+            <span className="font-mono-tabular font-bold text-[var(--dojo-ochre)]">
+              {keyUpper}
+            </span>
+            <span className="font-display font-semibold">
+              {chamber.primaryAnchor}
+              {t('宮')}
+            </span>
+            {pulse.activeChar && pulse.activeChar !== chamber.primaryAnchor && (
+              <>
+                <span aria-hidden="true" className="opacity-35">·</span>
+                <RadicalSymbol
+                  glyph={pulse.activeChar}
+                  className="font-display font-bold text-xs text-[var(--dojo-text-bright)]"
+                />
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -107,9 +202,9 @@ export const KeystrokePalaceCloud: React.FC<KeystrokePalaceCloudProps> = ({
         transition: visible
           ? 'opacity 190ms cubic-bezier(0.16, 1, 0.3, 1), transform 220ms cubic-bezier(0.16, 1, 0.3, 1), filter 220ms ease-out'
           : 'opacity 360ms ease-out, transform 360ms ease-out, filter 300ms ease-out',
+        ...style,
       }}
     >
-      {/* Proportionally bounded full-chamber cloud (anchorOnActive=false keeps 1:1 Memory Palace silhouette) */}
       <div
         className="relative flex items-center justify-center rounded-full"
         style={{
@@ -136,7 +231,6 @@ export const KeystrokePalaceCloud: React.FC<KeystrokePalaceCloudProps> = ({
         </div>
       </div>
 
-      {/* Whisper-quiet Palace Chamber Seal below the cloud */}
       <div
         className={`-mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] backdrop-blur-xs ${
           isMiss

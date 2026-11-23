@@ -34,6 +34,7 @@ export interface ActiveTargetSnapshot {
   typed: string;
   nextKey: string;
   nextRole?: CodeRole;
+  roles?: CodeRole[];
   parts: string[];
   palace?: PalaceMeta;
   xray?: GlyphEntry['xray'];
@@ -48,6 +49,8 @@ export interface ActiveTargetSnapshot {
   lastStrikeCorrect: boolean;
   lastStrikeTick: number;
   tabHintActive: boolean;
+  stageXRatio?: number;
+  stageYRatio?: number;
 }
 
 export interface HudSnapshot {
@@ -603,6 +606,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       typed: active.typed,
       nextKey,
       nextRole,
+      roles: active.entry.roles,
       parts: active.entry.parts,
       palace: active.entry.palace,
       xray: active.entry.xray,
@@ -617,6 +621,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       lastStrikeCorrect: s.lastStrikeCorrect,
       lastStrikeTick: s.lastStrikeTick,
       tabHintActive,
+      stageXRatio: active.x,
+      stageYRatio: s.height > 0 ? active.y / s.height : 0.48,
     });
   };
 
@@ -1746,7 +1752,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   ? depthMetrics.glyphSize
                   : Math.max(48, Math.round(depthMetrics.glyphSize * 1.35))
                 : isFocusMode
-                  ? 72
+                  ? 54
                   : 40;
             const glyphY =
               isFocusMode && curLayout === 'depth'
