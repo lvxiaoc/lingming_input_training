@@ -353,6 +353,7 @@ const CHAR_MAP: Record<string, string> = {
   彈: '弹',
   窗: '窗',
   略: '略',
+  塗: '涂',
   紙: '纸',
   紋: '纹',
   濃: '浓',

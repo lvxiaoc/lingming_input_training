@@ -1316,17 +1316,40 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                 </div>
               ) : currentItem ? (
                 <div className="flex flex-col items-center gap-2.5">
-                  {/* Giant Permanently-Centered, Lower-Anchored Calligraphic Focal Target */}
-                  <ColorSplitGlyph
-                    char={currentItem.char}
-                    strokes={currentItem.info.strokes}
-                    strokeRootIndices={currentItem.info.strokeRootIndices}
-                    themeMode={themeMode}
-                    colorMix={colorMix}
-                    activeRootIdx={activeRootIdx}
-                    errorFlash={errorFlash}
-                    sizeClass="w-44 h-44 sm:w-56 sm:h-56"
-                  />
+                  {/* Giant Permanently-Centered, Lower-Anchored Calligraphic Focal Target (Click directly to correct decomposition) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.currentTarget.blur();
+                      synth.playClick();
+                      setOverrideModalOpen(true);
+                    }}
+                    title={t('點擊直接校訂此字拆解與筆畫顏色')}
+                    aria-label={`${currentItem.char} · ${t('點擊校訂拆字')}`}
+                    className="group relative rounded-2xl cursor-pointer focus:outline-none"
+                  >
+                    <ColorSplitGlyph
+                      char={currentItem.char}
+                      strokes={currentItem.info.strokes}
+                      strokeRootIndices={currentItem.info.strokeRootIndices}
+                      themeMode={themeMode}
+                      colorMix={colorMix}
+                      activeRootIdx={activeRootIdx}
+                      errorFlash={errorFlash}
+                      sizeClass="w-44 h-44 sm:w-56 sm:h-56"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 backdrop-blur-xs ${
+                        isWash
+                          ? 'bg-[#F6F4EE]/92 border-[#141413]/18 text-[#2C2C29]'
+                          : 'bg-[#121824]/90 border-[#F2EEE6]/16 text-[#E6E1D8]'
+                      }`}
+                    >
+                      <Pencil className="w-2.5 h-2.5 text-[var(--dojo-ochre)]" />
+                      <span>{t('點擊校訂')}</span>
+                    </span>
+                  </button>
 
                   {/* Fixed-Height Hint Cushion: Hidden by default in adaptive/blind modes; gently fades in after hesitation */}
                   <div
@@ -1917,16 +1940,39 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
               <div className="py-5 flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10">
                 {/* Large Color-Decomposed Calligraphic Character */}
                 <div className="flex flex-col items-center gap-2">
-                  <ColorSplitGlyph
-                    char={currentItem.char}
-                    strokes={currentItem.info.strokes}
-                    strokeRootIndices={currentItem.info.strokeRootIndices}
-                    themeMode={themeMode}
-                    colorMix={colorMix}
-                    activeRootIdx={activeRootIdx}
-                    errorFlash={errorFlash}
-                    sizeClass="w-36 h-36 sm:w-44 sm:h-44"
-                  />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.currentTarget.blur();
+                      synth.playClick();
+                      setOverrideModalOpen(true);
+                    }}
+                    title={t('點擊直接校訂此字拆解與筆畫顏色')}
+                    aria-label={`${currentItem.char} · ${t('點擊校訂拆字')}`}
+                    className="group relative rounded-2xl cursor-pointer focus:outline-none"
+                  >
+                    <ColorSplitGlyph
+                      char={currentItem.char}
+                      strokes={currentItem.info.strokes}
+                      strokeRootIndices={currentItem.info.strokeRootIndices}
+                      themeMode={themeMode}
+                      colorMix={colorMix}
+                      activeRootIdx={activeRootIdx}
+                      errorFlash={errorFlash}
+                      sizeClass="w-36 h-36 sm:w-44 sm:h-44"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute top-1.5 right-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 backdrop-blur-xs ${
+                        isWash
+                          ? 'bg-[#F6F4EE]/92 border-[#141413]/18 text-[#2C2C29]'
+                          : 'bg-[#121824]/90 border-[#F2EEE6]/16 text-[#E6E1D8]'
+                      }`}
+                    >
+                      <Pencil className="w-2.5 h-2.5 text-[var(--dojo-ochre)]" />
+                      <span>{t('校訂')}</span>
+                    </span>
+                  </button>
                   <div className="flex items-center gap-1.5 text-[11px] text-[var(--dojo-text-muted)]">
                     <span
                       className="w-2 h-2 rounded-full"

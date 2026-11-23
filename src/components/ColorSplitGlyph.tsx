@@ -119,6 +119,7 @@ interface ColorSplitGlyphProps {
   sizeClass?: string;
   /** Optional interactive stroke painter hooks for decomposition editing */
   onStrokeClick?: (strokeIdx: number) => void;
+  onStrokeContextMenu?: (strokeIdx: number) => void;
   hoveredStrokeIdx?: number | null;
   onStrokeHover?: (strokeIdx: number | null) => void;
 }
@@ -133,6 +134,7 @@ export const ColorSplitGlyph: React.FC<ColorSplitGlyphProps> = ({
   errorFlash = false,
   sizeClass = 'w-44 h-44 sm:w-52 sm:h-52',
   onStrokeClick,
+  onStrokeContextMenu,
   hoveredStrokeIdx = null,
   onStrokeHover,
 }) => {
@@ -206,6 +208,14 @@ export const ColorSplitGlyph: React.FC<ColorSplitGlyphProps> = ({
                 strokeLinejoin="round"
                 className={interactive ? 'cursor-pointer' : undefined}
                 onClick={interactive ? () => onStrokeClick?.(idx) : undefined}
+                onContextMenu={
+                  onStrokeContextMenu
+                    ? (e) => {
+                        e.preventDefault();
+                        onStrokeContextMenu(idx);
+                      }
+                    : undefined
+                }
                 onMouseEnter={interactive ? () => onStrokeHover?.(idx) : undefined}
                 onMouseLeave={interactive ? () => onStrokeHover?.(null) : undefined}
                 style={{

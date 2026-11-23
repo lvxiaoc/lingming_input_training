@@ -98,6 +98,16 @@ export const CharOverrideModal: React.FC<CharOverrideModalProps> = ({
     });
   };
 
+  const handleCycleStroke = (strokeIdx: number) => {
+    synth.playClick();
+    setStrokeRootIndices((prev) => {
+      const next = [...prev];
+      const cur = next[strokeIdx] ?? 0;
+      next[strokeIdx] = cur < 0 ? 0 : cur + 1 >= rootRows.length ? -1 : cur + 1;
+      return next;
+    });
+  };
+
   const handleRedistributeStrokes = () => {
     const strokeCount = effectiveInfo.strokes?.length ?? 0;
     if (strokeCount === 0) return;
@@ -255,6 +265,12 @@ export const CharOverrideModal: React.FC<CharOverrideModalProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
+      onKeyDown={(e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          e.preventDefault();
+          handleSave();
+        }
+      }}
     >
       <div
         role="dialog"
@@ -306,6 +322,7 @@ export const CharOverrideModal: React.FC<CharOverrideModalProps> = ({
               colorMix={1}
               sizeClass="w-52 h-52 sm:w-60 sm:h-60"
               onStrokeClick={hasStrokes ? handlePaintStroke : undefined}
+              onStrokeContextMenu={hasStrokes ? handleCycleStroke : undefined}
               hoveredStrokeIdx={hoveredStrokeIdx}
               onStrokeHover={hasStrokes ? setHoveredStrokeIdx : undefined}
             />
@@ -315,7 +332,7 @@ export const CharOverrideModal: React.FC<CharOverrideModalProps> = ({
                 {/* Brush Selector */}
                 <div className="w-full">
                   <div className="flex items-center justify-between text-[11px] text-[var(--dojo-text-muted)] mb-1.5">
-                    <span>{t('1. 選取畫筆顏色，再點擊上方筆畫')}</span>
+                    <span>{t('1. 選畫筆左鍵重塗（右鍵循環切色）')}</span>
                     <button
                       type="button"
                       onClick={handleRedistributeStrokes}
@@ -398,6 +415,10 @@ export const CharOverrideModal: React.FC<CharOverrideModalProps> = ({
                           key={sIdx}
                           type="button"
                           onClick={() => handlePaintStroke(sIdx)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            handleCycleStroke(sIdx);
+                          }}
                           onMouseEnter={() => setHoveredStrokeIdx(sIdx)}
                           onMouseLeave={() => setHoveredStrokeIdx(null)}
                           className={`w-6 h-6 rounded-md text-[11px] font-mono-tabular font-bold border transition-transform cursor-pointer ${
