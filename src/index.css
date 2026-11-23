@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-@custom-variant wash (&:where([data-theme="wash"], [data-theme="wash"] *));
+@custom-variant wash (&:where([data-theme="wash"], [data-theme="wash"] *, .wash, .wash *));
 
 @layer base {
   :root {
@@ -31,7 +31,8 @@
     --dojo-crimson-wash: rgba(217, 74, 56, 0.18);
   }
 
-  :root[data-theme="wash"] {
+  :root[data-theme="wash"],
+  :root.wash {
     /* 宣紙水墨 (Pure Monochromatic Xuan Paper & Sumi Ink Gradations) */
     --dojo-canvas: #f3f1ec;
     --dojo-header: #eceae3;
@@ -265,12 +266,82 @@
   will-change: transform, opacity;
 }
 
-[data-theme="wash"] .wash-enter {
+[data-theme="wash"] .wash-enter,
+.wash .wash-enter {
   animation: inkWashReveal 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-[data-theme="wash"] .wash-enter-soft {
+[data-theme="wash"] .wash-enter-soft,
+.wash .wash-enter-soft {
   animation: inkWashSlideUp 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ==================== Xuan-Paper Ink Absorption Typography (.wash) ==================== */
+/* Grayscale antialiasing eliminates colored subpixel fringing; subtle SVG fractal-noise   */
+/* displacement + capillary shadow mimics sumi ink gently soaking into Xuan paper fibers.  */
+:where([data-theme="wash"], .wash) {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
+  font-kerning: normal;
+  font-synthesis-weight: none;
+}
+
+:where([data-theme="wash"], .wash) :is(
+  p,
+  a,
+  li,
+  dt,
+  dd,
+  th,
+  td,
+  label,
+  strong,
+  em,
+  small,
+  blockquote,
+  code,
+  kbd,
+  textarea,
+  input
+) {
+  text-shadow:
+    0 0 0.65px rgba(20, 20, 18, 0.26),
+    0 0 1.9px rgba(20, 20, 18, 0.085);
+  filter: url(#wash-ink-bleed-soft);
+}
+
+:where([data-theme="wash"], .wash) span:not([aria-hidden="true"]):not(.ink-aura-fade):not(.ink-aura-slow):not(.ink-droplet-fall):not(.ink-tendril-spread) {
+  text-shadow:
+    0 0 0.6px rgba(20, 20, 18, 0.24),
+    0 0 1.7px rgba(20, 20, 18, 0.08);
+  filter: url(#wash-ink-bleed-soft);
+}
+
+:where([data-theme="wash"], .wash) :is(h1, h2, h3, h4, h5, h6, .font-display) {
+  text-shadow:
+    0 0 0.95px rgba(16, 16, 15, 0.34),
+    0 0 2.8px rgba(18, 18, 17, 0.13);
+  filter: url(#wash-ink-bleed-display);
+}
+
+:where([data-theme="wash"], .wash) svg text {
+  text-rendering: geometricPrecision;
+  filter: url(#wash-ink-bleed-display);
+}
+
+/* Keep light-on-dark sumi-seal button text crisp without dark outer halo */
+:where([data-theme="wash"], .wash) :is(.text-white, [class*="text-white/"], [class*="text-[#F8F7F3]"]),
+:where([data-theme="wash"], .wash) :is(.text-white, [class*="text-white/"], [class*="text-[#F8F7F3]"]) span:not([aria-hidden="true"]),
+:where([data-theme="wash"], .wash) :is(.text-white, [class*="text-white/"], [class*="text-[#F8F7F3]"]) :is(strong, em) {
+  text-shadow: 0 0 0.7px rgba(248, 247, 243, 0.24);
+  filter: url(#wash-ink-bleed-soft);
+}
+
+/* Avoid compounding nested SVG filters on children inside already-filtered text blocks */
+:where([data-theme="wash"], .wash) :is(p, li, td, th, label, h1, h2, h3, h4, .font-display) :is(span, strong, em, a, code) {
+  filter: none;
 }
 
 .ink-aura-fade {
@@ -283,11 +354,13 @@
   will-change: transform, opacity, filter, border-radius;
 }
 
-[data-theme="wash"] .ink-aura-fade {
+[data-theme="wash"] .ink-aura-fade,
+.wash .ink-aura-fade {
   mix-blend-mode: multiply;
 }
 
-[data-theme="wash"] .ink-aura-slow {
+[data-theme="wash"] .ink-aura-slow,
+.wash .ink-aura-slow {
   mix-blend-mode: multiply;
 }
 

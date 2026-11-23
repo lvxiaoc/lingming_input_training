@@ -270,6 +270,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = themeMode;
+    document.documentElement.classList.toggle('wash', themeMode === 'wash');
     saveThemeMode(themeMode);
   }, [themeMode]);
 
