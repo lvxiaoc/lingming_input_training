@@ -129,6 +129,95 @@ function groupIntoLines(tokens: VerseToken[]): VerseToken[][] {
   return lines;
 }
 
+interface TakenRootSpan {
+  /** Index range [start, end) inside `rootCode` that is actually taken into the full character code */
+  matchStart: number;
+  matchEnd: number;
+  /** Index range [codeStart, codeEnd) inside the character's full `code` */
+  codeStart: number;
+  codeEnd: number;
+}
+
+/**
+ * Computes which exact letters of each root's own code (`rootCodes[i]`) are taken
+ * into the character's official Lingming full `code` (e.g. 玉: 王 ya -> Y, 丶 tu -> TU => YTU).
+ */
+function computeTakenRootSpans(code: string, rootCodes: string[]): TakenRootSpan[] {
+  const n = rootCodes.length;
+  if (n === 0) return [];
+  const r = rootCodes.map((x) => (x || '').toLowerCase());
+  const c = (code || '').toLowerCase();
+
+  type Candidate = Array<{ start: number; end: number }>;
+  const buildFromLens = (lens: number[]): Candidate =>
+    lens.map((len, i) => ({ start: 0, end: Math.min(len, r[i].length) }));
+
+  const candidates: Candidate[] = [];
+  if (n === 1) {
+    candidates.push(buildFromLens([r[0].length]));
+  } else if (n === 2) {
+    candidates.push(buildFromLens([1, r[1].length]));
+    candidates.push(buildFromLens([2, 2]));
+    candidates.push(buildFromLens([2, 1]));
+  } else if (n === 3) {
+    candidates.push(buildFromLens([1, 1, 2]));
+    candidates.push(buildFromLens([2, 1, 1]));
+    candidates.push(buildFromLens([1, 2, 1]));
+    // Edge case where 3rd root contributes its final vowel (e.g. 暉 hrbe: hri + bi + kce)
+    if (r[2].length >= 1) {
+      candidates.push([
+        { start: 0, end: Math.min(2, r[0].length) },
+        { start: 0, end: Math.min(1, r[1].length) },
+        { start: r[2].length - 1, end: r[2].length },
+      ]);
+    }
+  } else {
+    const last = n - 1;
+    // 1st root 2 consonants + 2nd root 1st + last root 1st
+    candidates.push(
+      r.map((rc, i) => ({
+        start: 0,
+        end: i === 0 ? Math.min(2, rc.length) : i === 1 || i === last ? Math.min(1, rc.length) : 0,
+      }))
+    );
+    // 1st, 2nd, 3rd, last each 1st key
+    candidates.push(
+      r.map((rc, i) => ({
+        start: 0,
+        end: i <= 2 || i === last ? Math.min(1, rc.length) : 0,
+      }))
+    );
+    // 1st 1, 2nd 2, last 1
+    candidates.push(
+      r.map((rc, i) => ({
+        start: 0,
+        end: i === 1 ? Math.min(2, rc.length) : i === 0 || i === last ? Math.min(1, rc.length) : 0,
+      }))
+    );
+  }
+
+  for (const cand of candidates) {
+    const joined = cand.map((sp, i) => r[i].slice(sp.start, sp.end)).join('');
+    if (joined === c) {
+      let offset = 0;
+      return cand.map((sp) => {
+        const len = sp.end - sp.start;
+        const out: TakenRootSpan = {
+          matchStart: sp.start,
+          matchEnd: sp.end,
+          codeStart: offset,
+          codeEnd: offset + len,
+        };
+        offset += len;
+        return out;
+      });
+    }
+  }
+
+  // Safe fallback if a rare override doesn't match standard templates
+  return r.map((rc) => ({ matchStart: 0, matchEnd: rc.length, codeStart: -1, codeEnd: -1 }));
+}
+
 interface HuangtingDojoProps {
   mastery: SchemeMasteryStore;
   onMasteryChange: (next: SchemeMasteryStore) => void;
@@ -284,15 +373,25 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
   const showRootGuide =
     isRescued || fadeMode === 'always' || (fadeMode === 'adaptive' && glyphLevel <= 1);
 
-  // Determine which radical corresponds to the next keystroke (for gentle focus on rescue)
+  const takenRootSpans = useMemo(() => {
+    if (!currentItem) return [];
+    return computeTakenRootSpans(currentItem.info.code, currentItem.info.rootCodes);
+  }, [currentItem]);
+
+  // Determine which radical corresponds to the next keystroke (using exact Lingming taken-key spans)
   const activeRootIdx = useMemo(() => {
     if (!currentItem || !showRootGuide) return null;
     const rootCount = currentItem.info.roots.length;
     if (rootCount <= 1) return 0;
-    if (typed.length === 0) return 0;
-    if (typed.length >= currentItem.info.code.length - 1) return rootCount - 1;
-    return Math.min(rootCount - 1, typed.length);
-  }, [currentItem, typed.length, showRootGuide]);
+    const pos = typed.length;
+    const exactIdx = takenRootSpans.findIndex(
+      (sp) => sp.codeStart >= 0 && pos >= sp.codeStart && pos < sp.codeEnd
+    );
+    if (exactIdx >= 0) return exactIdx;
+    if (pos === 0) return 0;
+    if (pos >= currentItem.info.code.length - 1) return rootCount - 1;
+    return Math.min(rootCount - 1, pos);
+  }, [currentItem, typed.length, showRootGuide, takenRootSpans]);
 
   // Whole-scripture mastery distribution (for current script)
   const scriptureStats = useMemo(() => {
@@ -528,9 +627,9 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
           : '化境 · 純墨無痕';
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--dojo-bg)] text-[var(--dojo-text)] select-none">
+    <div className="relative z-10 w-full h-full overflow-y-auto flex flex-col bg-[var(--dojo-canvas)] wash:bg-transparent text-[var(--dojo-text)] select-none">
       {/* Strict 3-Zone Top Header */}
-      <header className="sticky top-0 z-30 h-14 px-4 sm:px-6 border-b border-[var(--dojo-border)] bg-[var(--dojo-surface)]/92 backdrop-blur-md flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-30 h-14 px-4 sm:px-6 border-b border-[var(--dojo-border)] bg-[var(--dojo-header)]/95 wash:bg-[#ECEAE3]/92 backdrop-blur-md flex items-center justify-between gap-3">
         {/* Left: Back + Title */}
         <div className="flex items-center gap-3 min-w-0">
           <button
@@ -669,7 +768,7 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
         {/* Left Zone (8 cols): Active Calligraphy Desk + Scripture Scroll */}
         <section className="lg:col-span-8 flex flex-col gap-4">
           {/* Chapter Header & Daily Chanting Ledger */}
-          <div className="bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-2xl p-4 sm:p-5">
+          <div className="bg-[var(--dojo-surface)] wash:bg-[#F5F3EE]/88 wash:backdrop-blur-[2px] border border-[var(--dojo-border)] rounded-2xl p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-[var(--dojo-border)]">
               <div className="flex items-center gap-2">
                 <button
@@ -867,26 +966,35 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                 </div>
 
                 {/* Right of Focal Glyph: Keycode Slots & Color-Matched Radical Leads */}
-                <div className="flex flex-col items-center sm:items-start gap-3.5 min-w-[240px]">
+                <div className="flex flex-col items-center sm:items-start gap-3.5 min-w-[250px]">
                   {/* Full-code input slots */}
                   <div className="flex items-center gap-2">
                     {currentItem.info.code.split('').map((ch, idx) => {
                       const isTyped = idx < typed.length;
                       const isCurrent = idx === typed.length;
+                      const isFinalVowel =
+                        idx === currentItem.info.code.length - 1 && 'aeiou'.includes(ch);
                       return (
                         <div
                           key={idx}
-                          className={`w-10 h-12 sm:w-11 sm:h-13 rounded-lg border-2 flex items-center justify-center font-mono-tabular text-xl font-bold uppercase transition-all ${
+                          className={`w-11 h-13 sm:w-12 sm:h-14 rounded-xl border-2 flex flex-col items-center justify-center font-mono-tabular transition-all ${
                             isTyped
                               ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)] text-[var(--dojo-pine-text)]'
                               : isCurrent && errorFlash
                                 ? 'bg-[var(--dojo-crimson-wash)] border-[var(--dojo-crimson)] text-[var(--dojo-crimson-text)]'
                                 : isCurrent
-                                  ? 'bg-[var(--dojo-surface-2)] border-[var(--dojo-ochre)] text-[var(--dojo-text-bright)]'
-                                  : 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] text-[var(--dojo-text-muted)]'
+                                  ? 'bg-[var(--dojo-surface-2)] wash:bg-[#FFFFFF]/95 border-[var(--dojo-ochre)] text-[var(--dojo-text-bright)] shadow-xs'
+                                  : 'bg-[var(--dojo-surface-inset)] wash:bg-[#FAF9F5]/88 border-[var(--dojo-border-strong)] text-[var(--dojo-text-sub)]'
                           }`}
                         >
-                          {isTyped ? typed[idx] : showKeyGuide ? ch : '·'}
+                          <span className="text-xl font-bold uppercase leading-none">
+                            {isTyped ? typed[idx] : showKeyGuide ? ch : '·'}
+                          </span>
+                          {showKeyGuide && isFinalVowel && (
+                            <span className="text-[9px] leading-none mt-1 opacity-65 font-sans">
+                              {t('韻尾')}
+                            </span>
+                          )}
                         </div>
                       );
                     })}
@@ -904,7 +1012,7 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                     )}
                   </div>
 
-                  {/* Color-Matched Radical Decomposition Leads (fades with mastery, snaps back on error/Tab!) */}
+                  {/* Color-Matched Radical Decomposition Leads (highlights exact taken keys vs omitted keys!) */}
                   <div className="min-h-[3.25rem] flex flex-col justify-center gap-1.5">
                     {showRootGuide ? (
                       <div className="flex flex-wrap items-center gap-2">
@@ -914,18 +1022,28 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                             themeMode,
                             Math.max(0.65, colorMix)
                           );
-                          const rootMa = currentItem.info.rootCodes[rIdx] || '';
+                          const rootMa = (currentItem.info.rootCodes[rIdx] || '').toUpperCase();
+                          const span = takenRootSpans[rIdx];
+                          const isActiveRoot = activeRootIdx === rIdx;
+                          const hasTaken = span ? span.matchEnd > span.matchStart : rootMa.length > 0;
                           return (
                             <div
                               key={`${root}_${rIdx}`}
-                              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-all"
                               style={{
-                                borderColor: isWash
-                                  ? 'rgba(24,24,22,0.14)'
-                                  : 'rgba(255,255,255,0.10)',
+                                borderColor: isActiveRoot
+                                  ? rootColor
+                                  : isWash
+                                    ? 'rgba(24,24,22,0.16)'
+                                    : 'rgba(255,255,255,0.11)',
                                 backgroundColor: isWash
-                                  ? 'rgba(243,241,236,0.7)'
-                                  : 'rgba(255,255,255,0.03)',
+                                  ? isActiveRoot
+                                    ? 'rgba(255,255,255,0.92)'
+                                    : 'rgba(243,241,236,0.72)'
+                                  : isActiveRoot
+                                    ? 'rgba(255,255,255,0.07)'
+                                    : 'rgba(255,255,255,0.03)',
+                                opacity: hasTaken ? 1 : 0.55,
                               }}
                             >
                               <RadicalSymbol
@@ -934,11 +1052,25 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                                 style={{ color: rootColor }}
                               />
                               {showKeyGuide && rootMa && (
-                                <span
-                                  className="font-mono-tabular text-[11px] font-semibold uppercase"
-                                  style={{ color: rootColor }}
-                                >
-                                  {rootMa}
+                                <span className="font-mono-tabular text-[11px] uppercase tracking-wide inline-flex items-baseline">
+                                  {rootMa.split('').map((letter, lIdx) => {
+                                    const taken =
+                                      !span ||
+                                      (lIdx >= span.matchStart && lIdx < span.matchEnd);
+                                    return (
+                                      <span
+                                        key={lIdx}
+                                        style={{ color: rootColor }}
+                                        className={
+                                          taken
+                                            ? 'font-bold'
+                                            : 'opacity-35 line-through font-normal'
+                                        }
+                                      >
+                                        {letter}
+                                      </span>
+                                    );
+                                  })}
                                 </span>
                               )}
                             </div>
@@ -984,7 +1116,7 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
           </div>
 
           {/* Living Classical Scripture Scroll (Click any char to jump!) */}
-          <div className="bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-2xl p-5 sm:p-6">
+          <div className="bg-[var(--dojo-surface)] wash:bg-[#F5F3EE]/88 wash:backdrop-blur-[2px] border border-[var(--dojo-border)] rounded-2xl p-5 sm:p-6">
             <div className="flex items-center justify-between gap-2 pb-3 mb-4 border-b border-[var(--dojo-border)] text-xs">
               <div className="flex items-center gap-2 text-[var(--dojo-text-sub)]">
                 <BookOpen className="w-3.5 h-3.5 text-[var(--dojo-ochre)]" />
@@ -1090,7 +1222,7 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
         </section>
 
         {/* Right Zone (4 cols): Whole-Scripture Mastery Ledger & 36-Chapter Index */}
-        <aside className="lg:col-span-4 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-2xl p-4 sm:p-5 flex flex-col gap-4">
+        <aside className="lg:col-span-4 bg-[var(--dojo-surface)] wash:bg-[#F5F3EE]/88 wash:backdrop-blur-[2px] border border-[var(--dojo-border)] rounded-2xl p-4 sm:p-5 flex flex-col gap-4">
           {/* Scripture Mastery Distribution */}
           <div className="pb-4 border-b border-[var(--dojo-border)]">
             <div className="flex items-baseline justify-between gap-2 mb-2">

@@ -384,9 +384,9 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--dojo-bg)] text-[var(--dojo-text)] select-none">
+    <div className="relative z-10 w-full h-full overflow-y-auto flex flex-col bg-[var(--dojo-canvas)] wash:bg-transparent text-[var(--dojo-text)] select-none">
       {/* Strict 3-Zone Top Navigation Bar */}
-      <header className="sticky top-0 z-30 h-14 px-4 sm:px-6 border-b border-[var(--dojo-border)] bg-[var(--dojo-surface)]/92 backdrop-blur-md flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-30 h-14 px-4 sm:px-6 border-b border-[var(--dojo-border)] bg-[var(--dojo-header)]/95 wash:bg-[#ECEAE3]/92 backdrop-blur-md flex items-center justify-between gap-3">
         {/* Left: Back + Title */}
         <div className="flex items-center gap-3 min-w-0">
           <button
@@ -515,7 +515,7 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
       {/* Main 2-Zone Dojo Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-5 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left Zone (8 cols): Focused Short-Code Reflex Stage */}
-        <section className="lg:col-span-8 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-2xl p-5 sm:p-7 flex flex-col justify-between min-h-[540px]">
+        <section className="lg:col-span-8 bg-[var(--dojo-surface)] wash:bg-[#F5F3EE]/88 wash:backdrop-blur-[2px] border border-[var(--dojo-border)] rounded-2xl p-5 sm:p-7 flex flex-col justify-between min-h-[540px]">
           {/* Top Unboxed Metrics & Scaffold Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[var(--dojo-border)] text-xs">
             <div className="flex flex-wrap items-center gap-2 font-mono-tabular text-[var(--dojo-text-sub)]">
@@ -796,7 +796,7 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
         </section>
 
         {/* Right Zone (4 cols): Short-Code Structure & 20x5 Matrix Reference */}
-        <aside className="lg:col-span-4 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-2xl p-4 sm:p-5 flex flex-col gap-4">
+        <aside className="lg:col-span-4 bg-[var(--dojo-surface)] wash:bg-[#F5F3EE]/88 wash:backdrop-blur-[2px] border border-[var(--dojo-border)] rounded-2xl p-4 sm:p-5 flex flex-col gap-4">
           {/* Inspector Header Switch */}
           <div className="flex items-center justify-between gap-2 pb-3 border-b border-[var(--dojo-border)]">
             <div className="inline-flex items-center p-0.5 bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] rounded-lg">
