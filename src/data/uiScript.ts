@@ -539,6 +539,8 @@ const CHAR_MAP: Record<string, string> = {
   繪: '绘',
   跡: '迹',
   側: '侧',
+  緩: '缓',
+  勻: '匀',
 };
 
 const MNEMONIC_PROSE_TOKENS: Array<[string, string]> = [

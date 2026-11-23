@@ -26,8 +26,8 @@ class DojoSynth {
     }
   }
 
-  private ensureContext(): AudioContext | null {
-    if (this.muted) return null;
+  private ensureContext(ignoreKeySfxMute = false): AudioContext | null {
+    if (!ignoreKeySfxMute && this.muted) return null;
     if (!this.ctx && typeof window !== 'undefined') {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx) {
@@ -38,6 +38,44 @@ class DojoSynth {
       this.ctx.resume().catch(() => {});
     }
     return this.ctx;
+  }
+
+  public getMetronomeAudioTime(): number | null {
+    const ctx = this.ensureContext(true);
+    if (!ctx || ctx.state !== 'running') return null;
+    return ctx.currentTime;
+  }
+
+  // Whisper-soft sandalwood/guqin damped pulse for the invisible rhythm beat track
+  public playMetronomeTick(isDownbeat: boolean, volumeScale = 1, when?: number): void {
+    const ctx = this.ensureContext(true);
+    if (!ctx) return;
+    const t = when !== undefined ? Math.max(ctx.currentTime, when) : ctx.currentTime;
+    const vol = Math.max(0, Math.min(1.5, volumeScale));
+
+    const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+
+    osc.type = isDownbeat ? 'triangle' : 'sine';
+    const startHz = isDownbeat ? 295 : 225;
+    const endHz = isDownbeat ? 168 : 142;
+    const decay = isDownbeat ? 0.044 : 0.030;
+    const peakGain = (isDownbeat ? 0.048 : 0.025) * vol;
+
+    osc.frequency.setValueAtTime(startHz, t);
+    osc.frequency.exponentialRampToValueAtTime(endHz, t + decay);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(isDownbeat ? 640 : 460, t);
+
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(peakGain, t + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + decay + 0.008);
+
+    osc.connect(filter).connect(gain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + decay + 0.015);
   }
 
   // Soft muted mechanical keycap thock (no distracting ding-ding chimes)

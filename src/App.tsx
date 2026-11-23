@@ -104,6 +104,7 @@ import { CorrectionReportCard } from './components/CorrectionReportCard';
 import { GrowthAnalyticsPanel } from './components/GrowthAnalyticsPanel';
 import { FirebaseErrorBoundary } from './components/FirebaseErrorBoundary';
 import { KeystrokeCloudToggle, KeystrokePalaceCloud } from './components/KeystrokePalaceCloud';
+import { RhythmMetronome } from './components/RhythmMetronome';
 import { synth } from './audio/synth';
 import { speech } from './audio/speech';
 
@@ -2129,6 +2130,16 @@ export default function App() {
                 resetSignal={resetSignal}
               />
             </div>
+
+            {/* Layer 3: Curve-Driven Rhythm Metronome & Invisible Beat Track */}
+            <RhythmMetronome
+              mastery={mastery}
+              liveCpm={hud.cpm}
+              trainingScope={trainingScope}
+              paused={gameState !== 'PLAYING'}
+              lastStrikeTick={target?.lastStrikeTick ?? 0}
+              lastStrikeCorrect={target?.lastStrikeCorrect ?? true}
+            />
           </main>
 
           {/* SPLIT MODE ONLY: Classic bottom mechanical keyboard */}
