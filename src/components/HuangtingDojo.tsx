@@ -10,6 +10,7 @@ import {
   Flame,
   Layers,
   List,
+  Pencil,
   RotateCcw,
   ScrollText,
   Sparkles,
@@ -23,6 +24,15 @@ import {
   HuangtingCharInfo,
 } from '../data/huangtingjing';
 import {
+  applyOverrideToCharInfo,
+  BUILTIN_HUANGTING_OVERRIDES,
+  HuangtingCharOverride,
+  HuangtingOverrideMap,
+  loadUserHuangtingOverrides,
+  resolveHuangtingCharInfo,
+  saveUserHuangtingOverrides,
+} from '../data/huangtingOverrides';
+import {
   recordGlyphCompletion,
   recordKeyResult,
   SchemeMasteryStore,
@@ -31,6 +41,7 @@ import { THEME_OPTIONS, ThemeMode, useThemeMode } from '../data/theme';
 import { useUiText } from '../data/uiScript';
 import { synth } from '../audio/synth';
 import { ColorSplitGlyph, getRootColor, RadicalSymbol } from './ColorSplitGlyph';
+import { CharOverrideModal } from './CharOverrideModal';
 
 type ScriptureScript = 'trad' | 'simp';
 type FadeMode = 'adaptive' | 'always' | 'blind';
@@ -130,7 +141,10 @@ interface VerseToken {
   info?: HuangtingCharInfo;
 }
 
-function tokenizeChapterText(text: string): {
+function tokenizeChapterText(
+  text: string,
+  userOverrides: HuangtingOverrideMap
+): {
   tokens: VerseToken[];
   typableChars: Array<{ char: string; tokenIdx: number; info: HuangtingCharInfo }>;
 } {
@@ -139,7 +153,7 @@ function tokenizeChapterText(text: string): {
   const typableChars: Array<{ char: string; tokenIdx: number; info: HuangtingCharInfo }> = [];
   for (let i = 0; i < chars.length; i++) {
     const ch = chars[i];
-    const info = HUANGTING_CHAR_MAP[ch];
+    const info = resolveHuangtingCharInfo(ch, userOverrides);
     if (info && info.code) {
       const typableIdx = typableChars.length;
       tokens.push({ char: ch, isTypable: true, typableIdx, info });
@@ -290,6 +304,36 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
   const [hesitationSec, setHesitationSec] = useState<number>(() => loadHesitationSec());
   const [allowShortCode, setAllowShortCode] = useState<boolean>(true);
   const [weakDrillChars, setWeakDrillChars] = useState<string[] | null>(null);
+  const [userOverrides, setUserOverrides] = useState<HuangtingOverrideMap>(() =>
+    loadUserHuangtingOverrides()
+  );
+  const [overrideModalOpen, setOverrideModalOpen] = useState<boolean>(false);
+
+  const handleSaveCharOverride = useCallback((ch: string, override: HuangtingCharOverride) => {
+    setUserOverrides((prev) => {
+      const next = { ...prev, [ch]: override };
+      saveUserHuangtingOverrides(next);
+      return next;
+    });
+    setTyped('');
+  }, []);
+
+  const handleResetCharOverride = useCallback((ch: string) => {
+    setUserOverrides((prev) => {
+      if (!(ch in prev)) return prev;
+      const next = { ...prev };
+      delete next[ch];
+      saveUserHuangtingOverrides(next);
+      return next;
+    });
+    setTyped('');
+  }, []);
+
+  const handleImportCharOverrides = useCallback((merged: HuangtingOverrideMap) => {
+    saveUserHuangtingOverrides(merged);
+    setUserOverrides(merged);
+    setTyped('');
+  }, []);
 
   // Auto-hide top & bottom chrome in Depth mode for true distraction-free chanting
   const [chromeRevealed, setChromeRevealed] = useState<boolean>(true);
@@ -422,10 +466,10 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
 
   const { tokens, typableChars } = useMemo(() => {
     if (weakDrillChars && weakDrillChars.length > 0) {
-      return tokenizeChapterText(weakDrillChars.join(''));
+      return tokenizeChapterText(weakDrillChars.join(''), userOverrides);
     }
-    return tokenizeChapterText(chapterText);
-  }, [chapterText, weakDrillChars]);
+    return tokenizeChapterText(chapterText, userOverrides);
+  }, [chapterText, weakDrillChars, userOverrides]);
 
   const verseLines = useMemo(() => groupIntoLines(tokens), [tokens]);
 
@@ -496,7 +540,13 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
 
   // Automatic gentle hesitation rescue ("猶豫之後漸顯") using user-adjustable thinking delay
   useEffect(() => {
-    if (chapterDone || !currentItem || fadeMode !== 'adaptive' || hesitationSec <= 0) {
+    if (
+      chapterDone ||
+      !currentItem ||
+      fadeMode !== 'adaptive' ||
+      hesitationSec <= 0 ||
+      overrideModalOpen
+    ) {
       setHesitationRescue(false);
       return;
     }
@@ -506,7 +556,17 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
       setHesitationRescue(true);
     }, delayMs);
     return () => window.clearTimeout(timer);
-  }, [cursor, chapterId, script, typed, chapterDone, currentItem, fadeMode, hesitationSec]);
+  }, [
+    cursor,
+    chapterId,
+    script,
+    typed,
+    chapterDone,
+    currentItem,
+    fadeMode,
+    hesitationSec,
+    overrideModalOpen,
+  ]);
 
   // Core signature: Mastery-adaptive pigment-to-ink fading + instant rescue on error/hesitation/Tab
   const isImmediateRescue = rescueActive || hadError || errorFlash;
@@ -618,6 +678,13 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (overrideModalOpen) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setOverrideModalOpen(false);
+        }
+        return;
+      }
       if (e.key === 'Escape') {
         e.preventDefault();
         if (chapterDrawerOpen) {
@@ -784,10 +851,15 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
     selectChapter,
     viewMode,
     clearChromeTimer,
+    overrideModalOpen,
   ]);
 
   const showDepthChrome =
-    viewMode !== 'depth' || chromeRevealed || chapterDrawerOpen || chapterDone;
+    viewMode !== 'depth' ||
+    chromeRevealed ||
+    chapterDrawerOpen ||
+    chapterDone ||
+    overrideModalOpen;
 
   const accuracy = totalKeys > 0 ? Math.round((correctKeys / totalKeys) * 100) : 100;
   const avgMs = completedChars > 0 ? Math.round(totalCharMs / completedChars) : 0;
@@ -1530,6 +1602,29 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                 {rescueActive ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 <span>{t('Tab 顯影')}</span>
               </button>
+              {currentItem && !chapterDone && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      synth.playClick();
+                      setOverrideModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1 hover:text-[var(--dojo-text-bright)] transition-colors whitespace-nowrap cursor-pointer"
+                    title={t('校訂當前字的拆解字根、編碼或筆畫歸屬並持久化保存')}
+                  >
+                    <Pencil className="w-3 h-3" />
+                    <span>{t('校訂拆字')}</span>
+                    {Boolean(userOverrides[currentItem.char]) && (
+                      <span
+                        aria-hidden="true"
+                        className="w-1.5 h-1.5 rounded-full bg-[var(--dojo-ochre)]"
+                      />
+                    )}
+                  </button>
+                </>
+              )}
               <span aria-hidden="true">·</span>
               <button
                 type="button"
@@ -2018,6 +2113,25 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                         <span>{t('Tab 顯影引線')}</span>
                       </button>
                       <span aria-hidden="true">·</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          synth.playClick();
+                          setOverrideModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 hover:text-[var(--dojo-text-bright)] transition-colors cursor-pointer"
+                        title={t('校訂當前字的拆解字根、編碼或筆畫歸屬並持久化保存')}
+                      >
+                        <Pencil className="w-3 h-3" />
+                        <span>{t('校訂拆字')}</span>
+                        {Boolean(userOverrides[currentItem.char]) && (
+                          <span
+                            aria-hidden="true"
+                            className="w-1.5 h-1.5 rounded-full bg-[var(--dojo-ochre)]"
+                          />
+                        )}
+                      </button>
+                      <span aria-hidden="true">·</span>
                       <span>{t('Space 清空')}</span>
                       {lastUsedShort && (
                         <>
@@ -2247,6 +2361,25 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
           </div>
         </aside>
       </main>
+      )}
+
+      {/* Interactive Character Decomposition & Stroke-Coloring Override Modal */}
+      {overrideModalOpen && currentItem && HUANGTING_CHAR_MAP[currentItem.char] && (
+        <CharOverrideModal
+          char={currentItem.char}
+          defaultInfo={applyOverrideToCharInfo(
+            HUANGTING_CHAR_MAP[currentItem.char],
+            BUILTIN_HUANGTING_OVERRIDES[currentItem.char]
+          )}
+          effectiveInfo={currentItem.info}
+          hasUserOverride={Boolean(userOverrides[currentItem.char])}
+          allUserOverrides={userOverrides}
+          themeMode={themeMode}
+          onSave={handleSaveCharOverride}
+          onResetChar={handleResetCharOverride}
+          onImportOverrides={handleImportCharOverrides}
+          onClose={() => setOverrideModalOpen(false)}
+        />
       )}
     </div>
   );

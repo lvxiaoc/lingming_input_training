@@ -34,8 +34,13 @@ export function blendRgb(
 
 export function getRootColor(rootIndex: number, themeMode: ThemeMode, colorMix: number): string {
   const isWash = themeMode === 'wash';
-  const palette = isWash ? WASH_ROOT_RGB : NIGHT_ROOT_RGB;
   const ink = isWash ? WASH_INK_RGB : NIGHT_INK_RGB;
+  if (rootIndex < 0) {
+    // Omitted middle radical stroke: soft muted gray-ink when colorMix is high, unifying into full ink at mastery
+    const neutralMuted: [number, number, number] = isWash ? [122, 120, 114] : [138, 146, 160];
+    return blendRgb(ink, neutralMuted, colorMix);
+  }
+  const palette = isWash ? WASH_ROOT_RGB : NIGHT_ROOT_RGB;
   const pigment = palette[rootIndex % palette.length];
   return blendRgb(ink, pigment, colorMix);
 }
@@ -112,6 +117,10 @@ interface ColorSplitGlyphProps {
   /** True when user just mistyped — adds crisp vermilion ring pulse */
   errorFlash?: boolean;
   sizeClass?: string;
+  /** Optional interactive stroke painter hooks for decomposition editing */
+  onStrokeClick?: (strokeIdx: number) => void;
+  hoveredStrokeIdx?: number | null;
+  onStrokeHover?: (strokeIdx: number | null) => void;
 }
 
 export const ColorSplitGlyph: React.FC<ColorSplitGlyphProps> = ({
@@ -123,9 +132,13 @@ export const ColorSplitGlyph: React.FC<ColorSplitGlyphProps> = ({
   activeRootIdx = null,
   errorFlash = false,
   sizeClass = 'w-44 h-44 sm:w-52 sm:h-52',
+  onStrokeClick,
+  hoveredStrokeIdx = null,
+  onStrokeHover,
 }) => {
   const isWash = themeMode === 'wash';
   const hasStrokes = Boolean(strokes && strokes.length > 0);
+  const interactive = Boolean(onStrokeClick);
 
   if (!hasStrokes) {
     // Graceful typographic fallback for the ~1.3% ultra-rare classical Daoist glyphs not in MakeMeAHanzi
@@ -170,7 +183,9 @@ export const ColorSplitGlyph: React.FC<ColorSplitGlyphProps> = ({
         <g transform="translate(0, 900) scale(1, -1)">
           {strokes!.map((d, idx) => {
             const rootIdx = strokeRootIndices?.[idx] ?? 0;
+            const isHovered = hoveredStrokeIdx === idx;
             const isDimmed =
+              !interactive &&
               colorMix >= 0.45 &&
               activeRootIdx !== null &&
               activeRootIdx !== undefined &&
@@ -185,9 +200,16 @@ export const ColorSplitGlyph: React.FC<ColorSplitGlyphProps> = ({
                 key={idx}
                 d={d}
                 fill={fill}
-                fillOpacity={isDimmed ? 0.55 : 0.96}
+                fillOpacity={isHovered ? 1 : isDimmed ? 0.55 : rootIdx < 0 && colorMix >= 0.45 ? 0.62 : 0.96}
+                stroke={isHovered ? (isWash ? '#141413' : '#FFFFFF') : 'none'}
+                strokeWidth={isHovered ? 18 : 0}
+                strokeLinejoin="round"
+                className={interactive ? 'cursor-pointer' : undefined}
+                onClick={interactive ? () => onStrokeClick?.(idx) : undefined}
+                onMouseEnter={interactive ? () => onStrokeHover?.(idx) : undefined}
+                onMouseLeave={interactive ? () => onStrokeHover?.(null) : undefined}
                 style={{
-                  transition: 'fill 320ms ease, fill-opacity 240ms ease',
+                  transition: 'fill 260ms ease, fill-opacity 200ms ease',
                 }}
                 shapeRendering="geometricPrecision"
               />

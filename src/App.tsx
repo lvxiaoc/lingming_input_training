@@ -91,6 +91,7 @@ import { ExtremeDrillStudio } from './components/ExtremeDrillStudio';
 import { ShortCodeDojo } from './components/ShortCodeDojo';
 import { HuangtingDojo } from './components/HuangtingDojo';
 import { HomeTutorialModal, TutorialTabId } from './components/HomeTutorialModal';
+import { WeakKeyRadarCard } from './components/WeakKeyRadarCard';
 import { synth } from './audio/synth';
 import { speech } from './audio/speech';
 
@@ -1038,7 +1039,7 @@ export default function App() {
 
       {/* ==================== TITLE SCREEN ==================== */}
       {gameState === 'TITLE_MENU' && (
-        <div className="relative z-10 w-full h-full flex flex-col justify-between overflow-hidden">
+        <div className="relative z-10 w-full h-full flex flex-col justify-between overflow-y-auto overflow-x-hidden">
           {!heroImgFailed ? (
             <img
               src={TITLE_ART_URL}
@@ -1147,8 +1148,9 @@ export default function App() {
             </div>
           </div>
 
-          {/* Center-left Hero Lockup — Brand + Primary & Specialized Entries */}
-          <div className="relative z-10 px-6 sm:px-10 my-auto max-w-2xl wash-enter">
+          {/* Main Hero Row: Left Brand & Entries + Right Compact Weak-Key Radar Chart */}
+          <div className="relative z-10 w-full max-w-6xl mx-auto px-6 sm:px-10 py-6 my-auto flex flex-col lg:flex-row lg:items-end justify-between gap-6 lg:gap-10">
+          <div className="flex-1 min-w-0 max-w-2xl wash-enter">
             <svg
               viewBox="0 0 430 92"
               className="w-full max-w-[380px] h-auto mb-6"
@@ -1425,6 +1427,17 @@ export default function App() {
                 ))}
               </div>
             </div>
+          </div>
+
+          {/* Right Compact Weak-Key Radar Chart (Lowest-Mastery 5 Palace Chambers) */}
+          <WeakKeyRadarCard
+            weakestKeys={weakestKeys}
+            hasPracticedData={Object.values(mastery.keys).some((k) => k.attempts > 0)}
+            onStartWeakKeyDrill={(keys) => startPlay('weakkey', keys, 'root')}
+            onLaunchChamberDrill={(key) =>
+              handleLaunchChamberDrill(key, 'root', false, 'PALACE_CLOUD')
+            }
+          />
           </div>
 
           {/* Quiet bottom line */}
