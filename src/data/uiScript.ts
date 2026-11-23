@@ -360,6 +360,17 @@ const CHAR_MAP: Record<string, string> = {
   研: '研',
   修: '修',
   墨: '墨',
+  麼: '么',
+  們: '们',
+  擬: '拟',
+  幫: '帮',
+  際: '际',
+  歡: '欢',
+  讓: '让',
+  鳥: '鸟',
+  烏: '乌',
+  魚: '鱼',
+  越: '越',
 };
 
 const MNEMONIC_PROSE_TOKENS: Array<[string, string]> = [

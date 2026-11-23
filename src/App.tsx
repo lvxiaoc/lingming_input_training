@@ -18,6 +18,7 @@ import {
   Map as MapIcon,
   Shield,
   Flame,
+  BookOpen,
 } from 'lucide-react';
 import {
   BUILTIN_SCHEMES,
@@ -83,6 +84,7 @@ import { StrokeCloudStage } from './components/StrokeCloudStage';
 import { MemoryPalaceCloud } from './components/MemoryPalaceCloud';
 import { CampaignMapView } from './components/CampaignMapView';
 import { ExtremeDrillStudio } from './components/ExtremeDrillStudio';
+import { HomeTutorialModal, TutorialTabId } from './components/HomeTutorialModal';
 import { synth } from './audio/synth';
 import { speech } from './audio/speech';
 
@@ -216,6 +218,11 @@ export default function App() {
   const [hintPulseTick, setHintPulseTick] = useState(0);
   const [resetSignal, setResetSignal] = useState(1);
   const [heroImgFailed, setHeroImgFailed] = useState(false);
+  const [tutorialModal, setTutorialModal] = useState<{
+    open: boolean;
+    tab: TutorialTabId;
+    chamberKey: string;
+  }>({ open: false, tab: 'palace', chamberKey: 'x' });
   const [echoMemory, setEchoMemory] = useState<{
     chamberKey: string;
     activeChar: string | null;
@@ -817,6 +824,7 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (gameState === 'TITLE_MENU') {
+        if (tutorialModal.open) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           synth.playClick();
@@ -866,6 +874,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
     gameState,
+    tutorialModal.open,
     mode,
     focusKeys,
     activeStage,
@@ -1194,6 +1203,101 @@ export default function App() {
                 </span>
               </button>
             </div>
+
+            {/* Homepage Tutorial & Interactive Memory Palace Example Strip */}
+            <div
+              className={`mt-5 max-w-2xl rounded-xl border px-4 py-3.5 backdrop-blur-sm wash-enter-soft ${
+                isWash
+                  ? 'bg-[#F9F8F5]/88 border-[#141413]/14 text-[#141413]'
+                  : 'bg-[#121824]/86 border-[#F2EEE6]/12 text-[#F2EEE6]'
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <BookOpen
+                    className={`w-4 h-4 shrink-0 ${
+                      isWash ? 'text-[#181817]' : 'text-[#D89B3C]'
+                    }`}
+                  />
+                  <span className="text-sm font-semibold whitespace-nowrap">
+                    {t('首頁說明教程 · 記憶宮殿示例')}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      synth.playClick();
+                      setTutorialModal({ open: true, tab: 'palace', chamberKey: 'x' });
+                    }}
+                    className={`inline-flex items-center gap-1 font-medium hover:underline transition-colors whitespace-nowrap cursor-pointer ${
+                      isWash ? 'text-[#181817]' : 'text-[#E8C57B]'
+                    }`}
+                  >
+                    <span>{t('打開完整教程')}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <span aria-hidden="true" className="opacity-30">·</span>
+                  <button
+                    type="button"
+                    onClick={() => openPalaceCloud('TITLE_MENU')}
+                    className={`inline-flex items-center gap-1 hover:underline transition-colors whitespace-nowrap cursor-pointer ${
+                      isWash ? 'text-[#4F4F4A]' : 'text-[#AEB6C4] hover:text-[#F2EEE6]'
+                    }`}
+                  >
+                    <Compass className="w-3.5 h-3.5" />
+                    <span>{t('25 鍵宮殿圖')}</span>
+                  </button>
+                </div>
+              </div>
+
+              <p
+                className={`text-xs leading-relaxed mb-3 ${
+                  isWash ? 'text-[#4F4F4A]' : 'text-[#AAB3C2]'
+                }`}
+              >
+                {t(
+                  '依基本字根的筆畫順序與字頻建立空間記憶宮殿，讓字根排布貼合象形記憶機理。點選範例鍵位立即查看筆順路徑與拆字舉例：'
+                )}
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {(
+                  [
+                    { key: 'x', anchor: '木', hint: '上橫→左撇→右捺' },
+                    { key: 'd', anchor: '口', hint: '左豎→橫折→底橫' },
+                    { key: 'v', anchor: '水', hint: '中豎鉤→左右翼' },
+                    { key: 's', anchor: '土', hint: '上橫→中豎→底橫' },
+                  ] as const
+                ).map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => {
+                      synth.playClick();
+                      setTutorialModal({ open: true, tab: 'palace', chamberKey: item.key });
+                    }}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs transition-colors whitespace-nowrap cursor-pointer ${
+                      isWash
+                        ? 'bg-[#FFFFFF]/90 hover:bg-[#181817] hover:text-[#F8F7F3] border-[#141413]/14 text-[#181817]'
+                        : 'bg-[#182030]/90 hover:bg-[#232F46] border-[#F2EEE6]/12 text-[#ECE8DF]'
+                    }`}
+                  >
+                    <span className="font-mono-tabular font-bold">
+                      {item.key.toUpperCase()}
+                    </span>
+                    <span className="font-display font-bold">{item.anchor}</span>
+                    <span
+                      className={`text-[11px] hidden sm:inline ${
+                        isWash ? 'opacity-70' : 'text-[#9BA5B6]'
+                      }`}
+                    >
+                      {t(item.hint)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Quiet bottom line */}
@@ -1203,6 +1307,29 @@ export default function App() {
               {t('最高紀錄')} {mastery.bestScore}
             </span>
           </div>
+
+          {/* Interactive Homepage Tutorial & Memory Palace Examples Modal */}
+          {tutorialModal.open && (
+            <HomeTutorialModal
+              initialTab={tutorialModal.tab}
+              initialChamberKey={tutorialModal.chamberKey}
+              scriptMode={scriptMode}
+              onClose={() => setTutorialModal((prev) => ({ ...prev, open: false }))}
+              onOpenCampaign={() => {
+                synth.playClick();
+                setGameState('CAMPAIGN_MAP');
+              }}
+              onStartFreePlay={() => startPlay(mode)}
+              onOpenDrillStudio={() => {
+                synth.playClick();
+                setGameState('DRILL_STUDIO');
+              }}
+              onOpenPalaceCloud={() => openPalaceCloud('TITLE_MENU')}
+              onLaunchChamberDrill={(key) =>
+                handleLaunchChamberDrill(key, 'root', false, 'PALACE_CLOUD')
+              }
+            />
+          )}
         </div>
       )}
 
