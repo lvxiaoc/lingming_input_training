@@ -46,9 +46,16 @@ interface HuangtingLogStore {
 
 const LOG_STORAGE_KEY = 'lingming_huangting_log_v1';
 const VIEW_MODE_STORAGE_KEY = 'lingming_huangting_view_v1';
-const HESITATION_RESCUE_MS = 2600;
 const DEPTH_CELL_PX = 68;
 const DEPTH_ROW_PX = 104;
+
+// Mastery-adaptive hesitation delay before hints gently fade in ("犹豫之后渐显")
+function getHesitationDelayMs(level: number): number {
+  if (level <= 0) return 1100;
+  if (level === 1) return 1600;
+  if (level === 2) return 2100;
+  return 2600;
+}
 
 function loadViewMode(): HuangtingViewMode {
   try {
@@ -384,25 +391,23 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
   const glyphMastery = glyphKey ? mastery.glyphs[glyphKey] : undefined;
   const glyphLevel = glyphMastery?.level ?? 0;
 
-  // Automatic gentle hesitation rescue ("忘碼自動引線顯影") in adaptive mode
+  // Automatic gentle hesitation rescue ("猶豫之後漸顯") in adaptive mode across all mastery levels
   useEffect(() => {
     if (chapterDone || !currentItem || fadeMode !== 'adaptive') {
       setHesitationRescue(false);
       return;
     }
-    if (glyphLevel === 0) {
-      setHesitationRescue(false);
-      return;
-    }
     setHesitationRescue(false);
+    const delayMs = getHesitationDelayMs(glyphLevel);
     const timer = window.setTimeout(() => {
       setHesitationRescue(true);
-    }, HESITATION_RESCUE_MS);
+    }, delayMs);
     return () => window.clearTimeout(timer);
   }, [cursor, chapterId, script, typed, chapterDone, currentItem, fadeMode, glyphLevel]);
 
   // Core signature: Mastery-adaptive pigment-to-ink fading + instant rescue on error/hesitation/Tab
-  const isRescued = rescueActive || hesitationRescue || hadError || errorFlash;
+  const isImmediateRescue = rescueActive || hadError || errorFlash;
+  const isRescued = isImmediateRescue || hesitationRescue;
   const colorMix = useMemo(() => {
     if (isRescued) return 1.0;
     if (fadeMode === 'always') return 1.0;
@@ -418,6 +423,13 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
   const showRootGuide =
     isRescued || fadeMode === 'always' || (fadeMode === 'adaptive' && glyphLevel <= 1);
 
+  // In Depth mode, hints below the target glyph stay hidden by default in adaptive/blind modes,
+  // gently fading in after hesitation (adaptive) or snapping in immediately on mistype/Tab.
+  const depthHintsVisible =
+    fadeMode === 'always' ||
+    isImmediateRescue ||
+    (fadeMode === 'adaptive' && hesitationRescue);
+
   const takenRootSpans = useMemo(() => {
     if (!currentItem) return [];
     return computeTakenRootSpans(currentItem.info.code, currentItem.info.rootCodes);
@@ -425,7 +437,7 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
 
   // Determine which radical corresponds to the next keystroke (using exact Lingming taken-key spans)
   const activeRootIdx = useMemo(() => {
-    if (!currentItem || !showRootGuide) return null;
+    if (!currentItem || (!showRootGuide && colorMix < 0.45)) return null;
     const rootCount = currentItem.info.roots.length;
     if (rootCount <= 1) return 0;
     const pos = typed.length;
@@ -436,7 +448,7 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
     if (pos === 0) return 0;
     if (pos >= currentItem.info.code.length - 1) return rootCount - 1;
     return Math.min(rootCount - 1, pos);
-  }, [currentItem, typed.length, showRootGuide, takenRootSpans]);
+  }, [currentItem, typed.length, showRootGuide, colorMix, takenRootSpans]);
 
   // Whole-scripture mastery distribution (for current script)
   const scriptureStats = useMemo(() => {
@@ -849,281 +861,328 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
 
       {/* ==================== IMMERSIVE DEPTH-OF-FIELD SHIFTING SCRIPTURE MODE ==================== */}
       {viewMode === 'depth' ? (
-        <main className="relative flex-1 w-full overflow-hidden flex flex-col justify-between">
-          {/* Layer 1 (Far & Mid Depth): Smoothly Shifting Classical Scripture Scroll (Zero Keyboard) */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
-          >
+        <main className="relative flex-1 w-full overflow-hidden flex flex-col">
+          {/* Shared Coordinate Stage for Background Scripture + Lower-Anchored Ergonomic Target */}
+          <div className="relative flex-1 w-full overflow-hidden">
+            {/* Layer 1 (Far & Mid Depth): Smoothly Shifting Classical Scripture Scroll (Zero Keyboard) */}
             <div
-              className="absolute left-1/2 top-[43%]"
-              style={{
-                transform: `translate3d(${-(activeGridPos.col * DEPTH_CELL_PX + DEPTH_CELL_PX / 2)}px, ${-(activeGridPos.row * DEPTH_ROW_PX + DEPTH_ROW_PX / 2)}px, 0)`,
-                transition: 'transform 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-                willChange: 'transform',
-              }}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
             >
-              {verseLines.map((line, rIdx) => {
-                const rowDelta = Math.abs(rIdx - activeGridPos.row);
-                if (rowDelta > 4) return null;
+              {/* Anchored to exact vertical center of the lowered foreground target glyph (202px mobile / 234px desktop from stage bottom) */}
+              <div
+                className="absolute left-1/2 bottom-[202px] sm:bottom-[234px]"
+                style={{
+                  transform: `translate3d(${-(activeGridPos.col * DEPTH_CELL_PX + DEPTH_CELL_PX / 2)}px, ${-(activeGridPos.row * DEPTH_ROW_PX + DEPTH_ROW_PX / 2)}px, 0)`,
+                  transition: 'transform 380ms cubic-bezier(0.22, 1, 0.36, 1)',
+                  willChange: 'transform',
+                }}
+              >
+                {verseLines.map((line, rIdx) => {
+                  const signedRowDelta = rIdx - activeGridPos.row;
+                  const rowDelta = Math.abs(signedRowDelta);
+                  // Show up to 6 softly receding rows above the lowered focal line and 3 rows below
+                  if (signedRowDelta < -6 || signedRowDelta > 3) return null;
 
-                // Multi-plane optical depth: active line sits closest in mid-background,
-                // neighboring couplets recede softly with progressive optical defocus & scale
-                const rowBlur =
-                  rowDelta === 0
-                    ? 0.45
-                    : rowDelta === 1
-                      ? 1.7
-                      : rowDelta === 2
-                        ? 3.1
-                        : 4.6;
-                const rowScale =
-                  rowDelta === 0
-                    ? 1
-                    : rowDelta === 1
-                      ? 0.94
-                      : rowDelta === 2
-                        ? 0.88
-                        : 0.83;
-                const rowBaseOpacity =
-                  rowDelta === 0
-                    ? 1
-                    : rowDelta === 1
-                      ? 0.32
-                      : rowDelta === 2
-                        ? 0.16
-                        : 0.08;
+                  // Multi-plane optical depth: active line sits closest in mid-background,
+                  // neighboring couplets recede softly upward/downward with progressive optical defocus & scale
+                  const rowBlur =
+                    rowDelta === 0
+                      ? 0.45
+                      : rowDelta === 1
+                        ? 1.6
+                        : rowDelta === 2
+                          ? 2.9
+                          : rowDelta === 3
+                            ? 4.2
+                            : rowDelta === 4
+                              ? 5.4
+                              : rowDelta === 5
+                                ? 6.6
+                                : 7.6;
+                  const rowScale =
+                    rowDelta === 0
+                      ? 1
+                      : rowDelta === 1
+                        ? 0.95
+                        : rowDelta === 2
+                          ? 0.9
+                          : rowDelta === 3
+                            ? 0.85
+                            : rowDelta === 4
+                              ? 0.81
+                              : rowDelta === 5
+                                ? 0.77
+                                : 0.74;
+                  const rowBaseOpacity =
+                    rowDelta === 0
+                      ? 1
+                      : rowDelta === 1
+                        ? 0.35
+                        : rowDelta === 2
+                          ? 0.2
+                          : rowDelta === 3
+                            ? 0.11
+                            : rowDelta === 4
+                              ? 0.06
+                              : rowDelta === 5
+                                ? 0.035
+                                : 0.02;
 
-                return (
-                  <div
-                    key={rIdx}
-                    className="absolute left-0 flex items-center"
-                    style={{
-                      top: `${rIdx * DEPTH_ROW_PX}px`,
-                      height: `${DEPTH_ROW_PX}px`,
-                      opacity: rowBaseOpacity,
-                      filter: `blur(${rowBlur}px)`,
-                      transform: `scale(${rowScale})`,
-                      transformOrigin: `${activeGridPos.col * DEPTH_CELL_PX + DEPTH_CELL_PX / 2}px center`,
-                      transition:
-                        'opacity 380ms cubic-bezier(0.22, 1, 0.36, 1), filter 380ms ease, transform 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-                    }}
-                  >
-                    {line.map((tok, cIdx) => {
-                      const colDelta = cIdx - activeGridPos.col;
-                      const isCurrentSlot = rowDelta === 0 && colDelta === 0 && !chapterDone;
-                      const isDone = tok.isTypable && (tok.typableIdx < cursor || chapterDone);
-                      const wasMistyped = tok.isTypable && mistypedIndices.has(tok.typableIdx);
+                  return (
+                    <div
+                      key={rIdx}
+                      className="absolute left-0 flex items-center"
+                      style={{
+                        top: `${rIdx * DEPTH_ROW_PX}px`,
+                        height: `${DEPTH_ROW_PX}px`,
+                        opacity: rowBaseOpacity,
+                        filter: `blur(${rowBlur}px)`,
+                        transform: `scale(${rowScale})`,
+                        transformOrigin: `${activeGridPos.col * DEPTH_CELL_PX + DEPTH_CELL_PX / 2}px center`,
+                        transition:
+                          'opacity 380ms cubic-bezier(0.22, 1, 0.36, 1), filter 380ms ease, transform 380ms cubic-bezier(0.22, 1, 0.36, 1)',
+                      }}
+                    >
+                      {line.map((tok, cIdx) => {
+                        const colDelta = cIdx - activeGridPos.col;
+                        const isCurrentSlot = rowDelta === 0 && colDelta === 0 && !chapterDone;
+                        const isDone = tok.isTypable && (tok.typableIdx < cursor || chapterDone);
+                        const wasMistyped = tok.isTypable && mistypedIndices.has(tok.typableIdx);
 
-                      let charOpacity = 0.72;
-                      if (isCurrentSlot) {
-                        // Seamlessly hand off dead-center slot to the sharp foreground focal glyph
-                        charOpacity = 0;
-                      } else if (rowDelta === 0) {
-                        const absCol = Math.abs(colDelta);
-                        if (absCol === 1) {
-                          // Soft breathing clearance immediately flanking the giant center character
-                          charOpacity = colDelta > 0 ? 0.24 : 0.18;
-                        } else if (colDelta > 1) {
-                          // Upcoming text glides clearly in from the right for peripheral look-ahead
-                          charOpacity = absCol <= 5 ? 0.64 : Math.max(0.18, 0.64 - (absCol - 5) * 0.09);
+                        let charOpacity = 0.72;
+                        if (isCurrentSlot) {
+                          // Seamlessly hand off dead-center slot to the sharp foreground focal glyph
+                          charOpacity = 0;
+                        } else if (rowDelta === 0) {
+                          const absCol = Math.abs(colDelta);
+                          if (absCol === 1) {
+                            // Soft breathing clearance immediately flanking the giant center character
+                            charOpacity = colDelta > 0 ? 0.24 : 0.18;
+                          } else if (colDelta > 1) {
+                            // Upcoming text glides clearly in from the right for peripheral look-ahead
+                            charOpacity =
+                              absCol <= 5 ? 0.64 : Math.max(0.18, 0.64 - (absCol - 5) * 0.09);
+                          } else {
+                            // Completed characters drift calmly leftward in settled ink
+                            charOpacity =
+                              absCol <= 5 ? 0.34 : Math.max(0.12, 0.34 - (absCol - 5) * 0.05);
+                          }
                         } else {
-                          // Completed characters drift calmly leftward in settled ink
-                          charOpacity = absCol <= 5 ? 0.34 : Math.max(0.12, 0.34 - (absCol - 5) * 0.05);
+                          const absCol = Math.abs(colDelta);
+                          charOpacity = Math.max(0.25, 0.85 - absCol * 0.06);
                         }
-                      } else {
-                        const absCol = Math.abs(colDelta);
-                        charOpacity = Math.max(0.25, 0.85 - absCol * 0.06);
-                      }
 
-                      return (
-                        <span
-                          key={`${rIdx}_${cIdx}`}
-                          className={`inline-flex items-center justify-center font-display text-[38px] sm:text-[42px] leading-none transition-all duration-300 ${
-                            !tok.isTypable
-                              ? 'text-[var(--dojo-text-muted)]'
-                              : isDone
-                                ? 'text-[var(--dojo-text-bright)]'
-                                : 'text-[var(--dojo-text-sub)]'
-                          }`}
-                          style={{
-                            width: `${DEPTH_CELL_PX}px`,
-                            opacity: charOpacity,
-                            transform: isCurrentSlot ? 'scale(0.72)' : 'scale(1)',
-                          }}
-                        >
-                          <span className="relative">
-                            {tok.char}
-                            {wasMistyped && isDone && rowDelta === 0 && (
-                              <span
-                                aria-hidden="true"
-                                className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-1.5 h-1.5 rounded-full bg-[var(--dojo-crimson)] opacity-75"
-                              />
-                            )}
+                        return (
+                          <span
+                            key={`${rIdx}_${cIdx}`}
+                            className={`inline-flex items-center justify-center font-display text-[38px] sm:text-[42px] leading-none transition-all duration-300 ${
+                              !tok.isTypable
+                                ? 'text-[var(--dojo-text-muted)]'
+                                : isDone
+                                  ? 'text-[var(--dojo-text-bright)]'
+                                  : 'text-[var(--dojo-text-sub)]'
+                            }`}
+                            style={{
+                              width: `${DEPTH_CELL_PX}px`,
+                              opacity: charOpacity,
+                              transform: isCurrentSlot ? 'scale(0.72)' : 'scale(1)',
+                            }}
+                          >
+                            <span className="relative">
+                              {tok.char}
+                              {wasMistyped && isDone && rowDelta === 0 && (
+                                <span
+                                  aria-hidden="true"
+                                  className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-1.5 h-1.5 rounded-full bg-[var(--dojo-crimson)] opacity-75"
+                                />
+                              )}
+                            </span>
                           </span>
-                        </span>
-                      );
-                    })}
-                  </div>
-                );
-              })}
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Optical Halo Scrim locked to the lowered target glyph so contrast stays crisp */}
+              <div
+                className="absolute left-1/2 bottom-[202px] sm:bottom-[234px] -translate-x-1/2 translate-y-1/2 w-[540px] sm:w-[680px] h-[340px] sm:h-[420px]"
+                style={{
+                  background: isWash
+                    ? 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(243,241,236,0.92) 0%, rgba(243,241,236,0.62) 48%, rgba(243,241,236,0) 76%)'
+                    : 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(11,15,23,0.90) 0%, rgba(11,15,23,0.58) 48%, rgba(11,15,23,0) 76%)',
+                }}
+              />
+              {/* Soft horizontal & upper horizon mist scrims */}
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: isWash
+                    ? 'linear-gradient(90deg, rgba(243,241,236,0.92) 0%, transparent 14%, transparent 86%, rgba(243,241,236,0.92) 100%)'
+                    : 'linear-gradient(90deg, rgba(11,15,23,0.92) 0%, transparent 14%, transparent 86%, rgba(11,15,23,0.92) 100%)',
+                }}
+              />
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: isWash
+                    ? 'linear-gradient(180deg, rgba(243,241,236,0.88) 0%, transparent 16%, transparent 90%, rgba(243,241,236,0.75) 100%)'
+                    : 'linear-gradient(180deg, rgba(11,15,23,0.88) 0%, transparent 16%, transparent 90%, rgba(11,15,23,0.75) 100%)',
+                }}
+              />
             </div>
 
-            {/* Subtle Edge & Center Optical Scrim so the Foreground Focal Glyph always commands crisp contrast */}
+            {/* Layer 2 (Foreground Focal Plane): Ergonomically Lowered Target Glyph for Comfortable Downward Gaze */}
             <div
-              className="absolute inset-0"
-              style={{
-                background: isWash
-                  ? 'radial-gradient(ellipse 30% 34% at 50% 43%, rgba(243,241,236,0.92) 0%, rgba(243,241,236,0.62) 52%, rgba(243,241,236,0.06) 100%)'
-                  : 'radial-gradient(ellipse 30% 34% at 50% 43%, rgba(11,15,23,0.90) 0%, rgba(11,15,23,0.58) 52%, rgba(11,15,23,0.06) 100%)',
-              }}
-            />
-            <div
-              className="absolute inset-0"
-              style={{
-                background: isWash
-                  ? 'linear-gradient(90deg, rgba(243,241,236,0.92) 0%, transparent 14%, transparent 86%, rgba(243,241,236,0.92) 100%)'
-                  : 'linear-gradient(90deg, rgba(11,15,23,0.92) 0%, transparent 14%, transparent 86%, rgba(11,15,23,0.92) 100%)',
-              }}
-            />
-          </div>
-
-          {/* Layer 2 (Foreground Focal Plane): Permanently Centered Target Glyph & Adaptive Leads */}
-          <div className="relative z-20 flex-1 flex flex-col items-center justify-center px-4 pb-10 pt-4">
-            {chapterDone ? (
-              <div className="max-w-lg w-full bg-[var(--dojo-surface)]/92 wash:bg-[#F5F3EE]/94 backdrop-blur-md border border-[var(--dojo-border)] rounded-2xl p-7 flex flex-col items-center text-center gap-4 shadow-xl">
-                <div className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--dojo-pine-text)]">
-                  <Check className="w-4 h-4" />
-                  <span>{t(weakDrillChars ? '本章難字重抄完畢' : '本章誦抄圓滿')}</span>
-                </div>
-                <h3 className="font-display text-2xl sm:text-3xl font-bold text-[var(--dojo-text-bright)]">
-                  {activeTitle}
-                </h3>
-                <div className="flex items-center gap-6 font-mono-tabular text-sm">
-                  <div>
-                    <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('準確率')}</div>
-                    <div className="text-2xl font-bold text-[var(--dojo-pine-text)]">{accuracy}%</div>
+              className={`relative z-20 h-full w-full flex flex-col items-center px-4 ${
+                chapterDone ? 'justify-center py-6' : 'justify-end pb-2'
+              }`}
+            >
+              {chapterDone ? (
+                <div className="max-w-lg w-full bg-[var(--dojo-surface)]/92 wash:bg-[#F5F3EE]/94 backdrop-blur-md border border-[var(--dojo-border)] rounded-2xl p-7 flex flex-col items-center text-center gap-4 shadow-xl">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--dojo-pine-text)]">
+                    <Check className="w-4 h-4" />
+                    <span>{t(weakDrillChars ? '本章難字重抄完畢' : '本章誦抄圓滿')}</span>
                   </div>
-                  <div>
-                    <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('字均時長')}</div>
-                    <div className="text-2xl font-bold text-[var(--dojo-ochre)]">{avgMs}ms</div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('本章純墨率')}</div>
-                    <div className="text-2xl font-bold text-[var(--dojo-text-bright)]">
-                      {getChapterPurePct(chapterId)}%
+                  <h3 className="font-display text-2xl sm:text-3xl font-bold text-[var(--dojo-text-bright)]">
+                    {activeTitle}
+                  </h3>
+                  <div className="flex items-center gap-6 font-mono-tabular text-sm">
+                    <div>
+                      <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('準確率')}</div>
+                      <div className="text-2xl font-bold text-[var(--dojo-pine-text)]">{accuracy}%</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('字均時長')}</div>
+                      <div className="text-2xl font-bold text-[var(--dojo-ochre)]">{avgMs}ms</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('本章純墨率')}</div>
+                      <div className="text-2xl font-bold text-[var(--dojo-text-bright)]">
+                        {getChapterPurePct(chapterId)}%
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
-                  {currentWeakChars.length > 0 && !weakDrillChars && (
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+                    {currentWeakChars.length > 0 && !weakDrillChars && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          synth.playClick();
+                          setWeakDrillChars(currentWeakChars);
+                          resetChapterSession(0);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>{t('專抄本章難字')}（{currentWeakChars.length}）</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
                         synth.playClick();
-                        setWeakDrillChars(currentWeakChars);
+                        setWeakDrillChars(null);
                         resetChapterSession(0);
                       }}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-[var(--dojo-surface-2)] border border-[var(--dojo-border-strong)] text-[var(--dojo-text)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      <span>{t('專抄本章難字')}（{currentWeakChars.length}）</span>
+                      <span>{t('再誦本章')}</span>
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      synth.playClick();
-                      setWeakDrillChars(null);
-                      resetChapterSession(0);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-[var(--dojo-surface-2)] border border-[var(--dojo-border-strong)] text-[var(--dojo-text)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>{t('再誦本章')}</span>
-                  </button>
-                  {chapterId < HUANGTING_CHAPTERS.length && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        synth.playClick();
-                        selectChapter(chapterId + 1);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold bg-[var(--dojo-pine)] hover:opacity-90 text-white rounded-lg transition-opacity whitespace-nowrap cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>{t('續誦下一章（Enter）')}</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : currentItem ? (
-              <div className="flex flex-col items-center gap-4 -mt-6">
-                {/* Giant Permanently-Centered Calligraphic Focal Target */}
-                <ColorSplitGlyph
-                  char={currentItem.char}
-                  strokes={currentItem.info.strokes}
-                  strokeRootIndices={currentItem.info.strokeRootIndices}
-                  themeMode={themeMode}
-                  colorMix={colorMix}
-                  activeRootIdx={activeRootIdx}
-                  errorFlash={errorFlash}
-                  sizeClass="w-52 h-52 sm:w-64 sm:h-64"
-                />
-
-                {/* Keycode Input Slots directly beneath the centered glyph */}
-                <div className="flex items-center justify-center gap-2">
-                  {currentItem.info.code.split('').map((ch, idx) => {
-                    const isTyped = idx < typed.length;
-                    const isCurrent = idx === typed.length;
-                    const isFinalVowel =
-                      idx === currentItem.info.code.length - 1 && 'aeiou'.includes(ch);
-                    return (
-                      <div
-                        key={idx}
-                        className={`w-11 h-13 sm:w-12 sm:h-14 rounded-xl border-2 flex flex-col items-center justify-center font-mono-tabular transition-all ${
-                          isTyped
-                            ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)] text-[var(--dojo-pine-text)]'
-                            : isCurrent && errorFlash
-                              ? 'bg-[var(--dojo-crimson-wash)] border-[var(--dojo-crimson)] text-[var(--dojo-crimson-text)]'
-                              : isCurrent
-                                ? 'bg-[var(--dojo-surface-2)]/95 wash:bg-[#FFFFFF]/95 border-[var(--dojo-ochre)] text-[var(--dojo-text-bright)] shadow-xs'
-                                : 'bg-[var(--dojo-surface-inset)]/90 wash:bg-[#FAF9F5]/88 border-[var(--dojo-border-strong)] text-[var(--dojo-text-sub)]'
-                        }`}
+                    {chapterId < HUANGTING_CHAPTERS.length && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          synth.playClick();
+                          selectChapter(chapterId + 1);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold bg-[var(--dojo-pine)] hover:opacity-90 text-white rounded-lg transition-opacity whitespace-nowrap cursor-pointer"
                       >
-                        <span className="text-xl font-bold uppercase leading-none">
-                          {isTyped ? typed[idx] : showKeyGuide ? ch : '·'}
-                        </span>
-                        {showKeyGuide && isFinalVowel && (
-                          <span className="text-[9px] leading-none mt-1 opacity-65 font-sans">
-                            {t('韻尾')}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {allowShortCode && currentItem.info.shortCode && showRootGuide && (
-                    <div className="ml-1.5 pl-2.5 border-l border-[var(--dojo-border-strong)] flex flex-col leading-tight">
-                      <span className="text-[10px] text-[var(--dojo-text-muted)]">
-                        {t('亦支援簡碼')}
-                      </span>
-                      <span className="font-mono-tabular text-sm font-bold text-[var(--dojo-ochre)] uppercase">
-                        {currentItem.info.shortCode}
-                      </span>
-                    </div>
-                  )}
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>{t('續誦下一章（Enter）')}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
+              ) : currentItem ? (
+                <div className="flex flex-col items-center gap-2.5">
+                  {/* Giant Permanently-Centered, Lower-Anchored Calligraphic Focal Target */}
+                  <ColorSplitGlyph
+                    char={currentItem.char}
+                    strokes={currentItem.info.strokes}
+                    strokeRootIndices={currentItem.info.strokeRootIndices}
+                    themeMode={themeMode}
+                    colorMix={colorMix}
+                    activeRootIdx={activeRootIdx}
+                    errorFlash={errorFlash}
+                    sizeClass="w-44 h-44 sm:w-56 sm:h-56"
+                  />
 
-                {/* Mastery-Adaptive Radical Leads (Fades to serene silence at mastery; snaps back on error/Tab) */}
-                <div className="min-h-[2.4rem] flex flex-col items-center justify-center gap-1.5">
-                  {showRootGuide ? (
-                    <div className="flex flex-wrap items-center justify-center gap-2">
+                  {/* Fixed-Height Hint Cushion: Hidden by default in adaptive/blind modes; gently fades in after hesitation */}
+                  <div
+                    aria-hidden={!depthHintsVisible}
+                    className={`h-[96px] sm:h-[104px] flex flex-col items-center justify-start gap-1.5 ${
+                      depthHintsVisible
+                        ? isImmediateRescue || fadeMode === 'always'
+                          ? 'opacity-100 translate-y-0 transition-all duration-200 ease-out'
+                          : 'opacity-100 translate-y-0 transition-all duration-700 ease-out'
+                        : 'opacity-0 translate-y-1.5 pointer-events-none transition-none'
+                    }`}
+                  >
+                    {/* Keycode Input Slots */}
+                    <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+                      {currentItem.info.code.split('').map((ch, idx) => {
+                        const isTyped = idx < typed.length;
+                        const isCurrent = idx === typed.length;
+                        const isFinalVowel =
+                          idx === currentItem.info.code.length - 1 && 'aeiou'.includes(ch);
+                        return (
+                          <div
+                            key={idx}
+                            className={`w-10 h-11 sm:w-11 sm:h-12 rounded-xl border-2 flex flex-col items-center justify-center font-mono-tabular transition-colors ${
+                              isTyped
+                                ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)] text-[var(--dojo-pine-text)]'
+                                : isCurrent && errorFlash
+                                  ? 'bg-[var(--dojo-crimson-wash)] border-[var(--dojo-crimson)] text-[var(--dojo-crimson-text)]'
+                                  : isCurrent
+                                    ? 'bg-[var(--dojo-surface-2)]/95 wash:bg-[#FFFFFF]/95 border-[var(--dojo-ochre)] text-[var(--dojo-text-bright)] shadow-xs'
+                                    : 'bg-[var(--dojo-surface-inset)]/90 wash:bg-[#FAF9F5]/88 border-[var(--dojo-border-strong)] text-[var(--dojo-text-sub)]'
+                            }`}
+                          >
+                            <span className="text-lg font-bold uppercase leading-none">
+                              {isTyped ? typed[idx] : ch}
+                            </span>
+                            {isFinalVowel && (
+                              <span className="text-[9px] leading-none mt-0.5 opacity-65 font-sans">
+                                {t('韻尾')}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {allowShortCode && currentItem.info.shortCode && (
+                        <div className="ml-1 pl-2 border-l border-[var(--dojo-border-strong)] flex flex-col leading-tight">
+                          <span className="text-[10px] text-[var(--dojo-text-muted)]">
+                            {t('亦支援簡碼')}
+                          </span>
+                          <span className="font-mono-tabular text-xs font-bold text-[var(--dojo-ochre)] uppercase">
+                            {currentItem.info.shortCode}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Color-Matched Radical Leads */}
+                    <div className="flex flex-wrap items-center justify-center gap-1.5">
                       {currentItem.info.roots.map((root, rIdx) => {
                         const rootColor = getRootColor(
                           rIdx,
                           themeMode,
-                          Math.max(0.65, colorMix)
+                          Math.max(0.75, colorMix)
                         );
                         const rootMa = (currentItem.info.rootCodes[rIdx] || '').toUpperCase();
                         const span = takenRootSpans[rIdx];
@@ -1132,7 +1191,7 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                         return (
                           <div
                             key={`${root}_${rIdx}`}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-all backdrop-blur-xs"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs transition-all backdrop-blur-xs"
                             style={{
                               borderColor: isActiveRoot
                                 ? rootColor
@@ -1151,10 +1210,10 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                           >
                             <RadicalSymbol
                               glyph={root}
-                              className="font-display text-base font-bold leading-none"
+                              className="font-display text-sm font-bold leading-none"
                               style={{ color: rootColor }}
                             />
-                            {showKeyGuide && rootMa && (
+                            {rootMa && (
                               <span className="font-mono-tabular text-[11px] uppercase tracking-wide inline-flex items-baseline">
                                 {rootMa.split('').map((letter, lIdx) => {
                                   const taken =
@@ -1180,29 +1239,39 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                         );
                       })}
                     </div>
-                  ) : (
-                    <span className="text-xs text-[var(--dojo-text-muted)]">
-                      {t('已入化境 · 純墨默誦')}
-                    </span>
-                  )}
 
-                  {/* Whisper-quiet status line */}
-                  <div className="flex items-center gap-2 text-[11px] text-[var(--dojo-text-muted)]">
-                    <span className={isRescued ? 'text-[var(--dojo-crimson-text)] font-medium' : ''}>
-                      {isRescued
-                        ? t(hadError ? '誤擊回顯 · 全彩引線' : '久停／Tab 顯影')
-                        : t(masteryStageLabel)}
-                    </span>
-                    {lastUsedShort && (
-                      <>
-                        <span aria-hidden="true">·</span>
-                        <span className="text-[var(--dojo-pine-text)]">{t('剛以簡碼直上')}</span>
-                      </>
-                    )}
+                    {/* Whisper-quiet Rescue / Mode Caption */}
+                    <div className="flex items-center gap-2 text-[10px] leading-none text-[var(--dojo-text-muted)]">
+                      <span
+                        className={
+                          isImmediateRescue
+                            ? 'text-[var(--dojo-crimson-text)] font-medium'
+                            : hesitationRescue
+                              ? 'text-[var(--dojo-ochre)]'
+                              : ''
+                        }
+                      >
+                        {hadError || errorFlash
+                          ? t('誤擊回顯 · 全彩引線')
+                          : rescueActive
+                            ? t('Tab 顯影引線')
+                            : hesitationRescue
+                              ? t('猶豫漸顯 · 全彩引線')
+                              : t(masteryStageLabel)}
+                      </span>
+                      {lastUsedShort && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className="text-[var(--dojo-pine-text)]">
+                            {t('剛以簡碼直上')}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
 
           {/* Layer 3 (Quiet Perimeter Footer): Chapter Controls, Progress & Slide-over Directory */}
