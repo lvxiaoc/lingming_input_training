@@ -625,7 +625,10 @@ export function useUiScript(): UiScript {
   return useContext(UiScriptContext);
 }
 
+const translateTrad = (text: string): string => text;
+const translateSimp = (text: string): string => (text ? toSimplifiedUi(text) : text);
+
 export function useUiText(): (text: string) => string {
   const uiScript = useContext(UiScriptContext);
-  return (text: string) => uiText(text, uiScript);
+  return uiScript === 'simp' ? translateSimp : translateTrad;
 }

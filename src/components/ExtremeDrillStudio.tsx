@@ -38,6 +38,13 @@ import {
 } from '../engine/mastery';
 import { synth } from '../audio/synth';
 import { THEME_OPTIONS, ThemeMode } from '../data/theme';
+import {
+  isPalaceChamberKey,
+  resolveRadicalForChamberKey,
+  useKeystrokeCloud,
+  useKeystrokeCloudPulse,
+} from '../data/keystrokeCloud';
+import { KeystrokeCloudToggle, KeystrokePalaceCloud } from './KeystrokePalaceCloud';
 
 type DrillTab = 'passage' | 'hardsplit' | 'slowhell' | 'bottleneck';
 
@@ -99,6 +106,9 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
   const [errorCue, setErrorCue] = useState<string | null>(null);
   const [imeWarning, setImeWarning] = useState<boolean>(false);
   const [inspectedChar, setInspectedChar] = useState<string | null>(null);
+  const { enabled: keystrokeCloudEnabled } = useKeystrokeCloud();
+  const cloudPulse = useKeystrokeCloudPulse(keystrokeCloudEnabled);
+  const { trigger: triggerCloud, clear: clearCloud } = cloudPulse;
 
   // Session metrics
   const [results, setResults] = useState<Record<number, CompletedMarker>>({});
@@ -197,7 +207,8 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
     const now = performance.now();
     charStartRef.current = now;
     lastKeyTimeRef.current = now;
-  }, []);
+    clearCloud();
+  }, [clearCloud]);
 
   // Reset round on mode/script/passage change
   useEffect(() => {
@@ -318,17 +329,38 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
             ? `${t('應按')} ${expected.toUpperCase()}（${palaceInfo.primaryAnchor}）`
             : `${t('應按')} ${expected.toUpperCase()}`
         );
+        if (isPalaceChamberKey(expected)) {
+          triggerCloud(
+            expected,
+            resolveRadicalForChamberKey(activeEntry.parts, expected, typed.length),
+            'miss',
+            letter,
+            2600
+          );
+        } else if (isPalaceChamberKey(letter)) {
+          triggerCloud(letter, null, 'pressed_only', letter, 1600);
+        }
         onMasteryChange(nextStore);
         return;
       }
 
       // Correct keystroke
       const nextTyped = typed + letter;
-      synth.playKeyHit(combo + 1, nextTyped.length >= activeEntry.code.length);
+      const isComplete = nextTyped.length >= activeEntry.code.length;
+      if (isPalaceChamberKey(letter)) {
+        triggerCloud(
+          letter,
+          resolveRadicalForChamberKey(activeEntry.parts, letter, typed.length),
+          'hit',
+          letter,
+          isComplete ? 1650 : 2200
+        );
+      }
+      synth.playKeyHit(combo + 1, isComplete);
       setConsecutiveErrors(0);
       setErrorCue(null);
 
-      if (nextTyped.length < activeEntry.code.length) {
+      if (!isComplete) {
         setTyped(nextTyped);
         onMasteryChange(nextStore);
         return;
@@ -405,6 +437,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
     imeWarning,
     onMasteryChange,
     t,
+    triggerCloud,
   ]);
 
   // Session telemetry
@@ -595,8 +628,9 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
           </div>
         </nav>
 
-        {/* Zone 3: Single primary action */}
+        {/* Zone 3: Global Cloud Toggle + Single primary action */}
         <div className="flex items-center gap-2.5 shrink-0">
+          <KeystrokeCloudToggle compact />
           <button
             type="button"
             onClick={onToggleMute}
@@ -893,7 +927,25 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
           )}
 
           {/* CENTRAL FOCUS STAGE: Target Glyph + Latency Bar + In-Place X-Ray Rescue */}
-          <div className="flex-1 flex flex-col items-center justify-center py-6 min-h-[280px]">
+          <div className="relative flex-1 flex flex-col items-center justify-center py-6 min-h-[280px]">
+            {!isFinished && keystrokeCloudEnabled && (
+              <>
+                <KeystrokePalaceCloud
+                  pulse={cloudPulse.pulse}
+                  visible={cloudPulse.visible}
+                  scriptMode={scriptMode}
+                  size="md"
+                  className="hidden xl:flex absolute left-2 top-1/2 -translate-y-1/2 z-20"
+                />
+                <KeystrokePalaceCloud
+                  pulse={cloudPulse.pulse}
+                  visible={cloudPulse.visible}
+                  scriptMode={scriptMode}
+                  size="sm"
+                  className="xl:hidden fixed bottom-5 right-5 z-30"
+                />
+              </>
+            )}
             {!isFinished && activeEntry ? (
               <div className="w-full max-w-2xl flex flex-col items-center">
                 {/* Latency Bar & Explicit State Text (Dual-Coded) */}

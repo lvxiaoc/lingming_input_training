@@ -33,7 +33,14 @@ import {
 import { THEME_OPTIONS, ThemeMode, useThemeMode } from '../data/theme';
 import { useUiText } from '../data/uiScript';
 import { synth } from '../audio/synth';
+import {
+  isPalaceChamberKey,
+  resolveRadicalForChamberKey,
+  useKeystrokeCloud,
+  useKeystrokeCloudPulse,
+} from '../data/keystrokeCloud';
 import { ColorSplitGlyph, getRootColor, RadicalSymbol } from './ColorSplitGlyph';
+import { KeystrokeCloudToggle, KeystrokePalaceCloud } from './KeystrokePalaceCloud';
 
 type ShortCodeTier = 'one' | 'core50' | 'two' | 'three' | 'all';
 
@@ -88,6 +95,9 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
   const [tier, setTier] = useState<ShortCodeTier>('core50');
   const [rightTab, setRightTab] = useState<'inspect' | 'matrix'>('inspect');
   const [hintMode, setHintMode] = useState<'adaptive' | 'always' | 'blind'>('adaptive');
+  const { enabled: keystrokeCloudEnabled } = useKeystrokeCloud();
+  const cloudPulse = useKeystrokeCloudPulse(keystrokeCloudEnabled);
+  const { trigger: triggerCloud } = cloudPulse;
 
   // Filter pool by tier + scriptMode (gracefully keep full tier if script filter yields too few)
   const pool = useMemo(() => {
@@ -280,13 +290,23 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
       setTotalKeys((n) => n + 1);
 
       if (key === expected) {
+        const nextTyped = typed + key;
+        const isComplete = nextTyped === currentItem.shortCode;
+        if (isPalaceChamberKey(key)) {
+          triggerCloud(
+            key,
+            resolveRadicalForChamberKey(currentItem.roots, key, typed.length),
+            'hit',
+            key,
+            isComplete ? 1650 : 2200
+          );
+        }
         setCorrectKeys((n) => n + 1);
         setErrorFlash(false);
-        const nextTyped = typed + key;
         const now = performance.now();
         const elapsed = Math.max(80, Math.round(now - itemStartRef.current));
 
-        if (nextTyped === currentItem.shortCode) {
+        if (isComplete) {
           // Completed short code!
           const nextCombo = combo + 1;
           if (cursor + 1 >= deck.length) {
@@ -340,6 +360,17 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
         setRescueActive(true);
         setErrorFlash(true);
         window.setTimeout(() => setErrorFlash(false), 260);
+        if (isPalaceChamberKey(expected)) {
+          triggerCloud(
+            expected,
+            resolveRadicalForChamberKey(currentItem.roots, expected, typed.length),
+            'miss',
+            key,
+            2600
+          );
+        } else if (isPalaceChamberKey(key)) {
+          triggerCloud(key, null, 'pressed_only', key, 1600);
+        }
         const nextStore = recordKeyResult(masteryRef.current, expected, false, 900);
         onMasteryChange(nextStore);
       }
@@ -360,6 +391,7 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
     onBack,
     onMasteryChange,
     startFreshDeck,
+    triggerCloud,
   ]);
 
   const accuracy = totalKeys > 0 ? Math.round((correctKeys / totalKeys) * 100) : 100;
@@ -438,8 +470,9 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
           ))}
         </div>
 
-        {/* Right: Script + Theme + Sound */}
+        {/* Right: Cloud Toggle + Script + Theme + Sound */}
         <div className="flex items-center gap-2 shrink-0">
+          <KeystrokeCloudToggle compact />
           <div className="hidden sm:inline-flex items-center p-0.5 bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] rounded-lg">
             {SCRIPT_MODE_OPTIONS.map((opt) => (
               <button
@@ -644,7 +677,25 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
               </div>
             </div>
           ) : currentItem ? (
-            <div className="flex-1 flex flex-col items-center justify-center py-6 gap-5">
+            <div className="relative flex-1 flex flex-col items-center justify-center py-6 gap-5">
+              {keystrokeCloudEnabled && (
+                <>
+                  <KeystrokePalaceCloud
+                    pulse={cloudPulse.pulse}
+                    visible={cloudPulse.visible}
+                    scriptMode={scriptMode}
+                    size="md"
+                    className="hidden xl:flex absolute left-2 top-1/2 -translate-y-1/2 z-20"
+                  />
+                  <KeystrokePalaceCloud
+                    pulse={cloudPulse.pulse}
+                    visible={cloudPulse.visible}
+                    scriptMode={scriptMode}
+                    size="sm"
+                    className="xl:hidden fixed bottom-5 right-5 z-30"
+                  />
+                </>
+              )}
               {/* Mastery & Tier Meta Line */}
               <div className="flex items-center gap-2 text-xs text-[var(--dojo-text-muted)]">
                 <span className="text-[var(--dojo-ochre)] font-medium">

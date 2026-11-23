@@ -64,6 +64,14 @@ import {
   ThemeMode,
 } from './data/theme';
 import {
+  isPalaceChamberKey,
+  KeystrokeCloudContext,
+  loadKeystrokeCloudEnabled,
+  resolveRadicalForChamberKey,
+  saveKeystrokeCloudEnabled,
+  useKeystrokeCloudPulse,
+} from './data/keystrokeCloud';
+import {
   ActiveTargetSnapshot,
   GameCanvas,
   GameMode,
@@ -94,6 +102,7 @@ import { HomeTutorialModal, TutorialTabId } from './components/HomeTutorialModal
 import { WeakKeyRadarCard } from './components/WeakKeyRadarCard';
 import { CorrectionReportCard } from './components/CorrectionReportCard';
 import { FirebaseErrorBoundary } from './components/FirebaseErrorBoundary';
+import { KeystrokeCloudToggle, KeystrokePalaceCloud } from './components/KeystrokePalaceCloud';
 import { synth } from './audio/synth';
 import { speech } from './audio/speech';
 
@@ -187,6 +196,30 @@ export default function App() {
     setThemeMode(next);
     saveThemeMode(next);
   }, []);
+  const [keystrokeCloudEnabled, setKeystrokeCloudEnabled] = useState<boolean>(() =>
+    loadKeystrokeCloudEnabled()
+  );
+  const handleSetKeystrokeCloudEnabled = useCallback((next: boolean) => {
+    setKeystrokeCloudEnabled(next);
+    saveKeystrokeCloudEnabled(next);
+  }, []);
+  const handleToggleKeystrokeCloud = useCallback(() => {
+    setKeystrokeCloudEnabled((prev) => {
+      const next = !prev;
+      saveKeystrokeCloudEnabled(next);
+      return next;
+    });
+  }, []);
+  const keystrokeCloudCtx = useMemo(
+    () => ({
+      enabled: keystrokeCloudEnabled,
+      setEnabled: handleSetKeystrokeCloudEnabled,
+      toggle: handleToggleKeystrokeCloud,
+    }),
+    [keystrokeCloudEnabled, handleSetKeystrokeCloudEnabled, handleToggleKeystrokeCloud]
+  );
+  const playingCloudPulse = useKeystrokeCloudPulse(keystrokeCloudEnabled);
+  const { trigger: triggerPlayingCloud, clear: clearPlayingCloud } = playingCloudPulse;
   const [activeStage, setActiveStage] = useState<CampaignStage | null>(null);
   const [activeCustomDeck, setActiveCustomDeck] = useState<GlyphEntry[] | null>(null);
   const [isWeakDrill, setIsWeakDrill] = useState(false);
@@ -828,13 +861,24 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [gameState, autoAdvanceEnabled, autoAdvancePaused, hasNextProgression]);
 
+  // Single-radical / X-ray targets use the centered 1:1 Memory Palace echo;
+  // multi-root Chinese characters & Arcade mode use the proportionally bounded flanking KeystrokePalaceCloud.
+  const isCenteredPalaceTarget = Boolean(target && (target.palace || target.xray));
+
   const rawEchoChamberKey = useMemo(() => {
-    if (!activeScheme.isLingming || mode === 'arcade' || !target || target.typed.length < 1) {
+    if (
+      !keystrokeCloudEnabled ||
+      !activeScheme.isLingming ||
+      mode === 'arcade' ||
+      !target ||
+      !isCenteredPalaceTarget ||
+      target.typed.length < 1
+    ) {
       return null;
     }
     const candidate = target.palace?.chamberKey || target.code[0];
     return LINGMING_CHAMBER_BY_KEY[candidate] ? candidate : null;
-  }, [activeScheme.isLingming, mode, target]);
+  }, [keystrokeCloudEnabled, activeScheme.isLingming, mode, target, isCenteredPalaceTarget]);
 
   const rawEchoChar = useMemo(() => {
     if (!target || !rawEchoChamberKey) return null;
@@ -848,7 +892,60 @@ export default function App() {
     }
   }, [rawEchoChamberKey, rawEchoChar]);
 
-  const showCloudEcho = Boolean(rawEchoChamberKey && gameState === 'PLAYING');
+  const showCloudEcho = Boolean(
+    keystrokeCloudEnabled && rawEchoChamberKey && gameState === 'PLAYING'
+  );
+
+  // Trigger proportional flanking KeystrokePalaceCloud on consonant keystrokes (hit & miss) for multi-root chars & Arcade
+  useEffect(() => {
+    if (gameState !== 'PLAYING' || !activeScheme.isLingming || !keystrokeCloudEnabled) {
+      clearPlayingCloud();
+      return;
+    }
+    const useFlankCloud = mode === 'arcade' || Boolean(target && !isCenteredPalaceTarget);
+    if (!useFlankCloud) {
+      clearPlayingCloud();
+      return;
+    }
+
+    const onFlankKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!/^[a-zA-Z]$/.test(e.key)) return;
+      const letter = e.key.toLowerCase();
+      if (!target) {
+        if (isPalaceChamberKey(letter)) {
+          triggerPlayingCloud(letter, null, 'pressed_only', letter, 1600);
+        }
+        return;
+      }
+      const pos = target.typed.length;
+      const expected = target.code[pos];
+      if (expected && letter === expected) {
+        if (isPalaceChamberKey(letter)) {
+          const matched = resolveRadicalForChamberKey(target.parts, letter, pos);
+          const isComplete = pos + 1 >= target.code.length;
+          triggerPlayingCloud(letter, matched, 'hit', letter, isComplete ? 1650 : 2100);
+        }
+      } else if (expected && isPalaceChamberKey(expected)) {
+        const matched = resolveRadicalForChamberKey(target.parts, expected, pos);
+        triggerPlayingCloud(expected, matched, 'miss', letter, 2600);
+      } else if (isPalaceChamberKey(letter)) {
+        triggerPlayingCloud(letter, null, 'pressed_only', letter, 1600);
+      }
+    };
+
+    window.addEventListener('keydown', onFlankKeyDown);
+    return () => window.removeEventListener('keydown', onFlankKeyDown);
+  }, [
+    gameState,
+    activeScheme.isLingming,
+    keystrokeCloudEnabled,
+    mode,
+    target,
+    isCenteredPalaceTarget,
+    triggerPlayingCloud,
+    clearPlayingCloud,
+  ]);
 
   useEffect(() => {
     if (!showCloudEcho || !rawEchoChamberKey) {
@@ -975,6 +1072,7 @@ export default function App() {
 
   return (
     <FirebaseErrorBoundary>
+    <KeystrokeCloudContext.Provider value={keystrokeCloudCtx}>
     <UiScriptContext.Provider value={uiScript}>
     <ThemeContext.Provider value={themeMode}>
     <div className="relative w-screen h-screen overflow-hidden bg-[var(--dojo-canvas)] text-[var(--dojo-text)] flex flex-col">
@@ -1135,6 +1233,8 @@ export default function App() {
                   );
                 })}
               </div>
+
+              <KeystrokeCloudToggle />
 
               <button
                 type="button"
@@ -1743,6 +1843,8 @@ export default function App() {
                 </span>
               </button>
 
+              {activeScheme.isLingming && <KeystrokeCloudToggle compact />}
+
               {activeScheme.isLingming && (
                 <button
                   type="button"
@@ -1927,6 +2029,21 @@ export default function App() {
                   anchorOnActive
                 />
               </div>
+            )}
+
+            {/* Layer 1B: Proportionally Bounded Left-Flank Palace Cloud for Multi-Root Characters & Arcade */}
+            {activeScheme.isLingming && keystrokeCloudEnabled && (
+              <KeystrokePalaceCloud
+                pulse={playingCloudPulse.pulse}
+                visible={playingCloudPulse.visible && gameState === 'PLAYING'}
+                scriptMode={scriptMode}
+                size={mode === 'arcade' ? 'md' : 'lg'}
+                className={
+                  mode === 'arcade'
+                    ? 'hidden md:flex absolute left-5 bottom-8 z-[18]'
+                    : 'hidden md:flex absolute left-6 xl:left-12 top-1/2 -translate-y-1/2 z-[18]'
+                }
+              />
             )}
 
             {/* Layer 2 (Foreground · High-contrast 60fps Interactive Canvas) */}
@@ -2707,6 +2824,7 @@ export default function App() {
     </div>
     </ThemeContext.Provider>
     </UiScriptContext.Provider>
+    </KeystrokeCloudContext.Provider>
     </FirebaseErrorBoundary>
   );
 }

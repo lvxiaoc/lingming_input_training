@@ -117,7 +117,7 @@ export const CorrectionReportCard: React.FC = () => {
 
   useEffect(() => {
     if (!user) {
-      setReports([]);
+      setReports((prev) => (prev.length === 0 ? prev : []));
       return;
     }
     const unsub = subscribeCorrectionReports(
@@ -127,11 +127,11 @@ export const CorrectionReportCard: React.FC = () => {
         setErrorMsg(null);
       },
       () => {
-        setErrorMsg(t('讀取雲端報告失敗，請重新登入後再試'));
+        setErrorMsg('讀取雲端報告失敗，請重新登入後再試');
       }
     );
     return () => unsub();
-  }, [user, t]);
+  }, [user]);
 
   const firstChar = useMemo(() => {
     const trimmed = targetChar.trim();
@@ -511,7 +511,7 @@ export const CorrectionReportCard: React.FC = () => {
 
             {errorMsg && (
               <div className="text-[11px] font-medium text-[var(--dojo-crimson-text)]">
-                {errorMsg}
+                {t(errorMsg)}
               </div>
             )}
             {feedback && (

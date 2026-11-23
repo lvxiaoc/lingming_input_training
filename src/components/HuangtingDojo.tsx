@@ -40,8 +40,15 @@ import {
 import { THEME_OPTIONS, ThemeMode, useThemeMode } from '../data/theme';
 import { useUiText } from '../data/uiScript';
 import { synth } from '../audio/synth';
+import {
+  isPalaceChamberKey,
+  resolveRadicalForChamberKey,
+  useKeystrokeCloud,
+  useKeystrokeCloudPulse,
+} from '../data/keystrokeCloud';
 import { ColorSplitGlyph, getRootColor, RadicalSymbol } from './ColorSplitGlyph';
 import { CharOverrideModal } from './CharOverrideModal';
+import { KeystrokeCloudToggle, KeystrokePalaceCloud } from './KeystrokePalaceCloud';
 
 type ScriptureScript = 'trad' | 'simp';
 type FadeMode = 'adaptive' | 'always' | 'blind';
@@ -308,6 +315,9 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
     loadUserHuangtingOverrides()
   );
   const [overrideModalOpen, setOverrideModalOpen] = useState<boolean>(false);
+  const { enabled: keystrokeCloudEnabled } = useKeystrokeCloud();
+  const cloudPulse = useKeystrokeCloudPulse(keystrokeCloudEnabled);
+  const { trigger: triggerCloud, clear: clearCloud } = cloudPulse;
 
   const handleSaveCharOverride = useCallback((ch: string, override: HuangtingCharOverride) => {
     setUserOverrides((prev) => {
@@ -503,7 +513,8 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
     setTotalCharMs(0);
     setCompletedChars(0);
     charStartRef.current = performance.now();
-  }, []);
+    clearCloud();
+  }, [clearCloud]);
 
   const selectChapter = useCallback(
     (nextId: number) => {
@@ -748,9 +759,29 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
       const isExactFull = candidate === fullCode;
       const isExactShort = Boolean(shortCode && candidate === shortCode);
 
+      const findRootForKeyPos = (pos: number, chamberKey: string): string | null => {
+        const spanIdx = takenRootSpans.findIndex(
+          (sp) => sp.codeStart >= 0 && pos >= sp.codeStart && pos < sp.codeEnd
+        );
+        return resolveRadicalForChamberKey(
+          currentItem.info.roots,
+          chamberKey,
+          spanIdx >= 0 ? spanIdx : pos
+        );
+      };
+
       setTotalKeys((n) => n + 1);
 
       if (isExactFull || isExactShort) {
+        if (isPalaceChamberKey(key)) {
+          triggerCloud(
+            key,
+            findRootForKeyPos(typed.length, key),
+            'hit',
+            key,
+            1750
+          );
+        }
         setCorrectKeys((n) => n + 1);
         setErrorFlash(false);
         setLastUsedShort(Boolean(isExactShort && !isExactFull));
@@ -805,6 +836,15 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
           charStartRef.current = performance.now();
         }
       } else if (matchesFullPrefix || matchesShortPrefix) {
+        if (isPalaceChamberKey(key)) {
+          triggerCloud(
+            key,
+            findRootForKeyPos(typed.length, key),
+            'hit',
+            key,
+            2400
+          );
+        }
         setCorrectKeys((n) => n + 1);
         setErrorFlash(false);
         setTyped(candidate);
@@ -825,6 +865,17 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
           return next;
         });
         const expected = fullCode[typed.length] || fullCode[0];
+        if (isPalaceChamberKey(expected)) {
+          triggerCloud(
+            expected,
+            findRootForKeyPos(typed.length, expected),
+            'miss',
+            key,
+            2800
+          );
+        } else if (isPalaceChamberKey(key)) {
+          triggerCloud(key, null, 'pressed_only', key, 1800);
+        }
         const nextStore = recordKeyResult(masteryRef.current, expected, false, 950);
         onMasteryChange(nextStore);
       }
@@ -852,6 +903,8 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
     viewMode,
     clearChromeTimer,
     overrideModalOpen,
+    takenRootSpans,
+    triggerCloud,
   ]);
 
   const showDepthChrome =
@@ -1018,6 +1071,8 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
               {t('簡本')}
             </button>
           </div>
+
+          <KeystrokeCloudToggle compact />
 
           <button
             type="button"
@@ -1240,6 +1295,26 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                 }}
               />
             </div>
+
+            {/* Layer 1.5: Harmoniously Proportioned Keystroke Radical Palace Cloud (Left Flank on Desktop, Above on Mobile) */}
+            {!chapterDone && keystrokeCloudEnabled && (
+              <>
+                <KeystrokePalaceCloud
+                  pulse={cloudPulse.pulse}
+                  visible={cloudPulse.visible}
+                  scriptMode={script}
+                  size="lg"
+                  className="hidden md:flex absolute bottom-[238px] sm:bottom-[270px] translate-y-1/2 right-[calc(50%+126px)] lg:right-[calc(50%+148px)] z-[22]"
+                />
+                <KeystrokePalaceCloud
+                  pulse={cloudPulse.pulse}
+                  visible={cloudPulse.visible}
+                  scriptMode={script}
+                  size="sm"
+                  className="md:hidden absolute left-1/2 -translate-x-1/2 bottom-[366px] z-[22]"
+                />
+              </>
+            )}
 
             {/* Layer 2 (Foreground Focal Plane): Ergonomically Lowered Target Glyph for Comfortable Downward Gaze */}
             <div
@@ -1937,7 +2012,25 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                 </div>
               </div>
             ) : currentItem ? (
-              <div className="py-5 flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10">
+              <div className="relative py-5 flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10">
+                {keystrokeCloudEnabled && (
+                  <>
+                    <KeystrokePalaceCloud
+                      pulse={cloudPulse.pulse}
+                      visible={cloudPulse.visible}
+                      scriptMode={script}
+                      size="md"
+                      className="hidden xl:flex absolute left-2 top-1/2 -translate-y-1/2 z-20"
+                    />
+                    <KeystrokePalaceCloud
+                      pulse={cloudPulse.pulse}
+                      visible={cloudPulse.visible}
+                      scriptMode={script}
+                      size="sm"
+                      className="xl:hidden fixed bottom-5 right-5 z-30"
+                    />
+                  </>
+                )}
                 {/* Large Color-Decomposed Calligraphic Character */}
                 <div className="flex flex-col items-center gap-2">
                   <button
