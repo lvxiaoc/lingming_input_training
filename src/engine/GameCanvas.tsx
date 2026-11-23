@@ -198,6 +198,43 @@ const MAX_PLUMES = 42;
 const MAX_DISSOLVES = 8;
 const MAX_FLOATS = 24;
 
+/**
+ * Smoothly interpolates the Arcade micro-rhythm bar color from Warm Yellow (暖黃, t=0)
+ * through Jade-Celadon (碧青, t=0.55) to Cool Cyan (冷青, t=1) as consecutive precision rises.
+ */
+function sampleRhythmRgb(t: number, isWash: boolean): [number, number, number] {
+  const c = Math.max(0, Math.min(1, t));
+  const stops: [[number, number, number], [number, number, number], [number, number, number]] = isWash
+    ? [
+        [188, 126, 22], // Warm mineral amber-gold on rice paper
+        [42, 138, 118], // Mineral celadon midpoint
+        [18, 132, 158], // Cool mineral cyan on rice paper
+      ]
+    : [
+        [246, 189, 76], // Warm luminous gold on dark ink
+        [102, 214, 174], // Soft jade-teal midpoint
+        [54, 214, 234], // Cool serene cyan on dark ink
+      ];
+
+  const pivot = 0.55;
+  if (c <= pivot) {
+    const u = c / pivot;
+    const s = u * u * (3 - 2 * u);
+    return [
+      Math.round(stops[0][0] + (stops[1][0] - stops[0][0]) * s),
+      Math.round(stops[0][1] + (stops[1][1] - stops[0][1]) * s),
+      Math.round(stops[0][2] + (stops[1][2] - stops[0][2]) * s),
+    ];
+  }
+  const u = (c - pivot) / (1 - pivot);
+  const s = u * u * (3 - 2 * u);
+  return [
+    Math.round(stops[1][0] + (stops[2][0] - stops[1][0]) * s),
+    Math.round(stops[1][1] + (stops[2][1] - stops[1][1]) * s),
+    Math.round(stops[1][2] + (stops[2][2] - stops[1][2]) * s),
+  ];
+}
+
 export const GameCanvas: React.FC<GameCanvasProps> = ({
   scheme,
   mode,
@@ -370,6 +407,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     lastStrikeKey: null as string | null,
     lastStrikeCorrect: true,
     lastStrikeTick: 0,
+    keyStreak: 0,
+    lastGoodKeyAt: 0,
+    rhythmIntervals: [] as number[],
+    recentKeyOutcomes: [] as boolean[],
+    rhythmPrecision: 1,
+    rhythmStability: 0.78,
+    rhythmVisualPrecision: 1,
+    rhythmVisualStability: 0.78,
+    rhythmVisualColorT: 0.15,
+    rhythmPulse: 0,
+    rhythmOpacity: 0,
+    reducedMotion: false,
     lastHudSync: 0,
     lastTargetSync: 0,
     width: 960,
@@ -379,6 +428,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     ringPhase: 0,
     ended: false,
   });
+
+  useEffect(() => {
+    const mql = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (!mql) return;
+    simRef.current.reducedMotion = mql.matches;
+    const onChange = (e: MediaQueryListEvent) => {
+      simRef.current.reducedMotion = e.matches;
+    };
+    mql.addEventListener?.('change', onChange);
+    return () => mql.removeEventListener?.('change', onChange);
+  }, []);
 
   useEffect(() => {
     const img = new Image();
@@ -808,6 +868,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     s.lastStrikeKey = null;
     s.lastStrikeCorrect = true;
     s.lastStrikeTick = 0;
+    s.keyStreak = 0;
+    s.lastGoodKeyAt = 0;
+    s.rhythmIntervals = [];
+    s.recentKeyOutcomes = [];
+    s.rhythmPrecision = 1;
+    s.rhythmStability = 0.78;
+    s.rhythmVisualPrecision = 1;
+    s.rhythmVisualStability = 0.78;
+    s.rhythmVisualColorT = 0.15;
+    s.rhythmPulse = 0;
+    s.rhythmOpacity = 0;
     s.ended = false;
     s.particles.forEach((p) => (p.active = false));
     s.ripples.forEach((rp) => (rp.active = false));
@@ -947,6 +1018,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       s.lastStrikeKey = key;
       s.lastStrikeCorrect = true;
       s.lastStrikeTick = nowMs;
+
+      // Update live consecutive-keystroke rhythm precision & cadence stability
+      s.keyStreak += 1;
+      s.recentKeyOutcomes.push(true);
+      if (s.recentKeyOutcomes.length > 12) s.recentKeyOutcomes.shift();
+      const recentGood = s.recentKeyOutcomes.reduce((acc, ok) => acc + (ok ? 1 : 0), 0);
+      s.rhythmPrecision = recentGood / s.recentKeyOutcomes.length;
+
+      if (s.lastGoodKeyAt > 0) {
+        const iki = nowMs - s.lastGoodKeyAt;
+        if (iki >= 45 && iki <= 1800) {
+          s.rhythmIntervals.push(iki);
+          if (s.rhythmIntervals.length > 7) s.rhythmIntervals.shift();
+        }
+      }
+      s.lastGoodKeyAt = nowMs;
+
+      if (s.rhythmIntervals.length >= 2) {
+        const mean =
+          s.rhythmIntervals.reduce((acc, v) => acc + v, 0) / s.rhythmIntervals.length;
+        const variance =
+          s.rhythmIntervals.reduce((acc, v) => acc + (v - mean) * (v - mean), 0) /
+          s.rhythmIntervals.length;
+        const cv = Math.sqrt(variance) / Math.max(80, mean);
+        s.rhythmStability = Math.max(0.14, Math.min(1, 1 - cv * 1.35));
+      } else {
+        s.rhythmStability = Math.min(0.86, 0.68 + s.keyStreak * 0.06);
+      }
+      s.rhythmPulse = 1;
 
       masteryRef.current = recordKeyResult(masteryRef.current, expectedKey, true, keyLatency);
 
@@ -1207,6 +1307,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // Wrong key: stay locked on current target, allow Space/Backspace reset, and auto-reveal hint on repeated error
       const isFirstErrorOnTile = !active.hadError;
       s.combo = 0;
+      s.keyStreak = 0;
+      s.lastGoodKeyAt = 0;
+      s.rhythmIntervals = [];
+      s.rhythmPulse = 0;
+      s.recentKeyOutcomes.push(false);
+      if (s.recentKeyOutcomes.length > 12) s.recentKeyOutcomes.shift();
+      const recentGoodAfterMiss = s.recentKeyOutcomes.reduce((acc, ok) => acc + (ok ? 1 : 0), 0);
+      s.rhythmPrecision = recentGoodAfterMiss / s.recentKeyOutcomes.length;
       active.hadError = true;
       active.consecutiveErrors += 1;
       active.shake = 12;
@@ -1432,6 +1540,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 lostLife = true;
                 s.lives = Math.max(0, s.lives - 1);
                 s.combo = 0;
+                s.keyStreak = 0;
+                s.lastGoodKeyAt = 0;
+                s.rhythmIntervals = [];
+                s.rhythmPulse = 0;
                 s.camShake = 7;
                 const statKey = tile.entry.xray?.radicalChar || tile.entry.char;
                 const prevStat = s.weakStats.get(statKey);
@@ -1502,6 +1614,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
 
           s.camShake = Math.max(0, s.camShake - dt * 22);
+          s.rhythmPulse = Math.max(0, s.rhythmPulse - dt * 3.8);
+          const rhythmLerp = Math.min(1, dt * 10);
+          s.rhythmVisualPrecision += (s.rhythmPrecision - s.rhythmVisualPrecision) * rhythmLerp;
+          s.rhythmVisualStability += (s.rhythmStability - s.rhythmVisualStability) * rhythmLerp;
+          // Continuous warm-yellow -> cool-cyan progression driven by rolling precision + consecutive hit mastery
+          const precFactor = Math.max(0, Math.min(1, (s.rhythmPrecision - 0.55) / 0.45));
+          const streakFactor = Math.max(0, Math.min(1, (s.keyStreak - 2) / 10));
+          const targetColorT =
+            s.keyStreak >= 2 ? precFactor * (0.2 + 0.8 * streakFactor) : 0.12;
+          s.rhythmVisualColorT += (targetColorT - s.rhythmVisualColorT) * Math.min(1, dt * 5.2);
+          const targetRhythmAlpha = curMode === 'arcade' && s.keyStreak >= 2 ? 1 : 0;
+          s.rhythmOpacity +=
+            (targetRhythmAlpha - s.rhythmOpacity) *
+            Math.min(1, dt * (targetRhythmAlpha > s.rhythmOpacity ? 10 : 7));
 
           for (const p of s.particles) {
             if (!p.active) continue;
@@ -2225,6 +2351,184 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 0,
                 showCodeSlots ? slotY + slotH + 16 : 82
               );
+            }
+
+            // Arcade Mode: Micro-Rhythm Dynamic Bar beneath the active falling character on consecutive hits
+            if (curMode === 'arcade' && isActive && s.rhythmOpacity > 0.02) {
+              const barW = 118;
+              const barH = 24;
+              const barX = -barW / 2;
+              const barY = cardH / 2 + 6;
+              const prec = Math.max(0, Math.min(1, s.rhythmVisualPrecision));
+              const stab = Math.max(0, Math.min(1, s.rhythmVisualStability));
+              const colorT = Math.max(0, Math.min(1, s.rhythmVisualColorT));
+              const pulse = s.rhythmPulse;
+
+              // Gentle ~2s breathing lamp envelope (holds calm midpoint when reduced motion is enabled)
+              const breath = s.reducedMotion
+                ? 0.5
+                : 0.5 + 0.5 * Math.sin(s.ringPhase * 1.45);
+              const breathGlow = breath * (0.65 + colorT * 0.35);
+
+              // Sample warm-yellow -> jade-celadon -> cool-cyan gradient palette
+              const [warmR, warmG, warmB] = sampleRhythmRgb(Math.max(0, colorT - 0.42), isWash);
+              const [midR, midG, midB] = sampleRhythmRgb(Math.max(0, colorT - 0.16), isWash);
+              const [coolR, coolG, coolB] = sampleRhythmRgb(colorT, isWash);
+              const accentRgb = `${coolR}, ${coolG}, ${coolB}`;
+              const accentColor = `rgb(${accentRgb})`;
+
+              ctx.save();
+              ctx.globalAlpha *= s.rhythmOpacity;
+
+              // Compact translucent instrument tray with subtle outer breathing lamp aura
+              drawRoundedRect(ctx, barX, barY, barW, barH, 7);
+              ctx.save();
+              ctx.shadowColor = `rgba(${accentRgb}, ${(
+                (isWash ? 0.12 + breathGlow * 0.14 : 0.22 + breathGlow * 0.26) +
+                pulse * 0.18
+              ).toFixed(3)})`;
+              ctx.shadowBlur = (isWash ? 4 + breathGlow * 5 : 6 + breathGlow * 9) + pulse * 5;
+              ctx.fillStyle = isWash
+                ? 'rgba(248, 246, 240, 0.91)'
+                : 'rgba(13, 18, 28, 0.87)';
+              ctx.fill();
+              ctx.restore();
+
+              // Whisper-subtle inner horizontal breathing wash tinted with active warm->cool gradient
+              const trayWashGrad = ctx.createLinearGradient(barX, barY, barX + barW, barY);
+              const washAlphaLeft = (isWash ? 0.035 : 0.05) + breathGlow * (isWash ? 0.03 : 0.045);
+              const washAlphaRight =
+                (isWash ? 0.055 : 0.08) + breathGlow * (isWash ? 0.05 : 0.075) + pulse * 0.06;
+              trayWashGrad.addColorStop(0, `rgba(${warmR}, ${warmG}, ${warmB}, ${washAlphaLeft.toFixed(3)})`);
+              trayWashGrad.addColorStop(1, `rgba(${coolR}, ${coolG}, ${coolB}, ${washAlphaRight.toFixed(3)})`);
+              drawRoundedRect(ctx, barX, barY, barW, barH, 7);
+              ctx.fillStyle = trayWashGrad;
+              ctx.fill();
+
+              // Breathing gradient border rim
+              const borderGrad = ctx.createLinearGradient(barX, barY, barX + barW, barY);
+              const borderAlphaBase = 0.18 + breathGlow * 0.18 + pulse * 0.30;
+              borderGrad.addColorStop(
+                0,
+                `rgba(${warmR}, ${warmG}, ${warmB}, ${(borderAlphaBase * 0.82).toFixed(3)})`
+              );
+              borderGrad.addColorStop(
+                1,
+                `rgba(${coolR}, ${coolG}, ${coolB}, ${Math.min(0.88, borderAlphaBase).toFixed(3)})`
+              );
+              ctx.strokeStyle = borderGrad;
+              ctx.lineWidth = 1;
+              ctx.stroke();
+
+              // Top Micro-Rail: Live Keystroke Precision Fill (Warm Yellow -> Cool Cyan Gradient)
+              const railW = barW - 14;
+              const railX = -railW / 2;
+              const railY = barY + 4.5;
+              const railH = 2.8;
+              drawRoundedRect(ctx, railX, railY, railW, railH, 1.4);
+              ctx.fillStyle = isWash
+                ? 'rgba(20, 20, 18, 0.10)'
+                : 'rgba(242, 238, 230, 0.12)';
+              ctx.fill();
+
+              const fillW = Math.max(4, railW * prec);
+              const railGrad = ctx.createLinearGradient(
+                railX,
+                railY,
+                railX + Math.max(18, fillW),
+                railY
+              );
+              railGrad.addColorStop(0, `rgb(${warmR}, ${warmG}, ${warmB})`);
+              railGrad.addColorStop(0.52, `rgb(${midR}, ${midG}, ${midB})`);
+              railGrad.addColorStop(1, `rgb(${coolR}, ${coolG}, ${coolB})`);
+
+              ctx.save();
+              ctx.shadowColor = `rgba(${accentRgb}, ${(
+                (isWash ? 0.18 + breathGlow * 0.20 : 0.34 + breathGlow * 0.34) +
+                pulse * 0.25
+              ).toFixed(3)})`;
+              ctx.shadowBlur = (isWash ? 2.5 + breathGlow * 3 : 4 + breathGlow * 5.5) + pulse * 3;
+              drawRoundedRect(ctx, railX, railY, fillW, railH, 1.4);
+              ctx.fillStyle = railGrad;
+              ctx.fill();
+              ctx.restore();
+
+              // Delicate breathing lamp bead at the active precision tip (blooms softly on strike)
+              const tipX = railX + fillW;
+              const tipY = railY + railH / 2;
+              ctx.beginPath();
+              ctx.arc(tipX, tipY, 1.35 + breathGlow * 0.65 + pulse * 1.35, 0, Math.PI * 2);
+              ctx.fillStyle = isWash
+                ? `rgba(${coolR}, ${coolG}, ${coolB}, ${(0.34 + breathGlow * 0.28 + pulse * 0.35).toFixed(3)})`
+                : `rgba(${Math.min(255, coolR + 55)}, ${Math.min(255, coolG + 36)}, ${Math.min(255, coolB + 22)}, ${(0.42 + breathGlow * 0.32 + pulse * 0.26).toFixed(3)})`;
+              ctx.fill();
+
+              // Bottom Row: Left Precision %, Center 7-Bar Cadence Stability Wave, Right Streak
+              const rowMidY = barY + 15.8;
+              ctx.font = '600 9px "JetBrains Mono", monospace';
+              ctx.textBaseline = 'middle';
+              ctx.fillStyle = isWash
+                ? 'rgba(24, 24, 22, 0.74)'
+                : 'rgba(232, 236, 244, 0.80)';
+              ctx.textAlign = 'left';
+              ctx.fillText(`${Math.round(prec * 100)}%`, barX + 7, rowMidY + 0.5);
+
+              // 7-Bar Cadence Equalizer (carries warm->cool spectrum wave + gentle breathing luminance)
+              const eqBars = 7;
+              const eqBarW = 2.4;
+              const eqGap = 2.8;
+              const eqTotalW = eqBars * eqBarW + (eqBars - 1) * eqGap;
+              const eqStartX = -eqTotalW / 2;
+              const maxBarH = 9.5;
+              const intervals = s.rhythmIntervals;
+              const meanIki =
+                intervals.length > 0
+                  ? intervals.reduce((acc, v) => acc + v, 0) / intervals.length
+                  : 260;
+
+              for (let bi = 0; bi < eqBars; bi++) {
+                const sampleIdx = intervals.length - eqBars + bi;
+                const distFromCenter = Math.abs(bi - 3) / 3;
+                let hNorm: number;
+                if (sampleIdx >= 0 && sampleIdx < intervals.length) {
+                  const dev = Math.abs(intervals[sampleIdx] - meanIki) / Math.max(90, meanIki);
+                  const localHarmony = Math.max(0.24, Math.min(1, 1 - dev * 1.15));
+                  hNorm = 0.28 + localHarmony * (0.56 - distFromCenter * 0.14);
+                } else {
+                  const waveBreath = s.reducedMotion
+                    ? 0
+                    : Math.sin(s.ringPhase * 2.2 + bi * 0.72) * 0.08;
+                  hNorm = Math.max(
+                    0.22,
+                    0.26 + stab * (0.48 - distFromCenter * 0.14) + waveBreath
+                  );
+                }
+                const pulseBoost = pulse * Math.max(0, 0.30 - distFromCenter * 0.18);
+                const bh = Math.max(2.4, Math.min(maxBarH, (hNorm + pulseBoost) * maxBarH));
+                const bx = eqStartX + bi * (eqBarW + eqGap);
+                const by = rowMidY + maxBarH / 2 - bh;
+
+                const barColorT = Math.max(
+                  0,
+                  Math.min(1, colorT - 0.24 + (bi / (eqBars - 1)) * 0.28)
+                );
+                const [br, bg, bb] = sampleRhythmRgb(barColorT, isWash);
+
+                drawRoundedRect(ctx, bx, by, eqBarW, bh, 1.2);
+                ctx.fillStyle = `rgb(${br}, ${bg}, ${bb})`;
+                const baseAlpha = sampleIdx >= 0 ? 0.56 + stab * 0.30 : 0.34 + stab * 0.28;
+                ctx.globalAlpha =
+                  s.rhythmOpacity * Math.min(1, baseAlpha + breathGlow * 0.14 + pulse * 0.12);
+                ctx.fill();
+              }
+
+              // Right Streak Counter (×N consecutive successful hits)
+              ctx.globalAlpha = s.rhythmOpacity;
+              ctx.fillStyle = accentColor;
+              ctx.textAlign = 'right';
+              ctx.fillText(`×${s.keyStreak}`, barX + barW - 7, rowMidY + 0.5);
+
+              ctx.restore();
             }
 
             ctx.restore();

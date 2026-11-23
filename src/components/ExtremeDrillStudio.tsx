@@ -4,10 +4,12 @@ import {
   ClipboardPaste,
   Eye,
   Flame,
+  PanelRight,
   RotateCcw,
   Target,
   Volume2,
   VolumeX,
+  X,
 } from 'lucide-react';
 import {
   ALL_DRILL_CHARS,
@@ -105,6 +107,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
   const [errorCue, setErrorCue] = useState<string | null>(null);
   const [imeWarning, setImeWarning] = useState<boolean>(false);
   const [inspectedChar, setInspectedChar] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
   const { enabled: keystrokeCloudEnabled } = useKeystrokeCloud();
   const cloudPulse = useKeystrokeCloudPulse(keystrokeCloudEnabled);
   const { trigger: triggerCloud, clear: clearCloud } = cloudPulse;
@@ -216,12 +219,12 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
 
   // Real-time latency stopwatch for the active glyph
   useEffect(() => {
-    if (isFinished || !activeEntry || pasteOpen) return;
+    if (isFinished || !activeEntry || pasteOpen || drawerOpen) return;
     const id = window.setInterval(() => {
       setElapsedMs(Math.round(performance.now() - charStartRef.current));
     }, 60);
     return () => window.clearInterval(id);
-  }, [cursor, isFinished, activeEntry, pasteOpen]);
+  }, [cursor, isFinished, activeEntry, pasteOpen, drawerOpen]);
 
   // Focus textarea when paste drawer opens
   useEffect(() => {
@@ -254,11 +257,20 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
 
       if (e.key === 'Escape') {
         e.preventDefault();
+        if (drawerOpen) {
+          setDrawerOpen(false);
+          charStartRef.current = performance.now();
+          lastKeyTimeRef.current = performance.now();
+          setElapsedMs(0);
+          return;
+        }
         setTyped('');
         setErrorCue(null);
         setInspectedChar(null);
         return;
       }
+
+      if (drawerOpen) return;
 
       if (isFinished || !activeEntry) {
         if (e.key === 'Enter') {
@@ -424,6 +436,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
     pasteOpen,
+    drawerOpen,
     isFinished,
     activeEntry,
     typed,
@@ -455,30 +468,32 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
     return activeEntry;
   }, [inspectedChar, activeEntry]);
 
-  // Windowed passage/sequence ribbon for eye-ahead preview
-  const ribbonTokens = useMemo(() => {
+  // Full token stream for smooth depth-of-field horizontal glide centered through the focal target
+  const streamTokens = useMemo(() => {
     if (tab === 'passage' && parsedPassage) {
-      // Find token index corresponding to current drill cursor
-      let centerTokIdx = parsedPassage.tokens.findIndex((tk) => tk.drillIndex === cursor);
-      if (centerTokIdx === -1) centerTokIdx = Math.max(0, parsedPassage.tokens.length - 1);
-      const start = Math.max(0, centerTokIdx - 14);
-      const end = Math.min(parsedPassage.tokens.length, centerTokIdx + 24);
-      return parsedPassage.tokens.slice(start, end);
+      return parsedPassage.tokens;
     }
-    const start = Math.max(0, cursor - 6);
-    const end = Math.min(deck.length, cursor + 16);
-    return deck.slice(start, end).map((entry, offset) => ({
+    return deck.map((entry, idx) => ({
       raw: entry.char,
       entry,
-      drillIndex: start + offset,
+      drillIndex: idx,
     }));
-  }, [tab, parsedPassage, deck, cursor]);
+  }, [tab, parsedPassage, deck]);
+
+  const activeStreamIdx = useMemo(() => {
+    if (streamTokens.length === 0) return 0;
+    const idx = streamTokens.findIndex((tk) => tk.drillIndex === cursor);
+    return idx >= 0 ? idx : streamTokens.length - 1;
+  }, [streamTokens, cursor]);
+
+  const STREAM_CELL_PX = 56;
 
   const handleLaunchSlowHell = () => {
     synth.playClick();
     setBottleneckKey(null);
     setTab('slowhell');
     setDeckVersion((v) => v + 1);
+    setDrawerOpen(false);
   };
 
   const handleLaunchBottleneck = (key: string) => {
@@ -486,6 +501,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
     setBottleneckKey(key);
     setTab('bottleneck');
     setDeckVersion((v) => v + 1);
+    setDrawerOpen(false);
   };
 
   const handleClearSlowPool = () => {
@@ -625,9 +641,30 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
           </div>
         </nav>
 
-        {/* Zone 3: Global Cloud Toggle + Single primary action */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        {/* Zone 3: Cloud Toggle + Slow-Pool Drawer Trigger + Sound */}
+        <div className="flex items-center gap-2 shrink-0">
           <KeystrokeCloudToggle compact />
+          <button
+            type="button"
+            onClick={() => {
+              synth.playClick();
+              setDrawerOpen((o) => !o);
+            }}
+            aria-expanded={drawerOpen}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              drawerOpen
+                ? 'bg-[var(--dojo-surface-2)] border-[var(--dojo-ochre)] text-[var(--dojo-ochre)]'
+                : 'bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
+            }`}
+          >
+            <PanelRight className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">{t('慢字與瓶頸')}</span>
+            {slowPool.length > 0 && (
+              <span className="font-mono-tabular text-[11px] font-bold text-[var(--dojo-ochre)]">
+                {slowPool.length}
+              </span>
+            )}
+          </button>
           <button
             type="button"
             onClick={onToggleMute}
@@ -636,42 +673,111 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
           >
             {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
-
-          {slowPool.length > 0 && tab !== 'slowhell' ? (
-            <button
-              type="button"
-              onClick={handleLaunchSlowHell}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <Flame className="w-3.5 h-3.5 shrink-0" />
-              <span className="font-mono-tabular">
-                {t('立刻清零慢字')} ({slowPool.length})
-              </span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                synth.playClick();
-                setPasteDraft(customText);
-                setPasteOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border-strong)] text-[var(--dojo-text)] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <ClipboardPaste className="w-3.5 h-3.5 shrink-0" />
-              <span>{t('貼入自訂文段')}</span>
-            </button>
-          )}
         </div>
       </header>
 
-      {/* ==================== TWO-ZONE SANDBOX BODY (68% / 32%) ==================== */}
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
-        {/* LEFT 68% INTERACTIVE STAGE */}
-        <main className="flex-1 lg:w-[68%] min-h-0 flex flex-col justify-between px-6 sm:px-10 py-5 bg-[var(--dojo-canvas)] wash:bg-transparent relative overflow-y-auto">
+      {/* ==================== FULL-VIEWPORT CENTERED TARGET-GLYPH SANCTUARY ==================== */}
+      <div className="relative flex-1 min-h-0 w-full overflow-hidden flex flex-col">
+        {/* Layer 1 (Ambient Mid-Background): Horizontal Depth-of-Field Passage Stream locked to viewport vertical center */}
+        {!isFinished && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+          >
+            {/* Virtualized smoothly gliding calligraphy ribbon anchored to dead-center (50%, 50%) */}
+            <div
+              className="absolute left-1/2 top-1/2 h-[64px]"
+              style={{
+                transform: `translate3d(${-(activeStreamIdx * STREAM_CELL_PX + STREAM_CELL_PX / 2)}px, -50%, 0)`,
+                transition: 'transform 340ms cubic-bezier(0.22, 1, 0.36, 1)',
+                willChange: 'transform',
+              }}
+            >
+              {streamTokens.map((tk, idx) => {
+                const delta = idx - activeStreamIdx;
+                if (Math.abs(delta) > 13) return null;
+                const isCurrentSlot = delta === 0;
+                const done = tk.drillIndex >= 0 ? results[tk.drillIndex] : undefined;
+                const absDelta = Math.abs(delta);
+
+                let charOpacity = 0;
+                let charBlur = 0;
+                if (isCurrentSlot) {
+                  charOpacity = 0;
+                } else if (absDelta === 1) {
+                  charOpacity = delta > 0 ? 0.34 : 0.24;
+                  charBlur = 0.35;
+                } else if (delta > 1) {
+                  charOpacity = Math.max(0.08, 0.56 - (delta - 2) * 0.044);
+                  charBlur = 0.4 + (delta - 1) * 0.2;
+                } else {
+                  charOpacity = Math.max(0.06, 0.42 - (absDelta - 2) * 0.04);
+                  charBlur = 0.5 + (absDelta - 1) * 0.24;
+                }
+
+                let colorCls = 'text-[var(--dojo-text-sub)]';
+                if (tk.drillIndex === -1) {
+                  colorCls = 'text-[var(--dojo-text-muted)]';
+                } else if (done) {
+                  colorCls =
+                    done.status === 'clean'
+                      ? 'text-[var(--dojo-pine)]'
+                      : done.status === 'slow'
+                        ? 'text-[var(--dojo-ochre)]'
+                        : 'text-[var(--dojo-crimson)]';
+                }
+
+                return (
+                  <span
+                    key={`${idx}_${tk.raw}`}
+                    className={`absolute top-1/2 -translate-y-1/2 inline-flex items-center justify-center font-display text-[32px] sm:text-[36px] leading-none select-none transition-opacity duration-300 ${colorCls}`}
+                    style={{
+                      left: `${idx * STREAM_CELL_PX}px`,
+                      width: `${STREAM_CELL_PX}px`,
+                      opacity: charOpacity,
+                      filter: charBlur > 0.1 ? `blur(${charBlur.toFixed(1)}px)` : 'none',
+                    }}
+                  >
+                    <span className="relative">
+                      {tk.raw}
+                      {done?.status === 'error' && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-1.5 h-1.5 rounded-full bg-[var(--dojo-crimson)] opacity-80"
+                        />
+                      )}
+                    </span>
+                  </span>
+                );
+              })}
+            </div>
+
+            {/* Centered Radial Optical Halo Scrim locking pristine figure-ground contrast behind the focal glyph */}
+            <div
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] sm:w-[640px] h-[340px] sm:h-[420px]"
+              style={{
+                background: isWash
+                  ? 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(243,241,236,0.92) 0%, rgba(243,241,236,0.62) 48%, rgba(243,241,236,0) 76%)'
+                  : 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(11,15,23,0.90) 0%, rgba(11,15,23,0.58) 48%, rgba(11,15,23,0) 76%)',
+              }}
+            />
+            {/* Soft Horizontal Horizon Mist Scrims */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background: isWash
+                  ? 'linear-gradient(90deg, rgba(243,241,236,0.96) 0%, transparent 16%, transparent 84%, rgba(243,241,236,0.96) 100%)'
+                  : 'linear-gradient(90deg, rgba(11,15,23,0.96) 0%, transparent 16%, transparent 84%, rgba(11,15,23,0.96) 100%)',
+              }}
+            />
+          </div>
+        )}
+
+        {/* Top Floating Perimeter Bar: Compact Mobile Switcher + Quiet Unboxed Telemetry + Passage Controls */}
+        <div className="relative z-20 px-5 sm:px-8 pt-3.5 flex flex-col gap-2.5">
           {/* Mobile / Tablet compact controls (visible below lg) */}
-          <div className="flex lg:hidden flex-wrap items-center gap-2 pb-3 mb-3 border-b border-[var(--dojo-border)]">
-            <div className="flex items-center gap-1 p-1 bg-[var(--dojo-surface)] rounded-lg border border-[var(--dojo-border)]">
+          <div className="flex lg:hidden flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 p-0.5 bg-[var(--dojo-surface)]/90 rounded-lg border border-[var(--dojo-border)]">
               <button
                 type="button"
                 onClick={() => {
@@ -712,7 +818,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                 {t('慢字回爐精修')}
               </button>
             </div>
-            <div className="flex items-center gap-1 p-1 bg-[var(--dojo-surface)] rounded-lg border border-[var(--dojo-border)]">
+            <div className="flex items-center gap-1 p-0.5 bg-[var(--dojo-surface)]/90 rounded-lg border border-[var(--dojo-border)]">
               {THRESHOLD_OPTIONS.map((ms) => (
                 <button
                   key={ms}
@@ -728,7 +834,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-1 p-1 bg-[var(--dojo-surface)] rounded-lg border border-[var(--dojo-border)]">
+            <div className="flex items-center gap-1 p-0.5 bg-[var(--dojo-surface)]/90 rounded-lg border border-[var(--dojo-border)]">
               {SCRIPT_MODE_OPTIONS.map((opt) => (
                 <button
                   key={opt.id}
@@ -744,7 +850,7 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-1 p-1 bg-[var(--dojo-surface)] rounded-lg border border-[var(--dojo-border)]">
+            <div className="flex items-center gap-1 p-0.5 bg-[var(--dojo-surface)]/90 rounded-lg border border-[var(--dojo-border)]">
               {THEME_OPTIONS.map((opt) => (
                 <button
                   key={opt.id}
@@ -765,9 +871,8 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
             </div>
           </div>
 
-          {/* Quiet Stage Sub-Bar: Unboxed Tabular Stats + Passage Switcher */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[var(--dojo-border)]">
-            <div className="flex items-center gap-2.5 text-xs text-[var(--dojo-text-sub)] font-mono-tabular">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5 text-xs text-[var(--dojo-text-sub)] font-mono-tabular">
               <span>
                 {t('直出率')} <strong className="text-[var(--dojo-pine)] font-semibold">{cleanRate}%</strong>
               </span>
@@ -793,20 +898,21 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {tab === 'passage' && (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-wrap">
                   {DRILL_PASSAGES.map((p, idx) => (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() => {
+                        synth.playClick();
                         setUsingCustomText(false);
                         setPassageIdx(idx);
                       }}
-                      className={`px-2.5 py-1 text-[11px] rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                      className={`px-2.5 py-1 text-[11px] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                         !usingCustomText && passageIdx === idx
-                          ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)] font-medium'
+                          ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)] font-medium border border-[var(--dojo-border-strong)]'
                           : 'text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text)]'
                       }`}
                     >
@@ -816,16 +922,18 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      synth.playClick();
                       setPasteDraft(customText);
                       setPasteOpen((o) => !o);
                     }}
-                    className={`px-2.5 py-1 text-[11px] rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                       usingCustomText || pasteOpen
                         ? 'bg-[var(--dojo-ochre-wash)] text-[var(--dojo-ochre)] font-medium'
                         : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
                     }`}
                   >
-                    {t('貼入文段')}
+                    <ClipboardPaste className="w-3 h-3" />
+                    <span>{t('貼入文段')}</span>
                   </button>
                 </div>
               )}
@@ -833,21 +941,329 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
               {(tab === 'hardsplit' || tab === 'slowhell' || tab === 'bottleneck') && (
                 <button
                   type="button"
-                  onClick={() => setDeckVersion((v) => v + 1)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  onClick={() => {
+                    synth.playClick();
+                    setDeckVersion((v) => v + 1);
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] bg-[var(--dojo-surface)]/80 border border-[var(--dojo-border)] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <RotateCcw className="w-3 h-3" />
                   <span>{t('換一組')}</span>
                 </button>
               )}
+
+              {slowPool.length > 0 && tab !== 'slowhell' && (
+                <button
+                  type="button"
+                  onClick={handleLaunchSlowHell}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Flame className="w-3 h-3 shrink-0" />
+                  <span className="font-mono-tabular">
+                    {t('清零慢字')} ({slowPool.length})
+                  </span>
+                </button>
+              )}
             </div>
           </div>
+        </div>
 
-          {/* Inline Custom Text Paste Drawer */}
-          {pasteOpen && (
-            <div className="my-4 p-4 bg-[var(--dojo-surface)] border border-[var(--dojo-border-strong)] rounded-xl">
+        {/* Layer 2 (Foreground Focal Plane): Mathematically Screen-Centered Target Anchor (Zero Layout Shift) */}
+        {!isFinished && activeEntry ? (
+          <>
+            {/* Whisper Latency Hairline anchored quietly above the centered target */}
+            <div className="pointer-events-none absolute left-1/2 bottom-[calc(50%+54px)] -translate-x-1/2 z-20 w-44 flex flex-col items-center gap-1.5">
+              <div className="w-full flex items-center justify-between text-[11px] font-mono-tabular">
+                <span
+                  className={
+                    isOverThreshold
+                      ? 'text-[var(--dojo-ochre)] font-medium'
+                      : 'text-[var(--dojo-text-muted)]'
+                  }
+                >
+                  {isOverThreshold
+                    ? t('猶豫超時 · 記慢字')
+                    : `${t('目標')} < ${(thresholdMs / 1000).toFixed(1)}s`}
+                </span>
+                <span
+                  className={
+                    isOverThreshold ? 'text-[var(--dojo-ochre)] font-semibold' : 'text-[var(--dojo-text-sub)]'
+                  }
+                >
+                  {elapsedMs}ms
+                </span>
+              </div>
+              <div className="w-full h-[2.5px] bg-[var(--dojo-surface-2)]/80 rounded-full overflow-hidden">
+                <div
+                  className="h-full transition-colors"
+                  style={{
+                    width: `${Math.min(100, (elapsedMs / thresholdMs) * 100)}%`,
+                    backgroundColor: isOverThreshold ? 'var(--dojo-ochre)' : 'var(--dojo-pine)',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Dead-Center Target Character + 100% Target-Coincident Memory Palace Cloud */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center">
+              {keystrokeCloudEnabled && (
+                <>
+                  <KeystrokePalaceCloud
+                    pulse={cloudPulse.pulse}
+                    visible={cloudPulse.visible}
+                    scriptMode={scriptMode}
+                    placement="coincident"
+                    size="coincident-lg"
+                    className="hidden sm:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+                  />
+                  <KeystrokePalaceCloud
+                    pulse={cloudPulse.pulse}
+                    visible={cloudPulse.visible}
+                    scriptMode={scriptMode}
+                    placement="coincident"
+                    size="coincident-sm"
+                    className="sm:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+                  />
+                </>
+              )}
+              <div
+                key={`${activeEntry.char}_${cursor}`}
+                className={`wash-enter relative z-20 font-display text-[56px] sm:text-[66px] leading-none font-bold select-none transition-transform duration-150 ${
+                  errorCue ? 'text-[var(--dojo-crimson-text)]' : 'text-[var(--dojo-text-bright)]'
+                }`}
+              >
+                {isWash && (
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute -inset-5 rounded-full -z-10"
+                      style={{
+                        background: errorCue
+                          ? 'radial-gradient(circle, rgba(20, 20, 18, 0.14) 0%, transparent 70%)'
+                          : 'radial-gradient(circle, rgba(20, 20, 18, 0.075) 0%, rgba(48, 48, 44, 0.035) 45%, transparent 72%)',
+                      }}
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute -inset-6 rounded-full -z-10 blur-[6px] ink-aura-fade"
+                      style={{
+                        background:
+                          'radial-gradient(circle, rgba(20, 20, 18, 0.15) 0%, rgba(56, 56, 52, 0.05) 50%, transparent 76%)',
+                      }}
+                    />
+                  </>
+                )}
+                {activeEntry.char}
+              </div>
+            </div>
+
+            {/* Keycode Slots, Status Cue & Non-Shifting In-Place X-Ray Rescue below the centered target */}
+            <div className="absolute left-1/2 top-[calc(50%+54px)] -translate-x-1/2 z-20 flex flex-col items-center w-full max-w-md px-4">
+              {/* Blind Keycode Slots */}
+              <div className="flex items-center gap-2">
+                {Array.from(activeEntry.code).map((targetChar, idx) => {
+                  const typedChar = typed[idx];
+                  const isFilled = idx < typed.length;
+                  const isNext = idx === typed.length;
+                  const revealLetter = showXrayRescue;
+                  return (
+                    <div
+                      key={idx}
+                      className={`relative w-10 h-11 rounded-lg border flex items-center justify-center font-mono-tabular text-lg font-bold uppercase transition-all ${
+                        isFilled
+                          ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)] wash:border-[#181817]/40 text-[var(--dojo-pine-text)]'
+                          : isNext && errorCue
+                            ? 'bg-[var(--dojo-crimson-wash)] wash:bg-[rgba(20,20,18,0.22)] border-[var(--dojo-crimson)] wash:border-[#141413]/55 text-[var(--dojo-crimson-text)]'
+                            : isNext
+                              ? 'bg-[var(--dojo-surface-2)]/95 border-[var(--dojo-ochre)] text-[var(--dojo-text-bright)]'
+                              : 'bg-[var(--dojo-surface)]/85 border-[var(--dojo-border)] text-[var(--dojo-text-muted)]'
+                      }`}
+                    >
+                      {isFilled ? typedChar : revealLetter ? targetChar : '·'}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Quiet Error / Helper Line */}
+              <div className="h-5 mt-2.5 flex items-center justify-center text-xs">
+                {errorCue ? (
+                  <span className="text-[var(--dojo-crimson-text)] font-medium">
+                    {t('錯鍵')} · {errorCue}
+                  </span>
+                ) : imeWarning ? (
+                  <span className="text-[var(--dojo-ochre)]">
+                    {t('請將系統輸入法切換至英文狀態以直出字根')}
+                  </span>
+                ) : graduatedBanner ? (
+                  <span className="text-[var(--dojo-pine-text)] font-medium">
+                    {graduatedBanner}
+                  </span>
+                ) : (
+                  <span className="text-[var(--dojo-text-muted)]">
+                    {t('Tab 閃看拆法 · Space 清空緩衝')}
+                  </span>
+                )}
+              </div>
+
+              {/* Compact Translucent X-Ray Formula Strip (never shifts the centered glyph!) */}
+              {showXrayRescue && (
+                <div
+                  className={`mt-3 flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl border backdrop-blur-md wash-enter-soft ${
+                    isWash
+                      ? 'bg-[#F8F6F0]/90 border-[#141413]/14'
+                      : 'bg-[#121824]/88 border-[#F2EEE6]/12'
+                  }`}
+                >
+                  {activeEntry.xray && (
+                    <svg
+                      viewBox="0 0 1024 1024"
+                      className="w-12 h-12 shrink-0"
+                      aria-label={`${activeEntry.char} ${t('筆畫拆解')}`}
+                    >
+                      <g transform="translate(0, 900) scale(1, -1)">
+                        {activeEntry.xray.strokes.map((d, sIdx) => {
+                          const targetIdx = activeEntry.xray!.targets.findIndex((tg) =>
+                            tg.strokeIndices.includes(sIdx)
+                          );
+                          const strokeColor =
+                            targetIdx >= 0
+                              ? rootColors[Math.min(targetIdx, rootColors.length - 1)]
+                              : isWash
+                                ? '#A4A39B'
+                                : '#4E5768';
+                          return (
+                            <path
+                              key={sIdx}
+                              d={d}
+                              fill={strokeColor}
+                              fillOpacity={targetIdx >= 0 ? 0.94 : 0.35}
+                            />
+                          );
+                        })}
+                      </g>
+                    </svg>
+                  )}
+
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span className="font-medium text-[var(--dojo-ochre)]">{t('結構閃視')}</span>
+                      <span className="font-mono-tabular font-bold uppercase text-[var(--dojo-text-bright)]">
+                        {activeEntry.code}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {activeEntry.rootDetails.map((rd, idx) => {
+                        const color =
+                          idx === activeEntry.rootDetails.length - 1 && activeEntry.rootDetails.length > 1
+                            ? rootColors[3]
+                            : rootColors[Math.min(idx, 2)];
+                        return (
+                          <span
+                            key={`${rd.radical}-${idx}`}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-[var(--dojo-surface-inset)] rounded border border-[var(--dojo-border)] text-xs"
+                          >
+                            <span className="font-display font-bold" style={{ color }}>
+                              {rd.radical}
+                            </span>
+                            <span className="font-mono-tabular text-[10px] text-[var(--dojo-text-sub)] uppercase">
+                              {rd.chamberKey}
+                              <span className="text-[var(--dojo-text-muted)]">({rd.ma})</span>
+                            </span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          /* SESSION COMPLETE SUMMARY CENTERED IN STAGE */
+          <div className="relative z-20 flex-1 flex items-center justify-center px-4">
+            <div className="w-full max-w-lg p-6 bg-[var(--dojo-surface)]/95 backdrop-blur-md border border-[var(--dojo-border)] rounded-2xl text-center shadow-xl">
+              <h2 className="font-display text-2xl font-bold text-[var(--dojo-text-bright)] mb-2">
+                {t('本輪實戰完成')}
+              </h2>
+              <p className="text-xs text-[var(--dojo-text-sub)] mb-6">
+                {t('實戰延遲與慢字紀錄已同步寫入全域熟練度')}
+              </p>
+
+              <div className="grid grid-cols-3 gap-4 py-4 border-y border-[var(--dojo-border)] mb-6 font-mono-tabular">
+                <div>
+                  <div className="text-[11px] font-sans text-[var(--dojo-text-muted)] mb-1">{t('純直出率')}</div>
+                  <div className="text-2xl font-bold text-[var(--dojo-pine)]">{cleanRate}%</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-sans text-[var(--dojo-text-muted)] mb-1">{t('實戰均速')}</div>
+                  <div className="text-2xl font-bold text-[var(--dojo-text-bright)]">{avgCharMs}ms</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-sans text-[var(--dojo-text-muted)] mb-1">
+                    {tab === 'slowhell' ? t('移出達標') : t('記為慢字')}
+                  </div>
+                  <div className="text-2xl font-bold text-[var(--dojo-ochre)]">
+                    {tab === 'slowhell' ? sessionGraduated : sessionSlowAdded}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                {slowPool.length > 0 && tab !== 'slowhell' && (
+                  <button
+                    type="button"
+                    onClick={handleLaunchSlowHell}
+                    className="px-5 py-2.5 text-xs font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors cursor-pointer"
+                  >
+                    {t('立刻清零慢字')} ({slowPool.length})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setDeckVersion((v) => v + 1)}
+                  className="px-5 py-2.5 text-xs font-semibold bg-[var(--dojo-surface-2)] hover:opacity-90 border border-[var(--dojo-border-strong)] text-[var(--dojo-text)] rounded-lg transition-colors cursor-pointer"
+                >
+                  {t('再練一輪')}
+                </button>
+                {tab === 'passage' && !usingCustomText && (
+                  <button
+                    type="button"
+                    onClick={() => setPassageIdx((i) => (i + 1) % DRILL_PASSAGES.length)}
+                    className="px-5 py-2.5 text-xs font-semibold text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors cursor-pointer"
+                  >
+                    {t('下一篇短文')}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quiet Bottom Context Line */}
+        <div className="pointer-events-none absolute bottom-3.5 left-0 right-0 z-20 px-5 sm:px-8 flex items-center justify-between text-[11px] text-[var(--dojo-text-muted)]">
+          <span>
+            {tab === 'passage'
+              ? usingCustomText
+                ? t('自訂文段盲打模式')
+                : t(DRILL_PASSAGES[passageIdx % DRILL_PASSAGES.length].subtitle)
+              : tab === 'hardsplit'
+                ? t('超時 0.95 秒自動閃現筆畫切分，逼出第一眼結構直覺')
+                : tab === 'slowhell'
+                  ? t('所有超時與錯鍵字集中高頻重現，連續 3 次高速直出即移出')
+                  : t('專攻單一宮殿鍵位高頻搭配字，拉低鍵間延遲')}
+          </span>
+          <span className="font-mono-tabular hidden sm:inline">
+            {t('收錄詞庫')} {ALL_DRILL_CHARS.length} {t('字')}
+          </span>
+        </div>
+
+        {/* Custom Text Paste Centered Modal Overlay */}
+        {pasteOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-xs">
+            <div className="w-full max-w-lg p-5 bg-[var(--dojo-surface)] border border-[var(--dojo-border-strong)] rounded-2xl shadow-2xl">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-[var(--dojo-text-bright)]">
+                <span className="text-sm font-semibold text-[var(--dojo-text-bright)]">
                   {t('貼入任意文章進行純鍵碼盲打跟打')}
                 </span>
                 <span className="text-[11px] font-mono-tabular text-[var(--dojo-text-sub)]">
@@ -886,519 +1302,196 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
                 </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Eye-Ahead Rolling Passage / Sequence Track */}
-          {!isFinished && (
-            <div className="mt-5 px-4 py-3.5 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-xl">
-              <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-2 font-display text-lg sm:text-xl leading-relaxed tracking-wide">
-                {ribbonTokens.map((tk, i) => {
-                  if (tk.drillIndex === -1) {
-                    return (
-                      <span key={`p-${i}`} className="text-[var(--dojo-text-muted)] select-none">
-                        {tk.raw}
-                      </span>
-                    );
-                  }
-                  const done = results[tk.drillIndex];
-                  const isCurrent = tk.drillIndex === cursor;
-                  let colorCls = 'text-[var(--dojo-text-sub)]';
-                  if (done) {
-                    colorCls =
-                      done.status === 'clean'
-                        ? 'text-[var(--dojo-pine)] opacity-85'
-                        : done.status === 'slow'
-                          ? 'text-[var(--dojo-ochre)] wash:text-[#6E6E68]'
-                          : 'text-[var(--dojo-crimson)] wash:underline wash:decoration-dotted wash:underline-offset-4';
-                  } else if (isCurrent) {
-                    colorCls = 'text-[var(--dojo-text-bright)] font-bold border-b-2 border-[var(--dojo-crimson)] pb-0.5';
-                  }
-                  return (
-                    <span key={`d-${tk.drillIndex}-${i}`} className={`${colorCls} transition-colors`}>
-                      {tk.raw}
-                    </span>
-                  );
-                })}
+        {/* On-Demand Slide-Over Drawer: Slow Pool & Top 3 Bottleneck Chambers */}
+        {drawerOpen && (
+          <div className="absolute inset-0 z-40 flex justify-end">
+            <div
+              aria-hidden="true"
+              onClick={() => setDrawerOpen(false)}
+              className="flex-1 bg-black/25 backdrop-blur-[1px]"
+            />
+            <aside className="w-full max-w-[360px] h-full bg-[var(--dojo-surface)]/96 wash:bg-[#F3F1EC]/96 backdrop-blur-md border-l border-[var(--dojo-border)] shadow-2xl flex flex-col min-h-0 overflow-y-auto">
+              <div className="px-5 py-3.5 border-b border-[var(--dojo-border)] flex items-center justify-between">
+                <span className="text-xs font-semibold text-[var(--dojo-text-bright)]">
+                  {t('慢字精修池與瓶頸鍵位')}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDrawerOpen(false)}
+                  aria-label={t('關閉側欄')}
+                  className="p-1 rounded-md text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text-bright)] hover:bg-[var(--dojo-surface-2)] cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-            </div>
-          )}
 
-          {/* CENTRAL FOCUS STAGE: Target Glyph + Latency Bar + In-Place X-Ray Rescue */}
-          <div className="relative flex-1 flex flex-col items-center justify-center py-8 min-h-[360px]">
-            {!isFinished && activeEntry ? (
-              <div className="w-full max-w-2xl flex flex-col items-center">
-                {/* Latency Bar & Explicit State Text (Dual-Coded) */}
-                <div className="relative z-20 w-full max-w-sm mb-6">
-                  <div className="flex items-center justify-between text-xs font-mono-tabular mb-1.5">
-                    <span
-                      className={
-                        isOverThreshold
-                          ? 'text-[var(--dojo-ochre)] font-medium'
-                          : 'text-[var(--dojo-text-muted)]'
-                      }
+              {/* Upper Section: Slow & Error Pool */}
+              <section className="p-5 border-b border-[var(--dojo-border)] flex-1 min-h-[220px] flex flex-col">
+                <div className="flex items-baseline justify-between mb-1">
+                  <h2 className="text-sm font-semibold text-[var(--dojo-text-bright)]">
+                    {t('慢字／錯字精修池')}
+                    <span className="ml-2 font-mono-tabular text-[var(--dojo-ochre)]">{slowPool.length}</span>
+                  </h2>
+                  {slowPool.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearSlowPool}
+                      className="text-[11px] text-[var(--dojo-text-muted)] hover:text-[var(--dojo-crimson-text)] transition-colors cursor-pointer"
                     >
-                      {isOverThreshold
-                        ? t('猶豫超時 · 已標記慢字')
-                        : `${t('直出計時')} · ${t('目標')} < ${(thresholdMs / 1000).toFixed(1)}s`}
-                    </span>
-                    <span
-                      className={
-                        isOverThreshold ? 'text-[var(--dojo-ochre)] font-semibold' : 'text-[var(--dojo-text-sub)]'
-                      }
-                    >
-                      {elapsedMs}ms
-                    </span>
-                  </div>
-                  <div className="w-full h-1 bg-[var(--dojo-surface-2)] rounded-full overflow-hidden">
-                    <div
-                      className="h-full transition-colors"
-                      style={{
-                        width: `${Math.min(100, (elapsedMs / thresholdMs) * 100)}%`,
-                        backgroundColor: isOverThreshold ? 'var(--dojo-ochre)' : 'var(--dojo-pine)',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Natural Writing-Scale Target Character + 100% Target-Coincident Palace Cloud */}
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-8 sm:gap-12">
-                  <div className="flex flex-col items-center">
-                    <div className="relative flex items-center justify-center my-2">
-                      {keystrokeCloudEnabled && (
-                        <>
-                          <KeystrokePalaceCloud
-                            pulse={cloudPulse.pulse}
-                            visible={cloudPulse.visible}
-                            scriptMode={scriptMode}
-                            placement="coincident"
-                            size="coincident"
-                            className="hidden sm:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
-                          />
-                          <KeystrokePalaceCloud
-                            pulse={cloudPulse.pulse}
-                            visible={cloudPulse.visible}
-                            scriptMode={scriptMode}
-                            placement="coincident"
-                            size="coincident-sm"
-                            className="sm:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
-                          />
-                        </>
-                      )}
-                      <div
-                        key={`${activeEntry.char}_${cursor}`}
-                        className={`wash-enter relative z-20 font-display text-[52px] sm:text-[62px] leading-none font-bold select-none transition-transform duration-150 ${
-                          errorCue ? 'text-[var(--dojo-crimson-text)]' : 'text-[var(--dojo-text-bright)]'
-                        }`}
-                      >
-                        {isWash && (
-                          <>
-                            <span
-                              aria-hidden="true"
-                              className="pointer-events-none absolute -inset-5 rounded-full -z-10"
-                              style={{
-                                background: errorCue
-                                  ? 'radial-gradient(circle, rgba(20, 20, 18, 0.14) 0%, transparent 70%)'
-                                  : 'radial-gradient(circle, rgba(20, 20, 18, 0.075) 0%, rgba(48, 48, 44, 0.035) 45%, transparent 72%)',
-                              }}
-                            />
-                            <span
-                              aria-hidden="true"
-                              className="pointer-events-none absolute -inset-6 rounded-full -z-10 blur-[6px] ink-aura-fade"
-                              style={{
-                                background:
-                                  'radial-gradient(circle, rgba(20, 20, 18, 0.15) 0%, rgba(56, 56, 52, 0.05) 50%, transparent 76%)',
-                              }}
-                            />
-                          </>
-                        )}
-                        {activeEntry.char}
-                      </div>
-                    </div>
-
-                    {/* Blind Keycode Slots */}
-                    <div className="relative z-20 flex items-center gap-2.5 mt-6">
-                      {Array.from(activeEntry.code).map((targetChar, idx) => {
-                        const typedChar = typed[idx];
-                        const isFilled = idx < typed.length;
-                        const isNext = idx === typed.length;
-                        const revealLetter = showXrayRescue;
-                        return (
-                          <div
-                            key={idx}
-                            className={`relative w-11 h-12 rounded-lg border flex items-center justify-center font-mono-tabular text-xl font-bold uppercase transition-all ${
-                              isFilled
-                                ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)] wash:border-[#181817]/40 text-[var(--dojo-pine-text)] wash:shadow-[0_0_16px_rgba(20,20,18,0.16)]'
-                                : isNext && errorCue
-                                  ? 'bg-[var(--dojo-crimson-wash)] wash:bg-[rgba(20,20,18,0.22)] border-[var(--dojo-crimson)] wash:border-[#141413]/55 text-[var(--dojo-crimson-text)] wash:shadow-[0_0_20px_rgba(20,20,18,0.24)]'
-                                  : isNext
-                                    ? 'bg-[var(--dojo-surface-2)] border-[var(--dojo-border-strong)] text-[var(--dojo-text-bright)]'
-                                    : 'bg-[var(--dojo-surface)] border-[var(--dojo-border)] text-[var(--dojo-text-muted)]'
-                            }`}
-                          >
-                            {isWash && (isFilled || (isNext && errorCue)) && (
-                              <>
-                                <span
-                                  aria-hidden="true"
-                                  className="pointer-events-none absolute -inset-4 rounded-full blur-[7px] ink-aura-slow"
-                                  style={{
-                                    background:
-                                      isNext && errorCue
-                                        ? 'radial-gradient(circle, rgba(16, 16, 15, 0.24) 0%, rgba(44, 44, 40, 0.09) 50%, transparent 78%)'
-                                        : 'radial-gradient(circle, rgba(20, 20, 18, 0.16) 0%, rgba(56, 56, 52, 0.06) 52%, transparent 78%)',
-                                  }}
-                                />
-                                <span
-                                  aria-hidden="true"
-                                  className="pointer-events-none absolute -inset-2 rounded-full blur-[4px] ink-aura-fade"
-                                  style={{
-                                    background:
-                                      isNext && errorCue
-                                        ? 'radial-gradient(circle, rgba(16, 16, 15, 0.30) 0%, transparent 74%)'
-                                        : 'radial-gradient(circle, rgba(20, 20, 18, 0.22) 0%, transparent 74%)',
-                                  }}
-                                />
-                              </>
-                            )}
-                            {isFilled ? typedChar : revealLetter ? targetChar : '·'}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Wrong key cue or subtle helper */}
-                    <div className="h-6 mt-3 flex items-center justify-center text-xs">
-                      {errorCue ? (
-                        <span className="text-[var(--dojo-crimson-text)] font-medium">
-                          {t('錯鍵')} · {errorCue}
-                        </span>
-                      ) : imeWarning ? (
-                        <span className="text-[var(--dojo-ochre)]">
-                          {t('請將系統輸入法切換至英文狀態以直出字根')}
-                        </span>
-                      ) : (
-                        <span className="text-[var(--dojo-text-muted)]">
-                          {t('Tab 閃看拆法 · Space 清空當前緩衝')}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* In-Place Lightning X-Ray & Split Formula (revealed on timeout, 2 errors, or Tab) */}
-                  {showXrayRescue && (
-                    <div className="flex flex-col items-center sm:items-start gap-3 p-4 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-xl max-w-xs">
-                      <div className="flex items-center justify-between w-full gap-4 text-[11px] text-[var(--dojo-text-sub)]">
-                        <span className="font-medium text-[var(--dojo-ochre)]">{t('結構拆解閃視')}</span>
-                        <span className="font-mono-tabular uppercase text-[var(--dojo-text)]">
-                          {activeEntry.code}
-                        </span>
-                      </div>
-
-                      {activeEntry.xray && (
-                        <svg
-                          viewBox="0 0 1024 1024"
-                          className="w-28 h-28 self-center"
-                          aria-label={`${activeEntry.char} ${t('筆畫拆解')}`}
-                        >
-                          <g transform="translate(0, 900) scale(1, -1)">
-                            {activeEntry.xray.strokes.map((d, sIdx) => {
-                              const targetIdx = activeEntry.xray!.targets.findIndex((tg) =>
-                                tg.strokeIndices.includes(sIdx)
-                              );
-                              const strokeColor =
-                                targetIdx >= 0
-                                  ? rootColors[Math.min(targetIdx, rootColors.length - 1)]
-                                  : isWash
-                                    ? '#A4A39B'
-                                    : '#4E5768';
-                              return (
-                                <path
-                                  key={sIdx}
-                                  d={d}
-                                  fill={strokeColor}
-                                  fillOpacity={targetIdx >= 0 ? 0.92 : 0.35}
-                                />
-                              );
-                            })}
-                          </g>
-                        </svg>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        {activeEntry.rootDetails.map((rd, idx) => {
-                          const color =
-                            idx === activeEntry.rootDetails.length - 1 && activeEntry.rootDetails.length > 1
-                              ? rootColors[3]
-                              : rootColors[Math.min(idx, 2)];
-                          return (
-                            <div
-                              key={`${rd.radical}-${idx}`}
-                              className="flex items-center gap-1.5 px-2 py-1 bg-[var(--dojo-surface-inset)] rounded-md border border-[var(--dojo-border)] text-xs"
-                            >
-                              <span className="font-display text-base font-bold" style={{ color }}>
-                                {rd.radical}
-                              </span>
-                              <span className="font-mono-tabular text-[11px] text-[var(--dojo-text-sub)] uppercase">
-                                {rd.chamberKey}
-                                <span className="text-[var(--dojo-text-muted)]">({rd.ma})</span>
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                      {t('清空')}
+                    </button>
                   )}
                 </div>
-
-                {/* Graduation celebration toast */}
-                {graduatedBanner && (
-                  <div className="mt-4 text-xs font-medium text-[var(--dojo-pine-text)]">
-                    {graduatedBanner}
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* SESSION COMPLETE SUMMARY IN STAGE */
-              <div className="w-full max-w-lg p-6 bg-[var(--dojo-surface)] border border-[var(--dojo-border)] rounded-xl text-center">
-                <h2 className="font-display text-2xl font-bold text-[var(--dojo-text-bright)] mb-2">
-                  {t('本輪實戰完成')}
-                </h2>
-                <p className="text-xs text-[var(--dojo-text-sub)] mb-6">
-                  {t('實戰延遲與慢字紀錄已同步寫入全域熟練度')}
+                <p className="text-[11px] text-[var(--dojo-text-muted)] mb-3">
+                  {t('連續')} {SLOW_POOL_GRADUATE_STREAK} {t('次在')} {(thresholdMs / 1000).toFixed(1)}s{' '}
+                  {t('內無錯直出即移出')}
                 </p>
 
-                <div className="grid grid-cols-3 gap-4 py-4 border-y border-[var(--dojo-border)] mb-6 font-mono-tabular">
-                  <div>
-                    <div className="text-[11px] font-sans text-[var(--dojo-text-muted)] mb-1">{t('純直出率')}</div>
-                    <div className="text-2xl font-bold text-[var(--dojo-pine)]">{cleanRate}%</div>
+                {slowPool.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center text-xs text-[var(--dojo-text-muted)] py-8 text-center">
+                    {t('目前尚無卡殼字，持續保持直出節奏')}
                   </div>
-                  <div>
-                    <div className="text-[11px] font-sans text-[var(--dojo-text-muted)] mb-1">{t('實戰均速')}</div>
-                    <div className="text-2xl font-bold text-[var(--dojo-text-bright)]">{avgCharMs}ms</div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-sans text-[var(--dojo-text-muted)] mb-1">
-                      {tab === 'slowhell' ? t('移出達標') : t('記為慢字')}
-                    </div>
-                    <div className="text-2xl font-bold text-[var(--dojo-ochre)]">
-                      {tab === 'slowhell' ? sessionGraduated : sessionSlowAdded}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-center gap-3">
-                  {slowPool.length > 0 && tab !== 'slowhell' && (
-                    <button
-                      type="button"
-                      onClick={handleLaunchSlowHell}
-                      className="px-5 py-2.5 text-xs font-semibold bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white rounded-lg transition-colors cursor-pointer"
-                    >
-                      {t('立刻清零慢字')} ({slowPool.length})
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setDeckVersion((v) => v + 1)}
-                    className="px-5 py-2.5 text-xs font-semibold bg-[var(--dojo-surface-2)] hover:opacity-90 border border-[var(--dojo-border-strong)] text-[var(--dojo-text)] rounded-lg transition-colors cursor-pointer"
-                  >
-                    {t('再練一輪')}
-                  </button>
-                  {tab === 'passage' && !usingCustomText && (
-                    <button
-                      type="button"
-                      onClick={() => setPassageIdx((i) => (i + 1) % DRILL_PASSAGES.length)}
-                      className="px-5 py-2.5 text-xs font-semibold text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors cursor-pointer"
-                    >
-                      {t('下一篇短文')}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Quiet Bottom Context Line */}
-          <div className="pt-3 border-t border-[var(--dojo-border)] flex items-center justify-between text-[11px] text-[var(--dojo-text-muted)]">
-            <span>
-              {tab === 'passage'
-                ? usingCustomText
-                  ? t('自訂文段盲打模式')
-                  : t(DRILL_PASSAGES[passageIdx % DRILL_PASSAGES.length].subtitle)
-                : tab === 'hardsplit'
-                  ? t('超時 0.95 秒自動閃現筆畫切分，逼出第一眼結構直覺')
-                  : tab === 'slowhell'
-                    ? t('所有超時與錯鍵字集中高頻重現，連續 3 次高速直出即移出')
-                    : t('專攻單一宮殿鍵位高頻搭配字，拉低鍵間延遲')}
-            </span>
-            <span className="font-mono-tabular hidden sm:inline">
-              {t('收錄詞庫')} {ALL_DRILL_CHARS.length} {t('字')}
-            </span>
-          </div>
-        </main>
-
-        {/* RIGHT 32% SLOW POOL & BOTTLENECK CHAMBER DECK (Single-Level Surface) */}
-        <aside className="lg:w-[32%] lg:min-w-[320px] shrink-0 bg-[var(--dojo-surface)] wash:bg-[#EAE7DF]/86 wash:backdrop-blur-xs border-t lg:border-t-0 lg:border-l border-[var(--dojo-border)] flex flex-col min-h-0 overflow-y-auto">
-          {/* Upper Section: Slow & Error Pool */}
-          <section className="p-5 border-b border-[var(--dojo-border)] flex-1 min-h-[240px] flex flex-col">
-            <div className="flex items-baseline justify-between mb-1">
-              <h2 className="text-sm font-semibold text-[var(--dojo-text-bright)]">
-                {t('慢字／錯字精修池')}
-                <span className="ml-2 font-mono-tabular text-[var(--dojo-ochre)]">{slowPool.length}</span>
-              </h2>
-              {slowPool.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleClearSlowPool}
-                  className="text-[11px] text-[var(--dojo-text-muted)] hover:text-[var(--dojo-crimson-text)] transition-colors cursor-pointer"
-                >
-                  {t('清空')}
-                </button>
-              )}
-            </div>
-            <p className="text-[11px] text-[var(--dojo-text-muted)] mb-3">
-              {t('連續')} {SLOW_POOL_GRADUATE_STREAK} {t('次在')} {(thresholdMs / 1000).toFixed(1)}s{' '}
-              {t('內無錯直出即移出')}
-            </p>
-
-            {slowPool.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center text-xs text-[var(--dojo-text-muted)] py-8 text-center">
-                {t('目前尚無卡殼字，持續保持直出節奏')}
-              </div>
-            ) : (
-              <div className="divide-y divide-[var(--dojo-border)] overflow-y-auto max-h-[280px]">
-                {slowPool.slice(0, 12).map((item) => {
-                  const isSelected = inspectedChar === item.char;
-                  return (
-                    <button
-                      key={item.char}
-                      type="button"
-                      onClick={() =>
-                        setInspectedChar((prev) => (prev === item.char ? null : item.char))
-                      }
-                      className={`w-full py-2.5 px-2 flex items-center justify-between gap-2 text-left transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'bg-[var(--dojo-surface-2)]'
-                          : 'hover:bg-[var(--dojo-surface-2)]/65'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="font-display text-xl font-bold text-[var(--dojo-text-bright)] w-7 text-center shrink-0">
-                          {item.char}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="text-xs text-[var(--dojo-text-sub)] truncate">
-                            {item.parts.join(' · ')}
-                          </div>
-                          <div className="text-[11px] font-mono-tabular text-[var(--dojo-text-muted)] uppercase">
-                            {item.code}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3 shrink-0 text-xs font-mono-tabular">
-                        <span
-                          className={
-                            item.reason === 'error'
-                              ? 'text-[var(--dojo-crimson-text)] font-medium'
-                              : 'text-[var(--dojo-ochre)] font-medium'
+                ) : (
+                  <div className="divide-y divide-[var(--dojo-border)] overflow-y-auto max-h-[280px]">
+                    {slowPool.slice(0, 12).map((item) => {
+                      const isSelected = inspectedChar === item.char;
+                      return (
+                        <button
+                          key={item.char}
+                          type="button"
+                          onClick={() =>
+                            setInspectedChar((prev) => (prev === item.char ? null : item.char))
                           }
+                          className={`w-full py-2.5 px-2 flex items-center justify-between gap-2 text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-[var(--dojo-surface-2)]'
+                              : 'hover:bg-[var(--dojo-surface-2)]/65'
+                          }`}
                         >
-                          {item.reason === 'error' ? t('錯') : t('慢')} {item.lastLatencyMs}ms
-                        </span>
-                        <span className="text-[var(--dojo-text-sub)]">
-                          {item.fastCleanStreak}/{SLOW_POOL_GRADUATE_STREAK}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="font-display text-xl font-bold text-[var(--dojo-text-bright)] w-7 text-center shrink-0">
+                              {item.char}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="text-xs text-[var(--dojo-text-sub)] truncate">
+                                {item.parts.join(' · ')}
+                              </div>
+                              <div className="text-[11px] font-mono-tabular text-[var(--dojo-text-muted)] uppercase">
+                                {item.code}
+                              </div>
+                            </div>
+                          </div>
 
-            {/* Quick inline inspection of clicked slow glyph */}
-            {inspectedChar && inspectedEntry && (
-              <div className="mt-3 pt-3 border-t border-[var(--dojo-border)] flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs">
-                  <Eye className="w-3.5 h-3.5 text-[var(--dojo-ochre)] shrink-0" />
-                  <span className="font-display text-base font-bold text-[var(--dojo-text-bright)]">
-                    {inspectedEntry.char}
-                  </span>
-                  <span className="text-[var(--dojo-text-sub)]">
-                    {inspectedEntry.rootDetails
-                      .map((r) => `${r.radical}(${r.chamberKey.toUpperCase()})`)
-                      .join(' + ')}
-                  </span>
-                </div>
-                <span className="font-mono-tabular text-xs font-bold uppercase text-[var(--dojo-pine-text)]">
-                  {inspectedEntry.code}
-                </span>
-              </div>
-            )}
-          </section>
+                          <div className="flex items-center gap-3 shrink-0 text-xs font-mono-tabular">
+                            <span
+                              className={
+                                item.reason === 'error'
+                                  ? 'text-[var(--dojo-crimson-text)] font-medium'
+                                  : 'text-[var(--dojo-ochre)] font-medium'
+                              }
+                            >
+                              {item.reason === 'error' ? t('錯') : t('慢')} {item.lastLatencyMs}ms
+                            </span>
+                            <span className="text-[var(--dojo-text-sub)]">
+                              {item.fastCleanStreak}/{SLOW_POOL_GRADUATE_STREAK}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
-          {/* Lower Section: Top 3 Bottleneck Consonant Chambers */}
-          <section className="p-5 flex flex-col">
-            <div className="flex items-baseline justify-between mb-1">
-              <h2 className="text-sm font-semibold text-[var(--dojo-text-bright)]">
-                {t('瓶頸字根（最慢 3 個宮殿鍵位）')}
-              </h2>
-              {tab === 'bottleneck' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBottleneckKey(null);
-                    setTab('passage');
-                  }}
-                  className="text-[11px] text-[var(--dojo-pine-text)] hover:underline cursor-pointer"
-                >
-                  {t('返回短文')}
-                </button>
-              )}
-            </div>
-            <p className="text-[11px] text-[var(--dojo-text-muted)] mb-3">
-              {t('點擊任一鍵位，立即抽出 16 字進行專屬拔刺快練')}
-            </p>
-
-            <div className="divide-y divide-[var(--dojo-border)]">
-              {bottleneckKeys.map((wk) => {
-                const isSelected = tab === 'bottleneck' && bottleneckKey === wk.key;
-                const errPct = wk.attempts > 0 ? Math.round(wk.errorRate * 100) : 0;
-                return (
-                  <button
-                    key={wk.key}
-                    type="button"
-                    onClick={() => handleLaunchBottleneck(wk.key)}
-                    className={`w-full py-2.5 px-2 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-[var(--dojo-surface-2)]'
-                        : 'hover:bg-[var(--dojo-surface-2)]/65'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="w-7 h-7 rounded bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border-strong)] flex items-center justify-center font-mono-tabular text-xs font-bold uppercase text-[var(--dojo-text-bright)]">
-                        {wk.key}
+                {inspectedChar && inspectedEntry && (
+                  <div className="mt-3 pt-3 border-t border-[var(--dojo-border)] flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      <Eye className="w-3.5 h-3.5 text-[var(--dojo-ochre)] shrink-0" />
+                      <span className="font-display text-base font-bold text-[var(--dojo-text-bright)]">
+                        {inspectedEntry.char}
                       </span>
-                      <div>
-                        <div className="text-xs font-medium text-[var(--dojo-text)]">
-                          {t('主根')} {wk.primary}
-                        </div>
-                        <div className="text-[11px] font-mono-tabular text-[var(--dojo-text-muted)]">
-                          {wk.attempts > 0
-                            ? `${Math.round(wk.emaLatencyMs)}ms · ${t('錯率')} ${errPct}%`
-                            : t('尚待累積樣本')}
-                        </div>
-                      </div>
+                      <span className="text-[var(--dojo-text-sub)]">
+                        {inspectedEntry.rootDetails
+                          .map((r) => `${r.radical}(${r.chamberKey.toUpperCase()})`)
+                          .join(' + ')}
+                      </span>
                     </div>
-
-                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--dojo-ochre)] shrink-0">
-                      <Target className="w-3 h-3" />
-                      <span>{t('專攻')}</span>
+                    <span className="font-mono-tabular text-xs font-bold uppercase text-[var(--dojo-pine-text)]">
+                      {inspectedEntry.code}
                     </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        </aside>
+                  </div>
+                )}
+              </section>
+
+              {/* Lower Section: Top 3 Bottleneck Consonant Chambers */}
+              <section className="p-5 flex flex-col">
+                <div className="flex items-baseline justify-between mb-1">
+                  <h2 className="text-sm font-semibold text-[var(--dojo-text-bright)]">
+                    {t('瓶頸字根（最慢 3 個宮殿鍵位）')}
+                  </h2>
+                  {tab === 'bottleneck' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBottleneckKey(null);
+                        setTab('passage');
+                        setDrawerOpen(false);
+                      }}
+                      className="text-[11px] text-[var(--dojo-pine-text)] hover:underline cursor-pointer"
+                    >
+                      {t('返回短文')}
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-[var(--dojo-text-muted)] mb-3">
+                  {t('點擊任一鍵位，立即抽出 16 字進行專屬拔刺快練')}
+                </p>
+
+                <div className="divide-y divide-[var(--dojo-border)]">
+                  {bottleneckKeys.map((wk) => {
+                    const isSelected = tab === 'bottleneck' && bottleneckKey === wk.key;
+                    const errPct = wk.attempts > 0 ? Math.round(wk.errorRate * 100) : 0;
+                    return (
+                      <button
+                        key={wk.key}
+                        type="button"
+                        onClick={() => handleLaunchBottleneck(wk.key)}
+                        className={`w-full py-2.5 px-2 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-[var(--dojo-surface-2)]'
+                            : 'hover:bg-[var(--dojo-surface-2)]/65'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="w-7 h-7 rounded bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border-strong)] flex items-center justify-center font-mono-tabular text-xs font-bold uppercase text-[var(--dojo-text-bright)]">
+                            {wk.key}
+                          </span>
+                          <div>
+                            <div className="text-xs font-medium text-[var(--dojo-text)]">
+                              {t('主根')} {wk.primary}
+                            </div>
+                            <div className="text-[11px] font-mono-tabular text-[var(--dojo-text-muted)]">
+                              {wk.attempts > 0
+                                ? `${Math.round(wk.emaLatencyMs)}ms · ${t('錯率')} ${errPct}%`
+                                : t('尚待累積樣本')}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--dojo-ochre)] shrink-0">
+                          <Target className="w-3 h-3" />
+                          <span>{t('專攻')}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            </aside>
+          </div>
+        )}
       </div>
     </div>
   );

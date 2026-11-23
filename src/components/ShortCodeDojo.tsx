@@ -9,6 +9,7 @@ import {
   Sparkles,
   Volume2,
   VolumeX,
+  X,
   Zap,
 } from 'lucide-react';
 import {
@@ -93,6 +94,7 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
 
   const [tier, setTier] = useState<ShortCodeTier>('core50');
   const [rightTab, setRightTab] = useState<'inspect' | 'matrix'>('inspect');
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [hintMode, setHintMode] = useState<'adaptive' | 'always' | 'blind'>('adaptive');
   const { enabled: keystrokeCloudEnabled } = useKeystrokeCloud();
   const cloudPulse = useKeystrokeCloudPulse(keystrokeCloudEnabled);
@@ -252,9 +254,15 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'Escape') {
         e.preventDefault();
+        if (inspectorOpen) {
+          setInspectorOpen(false);
+          itemStartRef.current = performance.now();
+          return;
+        }
         onBack();
         return;
       }
+      if (inspectorOpen) return;
       if (roundDone) {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -377,6 +385,7 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
+    inspectorOpen,
     currentItem,
     typed,
     combo,
@@ -413,8 +422,10 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
     );
   };
 
+  const DECK_CELL_PX = 62;
+
   return (
-    <div className="relative z-10 w-full h-full overflow-y-auto flex flex-col bg-[var(--dojo-canvas)] wash:bg-transparent text-[var(--dojo-text)] select-none">
+    <div className="relative z-10 w-screen h-screen overflow-hidden flex flex-col bg-[var(--dojo-canvas)] wash:bg-transparent text-[var(--dojo-text)] select-none">
       {/* Strict 3-Zone Top Navigation Bar */}
       <header className="sticky top-0 z-30 h-14 px-4 sm:px-6 border-b border-[var(--dojo-border)] bg-[var(--dojo-header)]/95 wash:bg-[#ECEAE3]/92 backdrop-blur-md flex items-center justify-between gap-3">
         {/* Left: Back + Title */}
@@ -468,9 +479,25 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
           ))}
         </div>
 
-        {/* Right: Cloud Toggle + Script + Theme + Sound */}
+        {/* Right: Cloud Toggle + Reference Drawer Trigger + Script + Theme + Sound */}
         <div className="flex items-center gap-2 shrink-0">
           <KeystrokeCloudToggle compact />
+          <button
+            type="button"
+            onClick={() => {
+              synth.playClick();
+              setInspectorOpen((v) => !v);
+            }}
+            aria-expanded={inspectorOpen}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              inspectorOpen
+                ? 'bg-[var(--dojo-surface-2)] border-[var(--dojo-ochre)] text-[var(--dojo-ochre)]'
+                : 'bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
+            }`}
+          >
+            <Grid2x2 className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">{t('簡碼矩陣')}</span>
+          </button>
           <div className="hidden sm:inline-flex items-center p-0.5 bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] rounded-lg">
             {SCRIPT_MODE_OPTIONS.map((opt) => (
               <button
@@ -543,62 +570,136 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
         ))}
       </div>
 
-      {/* Main 2-Zone Dojo Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-5 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left Zone (8 cols): Focused Short-Code Reflex Stage */}
-        <section className="lg:col-span-8 bg-[var(--dojo-surface)] wash:bg-[#F5F3EE]/88 wash:backdrop-blur-[2px] border border-[var(--dojo-border)] rounded-2xl p-5 sm:p-7 flex flex-col justify-between min-h-[540px]">
-          {/* Top Unboxed Metrics & Scaffold Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[var(--dojo-border)] text-xs">
-            <div className="flex flex-wrap items-center gap-2 font-mono-tabular text-[var(--dojo-text-sub)]">
-              <span className="text-[var(--dojo-text-bright)] font-semibold">
-                {Math.min(cursor + (roundDone ? 1 : 0), deck.length)}/{deck.length}
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>
-                {t('連擊')} <strong className="text-[var(--dojo-ochre)]">×{combo}</strong>
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>
-                {t('準確')} <strong className="text-[var(--dojo-pine-text)]">{accuracy}%</strong>
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>
-                {t('均速')} <strong className="text-[var(--dojo-text)]">{avgMs > 0 ? `${avgMs}ms` : '--'}</strong>
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>
-                {t('本組已熟')} {masteredInPool}/{pool.length}
-              </span>
+      {/* ==================== FULL-VIEWPORT CENTERED SHORT-CODE SANCTUARY ==================== */}
+      <main className="relative flex-1 min-h-0 w-full overflow-hidden flex flex-col">
+        {/* Layer 1 (Ambient Mid-Background): Horizontal Depth-of-Field Short-Code Deck Stream centered on (50%, 50%) */}
+        {!roundDone && deck.length > 0 && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+          >
+            <div
+              className="absolute left-1/2 top-1/2 h-[68px]"
+              style={{
+                transform: `translate3d(${-(cursor * DECK_CELL_PX + DECK_CELL_PX / 2)}px, -50%, 0)`,
+                transition: 'transform 340ms cubic-bezier(0.22, 1, 0.36, 1)',
+                willChange: 'transform',
+              }}
+            >
+              {deck.map((entry, idx) => {
+                const delta = idx - cursor;
+                if (Math.abs(delta) > 11) return null;
+                const isCurrentSlot = delta === 0;
+                const absDelta = Math.abs(delta);
+
+                let charOpacity = 0;
+                let charBlur = 0;
+                if (isCurrentSlot) {
+                  charOpacity = 0;
+                } else if (absDelta === 1) {
+                  charOpacity = delta > 0 ? 0.34 : 0.24;
+                  charBlur = 0.35;
+                } else if (delta > 1) {
+                  charOpacity = Math.max(0.08, 0.54 - (delta - 2) * 0.05);
+                  charBlur = 0.45 + (delta - 1) * 0.22;
+                } else {
+                  charOpacity = Math.max(0.06, 0.38 - (absDelta - 2) * 0.045);
+                  charBlur = 0.55 + (absDelta - 1) * 0.24;
+                }
+
+                return (
+                  <span
+                    key={`${entry.char}_${idx}`}
+                    className={`absolute top-1/2 -translate-y-1/2 inline-flex items-center justify-center font-display text-[32px] sm:text-[36px] leading-none select-none transition-opacity duration-300 ${
+                      delta < 0 ? 'text-[var(--dojo-pine)]' : 'text-[var(--dojo-text-sub)]'
+                    }`}
+                    style={{
+                      left: `${idx * DECK_CELL_PX}px`,
+                      width: `${DECK_CELL_PX}px`,
+                      opacity: charOpacity,
+                      filter: charBlur > 0.1 ? `blur(${charBlur.toFixed(1)}px)` : 'none',
+                    }}
+                  >
+                    {entry.char}
+                  </span>
+                );
+              })}
             </div>
 
-            <div className="inline-flex items-center gap-1 p-0.5 bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] rounded-lg">
-              {([
-                ['adaptive', '熟度漸隱'],
-                ['always', '始終提示'],
-                ['blind', '全盲默打'],
-              ] as const).map(([modeId, label]) => (
-                <button
-                  key={modeId}
-                  type="button"
-                  onClick={() => {
-                    synth.playClick();
-                    setHintMode(modeId);
-                  }}
-                  className={`px-2 py-1 text-[11px] rounded-md transition-colors whitespace-nowrap cursor-pointer ${
-                    hintMode === modeId
-                      ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)] font-semibold'
-                      : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
-                  }`}
-                >
-                  {t(label)}
-                </button>
-              ))}
-            </div>
+            {/* Centered Radial Optical Halo Scrim */}
+            <div
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] sm:w-[640px] h-[340px] sm:h-[420px]"
+              style={{
+                background: isWash
+                  ? 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(243,241,236,0.92) 0%, rgba(243,241,236,0.62) 48%, rgba(243,241,236,0) 76%)'
+                  : 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(11,15,23,0.90) 0%, rgba(11,15,23,0.58) 48%, rgba(11,15,23,0) 76%)',
+              }}
+            />
+            {/* Soft Horizontal Edge Mist Scrims */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background: isWash
+                  ? 'linear-gradient(90deg, rgba(243,241,236,0.96) 0%, transparent 16%, transparent 84%, rgba(243,241,236,0.96) 100%)'
+                  : 'linear-gradient(90deg, rgba(11,15,23,0.96) 0%, transparent 16%, transparent 84%, rgba(11,15,23,0.96) 100%)',
+              }}
+            />
+          </div>
+        )}
+
+        {/* Top Floating Perimeter Bar: Unboxed Metrics & Scaffold Switcher */}
+        <div className="relative z-20 px-5 sm:px-8 pt-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2 font-mono-tabular text-[var(--dojo-text-sub)]">
+            <span className="text-[var(--dojo-text-bright)] font-semibold">
+              {Math.min(cursor + (roundDone ? 1 : 0), deck.length)}/{deck.length}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>
+              {t('連擊')} <strong className="text-[var(--dojo-ochre)]">×{combo}</strong>
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>
+              {t('準確')} <strong className="text-[var(--dojo-pine-text)]">{accuracy}%</strong>
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>
+              {t('均速')} <strong className="text-[var(--dojo-text)]">{avgMs > 0 ? `${avgMs}ms` : '--'}</strong>
+            </span>
+            <span aria-hidden="true" className="hidden sm:inline">·</span>
+            <span className="hidden sm:inline">
+              {t('本組已熟')} {masteredInPool}/{pool.length}
+            </span>
           </div>
 
-          {/* Center Interactive Character & Input Slots */}
-          {roundDone ? (
-            <div className="flex-1 flex flex-col items-center justify-center py-10 text-center gap-5">
+          <div className="inline-flex items-center gap-1 p-0.5 bg-[var(--dojo-surface-inset)]/90 border border-[var(--dojo-border)] rounded-lg backdrop-blur-xs">
+            {([
+              ['adaptive', '熟度漸隱'],
+              ['always', '始終提示'],
+              ['blind', '全盲默打'],
+            ] as const).map(([modeId, label]) => (
+              <button
+                key={modeId}
+                type="button"
+                onClick={() => {
+                  synth.playClick();
+                  setHintMode(modeId);
+                }}
+                className={`px-2 py-1 text-[11px] rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                  hintMode === modeId
+                    ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)] font-semibold'
+                    : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
+                }`}
+              >
+                {t(label)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Layer 2 (Foreground Focal Plane): Screen-Centered Target Character (0px shift) */}
+        {roundDone ? (
+          <div className="relative z-20 flex-1 flex items-center justify-center px-4">
+            <div className="max-w-lg w-full bg-[var(--dojo-surface)]/95 backdrop-blur-md border border-[var(--dojo-border)] rounded-2xl p-7 flex flex-col items-center text-center gap-5 shadow-xl">
               <div className="inline-flex items-center gap-2 text-xs font-medium text-[var(--dojo-pine-text)]">
                 <Check className="w-4 h-4" />
                 <span>{t('本輪簡碼訓練完成')}</span>
@@ -674,76 +775,78 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
                 </button>
               </div>
             </div>
-          ) : currentItem ? (
-            <div className="relative flex-1 flex flex-col items-center justify-center py-8 gap-6 min-h-[380px]">
-              {/* Mastery & Tier Meta Line */}
-              <div className="relative z-20 flex items-center gap-2 text-xs text-[var(--dojo-text-muted)]">
-                <span className="text-[var(--dojo-ochre)] font-medium">
-                  {currentItem.level === 1
-                    ? t('一碼直上')
-                    : currentItem.level === 2
-                      ? t('二碼直上')
-                      : t('三碼直上')}
-                </span>
-                <span aria-hidden="true">·</span>
-                <span>
-                  {t(
-                    glyphLevel === 0
-                      ? '初識（分色引導）'
-                      : glyphLevel === 1
-                        ? '漸熟（淡色過渡）'
-                        : glyphLevel === 2
-                          ? '心印（微墨隱碼）'
-                          : '純墨無痕'
-                  )}
-                </span>
-                {rescueActive && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span className="text-[var(--dojo-crimson-text)] font-medium">
-                      {t('引線顯影')}
-                    </span>
-                  </>
+          </div>
+        ) : currentItem ? (
+          <>
+            {/* Whisper Meta Line quietly anchored above the centered target */}
+            <div className="pointer-events-none absolute left-1/2 bottom-[calc(50%+58px)] -translate-x-1/2 z-20 flex items-center gap-2 text-xs text-[var(--dojo-text-muted)] whitespace-nowrap">
+              <span className="text-[var(--dojo-ochre)] font-medium">
+                {currentItem.level === 1
+                  ? t('一碼直上')
+                  : currentItem.level === 2
+                    ? t('二碼直上')
+                    : t('三碼直上')}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>
+                {t(
+                  glyphLevel === 0
+                    ? '初識（分色引導）'
+                    : glyphLevel === 1
+                      ? '漸熟（淡色過渡）'
+                      : glyphLevel === 2
+                        ? '心印（微墨隱碼）'
+                        : '純墨無痕'
                 )}
-              </div>
+              </span>
+              {rescueActive && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="text-[var(--dojo-crimson-text)] font-medium">
+                    {t('引線顯影')}
+                  </span>
+                </>
+              )}
+            </div>
 
-              {/* Natural Writing-Scale Color-Decomposed Character + 100% Target-Coincident Palace Cloud */}
-              <div className="relative flex items-center justify-center my-3">
-                {keystrokeCloudEnabled && (
-                  <>
-                    <KeystrokePalaceCloud
-                      pulse={cloudPulse.pulse}
-                      visible={cloudPulse.visible}
-                      scriptMode={scriptMode}
-                      placement="coincident"
-                      size="coincident"
-                      className="hidden sm:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
-                    />
-                    <KeystrokePalaceCloud
-                      pulse={cloudPulse.pulse}
-                      visible={cloudPulse.visible}
-                      scriptMode={scriptMode}
-                      placement="coincident"
-                      size="coincident-sm"
-                      className="sm:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
-                    />
-                  </>
-                )}
-                <div className="relative z-20">
-                  <ColorSplitGlyph
-                    char={currentItem.char}
-                    strokes={currentItem.strokes}
-                    strokeRootIndices={currentItem.strokeRootIndices}
-                    themeMode={themeMode}
-                    colorMix={colorMix}
-                    errorFlash={errorFlash}
-                    sizeClass="w-[68px] h-[68px] sm:w-[76px] sm:h-[76px]"
+            {/* Dead-Center Target Character + 100% Target-Coincident Memory Palace Cloud */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center">
+              {keystrokeCloudEnabled && (
+                <>
+                  <KeystrokePalaceCloud
+                    pulse={cloudPulse.pulse}
+                    visible={cloudPulse.visible}
+                    scriptMode={scriptMode}
+                    placement="coincident"
+                    size="coincident-lg"
+                    className="hidden sm:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
                   />
-                </div>
+                  <KeystrokePalaceCloud
+                    pulse={cloudPulse.pulse}
+                    visible={cloudPulse.visible}
+                    scriptMode={scriptMode}
+                    placement="coincident"
+                    size="coincident-sm"
+                    className="sm:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+                  />
+                </>
+              )}
+              <div className="relative z-20">
+                <ColorSplitGlyph
+                  char={currentItem.char}
+                  strokes={currentItem.strokes}
+                  strokeRootIndices={currentItem.strokeRootIndices}
+                  themeMode={themeMode}
+                  colorMix={colorMix}
+                  errorFlash={errorFlash}
+                  sizeClass="w-[68px] h-[68px] sm:w-[76px] sm:h-[76px]"
+                />
               </div>
+            </div>
 
-              {/* Short-Code Key Slots */}
-              <div className="relative z-20 flex items-center gap-3">
+            {/* Keycode Slots & Rule Explanation anchored below the centered target */}
+            <div className="absolute left-1/2 top-[calc(50%+56px)] -translate-x-1/2 z-20 flex flex-col items-center gap-3.5 w-full max-w-lg px-4">
+              <div className="flex items-center gap-2.5">
                 {currentItem.shortCode.split('').map((ch, idx) => {
                   const isTyped = idx < typed.length;
                   const isCurrent = idx === typed.length;
@@ -751,17 +854,17 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
                   return (
                     <div
                       key={idx}
-                      className={`w-12 h-14 sm:w-14 sm:h-16 rounded-xl border-2 flex flex-col items-center justify-center transition-all ${
+                      className={`w-11 h-13 sm:w-12 sm:h-14 rounded-xl border-2 flex flex-col items-center justify-center transition-all ${
                         isTyped
                           ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)] text-[var(--dojo-pine-text)]'
                           : isCurrent && errorFlash
                             ? 'bg-[var(--dojo-crimson-wash)] border-[var(--dojo-crimson)] text-[var(--dojo-crimson-text)]'
                             : isCurrent
-                              ? 'bg-[var(--dojo-surface-2)] border-[var(--dojo-ochre)] text-[var(--dojo-text-bright)]'
-                              : 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] text-[var(--dojo-text-muted)]'
+                              ? 'bg-[var(--dojo-surface-2)]/95 border-[var(--dojo-ochre)] text-[var(--dojo-text-bright)]'
+                              : 'bg-[var(--dojo-surface-inset)]/88 border-[var(--dojo-border)] text-[var(--dojo-text-muted)]'
                       }`}
                     >
-                      <span className="font-mono-tabular text-2xl font-bold uppercase leading-none">
+                      <span className="font-mono-tabular text-xl font-bold uppercase leading-none">
                         {isTyped ? typed[idx] : showKeyHint ? ch : '·'}
                       </span>
                       <span className="text-[9px] mt-1 opacity-75">
@@ -772,7 +875,6 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
                 })}
               </div>
 
-              {/* Rule & Full-Code Comparison Line */}
               <div className="min-h-[2.25rem] flex flex-col items-center justify-center text-center gap-1">
                 {showRuleHint ? (
                   <>
@@ -804,237 +906,253 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
                 )}
               </div>
             </div>
-          ) : null}
+          </>
+        ) : null}
 
-          {/* Bottom Preview Queue & Controls */}
-          <div className="pt-4 border-t border-[var(--dojo-border)] flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 overflow-hidden">
-              <span className="text-[var(--dojo-text-muted)] whitespace-nowrap">{t('後續隊列')}</span>
-              <div className="flex items-center gap-2.5">
-                {deck.slice(cursor + 1, cursor + 7).map((next, idx) => (
-                  <span
-                    key={`${next.char}_${idx}`}
-                    className="font-display text-base text-[var(--dojo-text-sub)]"
-                    style={{ opacity: Math.max(0.35, 0.9 - idx * 0.12) }}
+        {/* Quiet Bottom Perimeter Controls */}
+        <div className="absolute bottom-4 left-0 right-0 z-20 px-5 sm:px-8 flex items-center justify-between gap-3 text-xs">
+          <span className="hidden sm:inline text-[11px] text-[var(--dojo-text-muted)]">
+            {t(activeTierMeta.desc)}
+          </span>
+          <div className="flex items-center gap-2 ml-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                synth.playClick();
+                setRescueActive((v) => !v);
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] bg-[var(--dojo-surface-inset)]/90 border border-[var(--dojo-border)] rounded-lg transition-colors whitespace-nowrap cursor-pointer backdrop-blur-xs"
+            >
+              {rescueActive ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              <span>{t('Tab 顯影')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                synth.playClick();
+                startFreshDeck(pool);
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] bg-[var(--dojo-surface-inset)]/90 border border-[var(--dojo-border)] rounded-lg transition-colors whitespace-nowrap cursor-pointer backdrop-blur-xs"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>{t('換一批')}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* On-Demand Slide-Over Reference Drawer: Short-Code Structure & 20x5 Matrix */}
+        {inspectorOpen && (
+          <div className="absolute inset-0 z-40 flex justify-end">
+            <div
+              aria-hidden="true"
+              onClick={() => setInspectorOpen(false)}
+              className="flex-1 bg-black/25 backdrop-blur-[1px]"
+            />
+            <aside className="w-full max-w-[390px] h-full bg-[var(--dojo-surface)]/96 wash:bg-[#F3F1EC]/96 backdrop-blur-md border-l border-[var(--dojo-border)] shadow-2xl p-4 sm:p-5 flex flex-col gap-4 overflow-y-auto">
+              {/* Inspector Header Switch */}
+              <div className="flex items-center justify-between gap-2 pb-3 border-b border-[var(--dojo-border)]">
+                <div className="inline-flex items-center p-0.5 bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      synth.playClick();
+                      setRightTab('inspect');
+                    }}
+                    className={`px-2.5 py-1 text-xs rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                      rightTab === 'inspect'
+                        ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)] font-semibold'
+                        : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
+                    }`}
                   >
-                    {next.char}
+                    {t('簡碼構理')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      synth.playClick();
+                      setRightTab('matrix');
+                    }}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                      rightTab === 'matrix'
+                        ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-ochre)] font-semibold'
+                        : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
+                    }`}
+                  >
+                    <Grid2x2 className="w-3 h-3" />
+                    <span>{t('20×5 二碼矩陣')}</span>
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono-tabular text-[11px] text-[var(--dojo-text-muted)]">
+                    {pool.length}{t('字')}
                   </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  synth.playClick();
-                  setRescueActive((v) => !v);
-                }}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
-              >
-                {rescueActive ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                <span>{t('Tab 顯影')}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  synth.playClick();
-                  startFreshDeck(pool);
-                }}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>{t('換一批')}</span>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* Right Zone (4 cols): Short-Code Structure & 20x5 Matrix Reference */}
-        <aside className="lg:col-span-4 bg-[var(--dojo-surface)] wash:bg-[#F5F3EE]/88 wash:backdrop-blur-[2px] border border-[var(--dojo-border)] rounded-2xl p-4 sm:p-5 flex flex-col gap-4">
-          {/* Inspector Header Switch */}
-          <div className="flex items-center justify-between gap-2 pb-3 border-b border-[var(--dojo-border)]">
-            <div className="inline-flex items-center p-0.5 bg-[var(--dojo-surface-inset)] border border-[var(--dojo-border)] rounded-lg">
-              <button
-                type="button"
-                onClick={() => {
-                  synth.playClick();
-                  setRightTab('inspect');
-                }}
-                className={`px-2.5 py-1 text-xs rounded-md transition-colors whitespace-nowrap cursor-pointer ${
-                  rightTab === 'inspect'
-                    ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-text-bright)] font-semibold'
-                    : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
-                }`}
-              >
-                {t('簡碼構理')}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  synth.playClick();
-                  setRightTab('matrix');
-                }}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-md transition-colors whitespace-nowrap cursor-pointer ${
-                  rightTab === 'matrix'
-                    ? 'bg-[var(--dojo-surface-2)] text-[var(--dojo-ochre)] font-semibold'
-                    : 'text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
-                }`}
-              >
-                <Grid2x2 className="w-3 h-3" />
-                <span>{t('20×5 二碼矩陣')}</span>
-              </button>
-            </div>
-            <span className="font-mono-tabular text-[11px] text-[var(--dojo-text-muted)]">
-              {pool.length}{t('字')}
-            </span>
-          </div>
-
-          {rightTab === 'inspect' ? (
-            <div className="flex flex-col gap-4 text-xs">
-              <p className="text-[var(--dojo-text-sub)] leading-relaxed">
-                {t(activeTierMeta.desc)}
-              </p>
-
-              {/* 1-Key Quick Strip (always handy!) */}
-              <div>
-                <div className="text-[11px] font-medium text-[var(--dojo-text-muted)] mb-2">
-                  {t('一碼五字直出（單按元音，無需空格）')}
-                </div>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {LINGMING_ONE_KEY_CODES.map((item) => {
-                    const isMastered = (mastery.glyphs[`sc_${item.char}`]?.level ?? 0) >= 2;
-                    return (
-                      <button
-                        key={item.char}
-                        type="button"
-                        onClick={() => focusSingleChar(item)}
-                        className={`p-2 rounded-lg border text-center transition-colors cursor-pointer ${
-                          currentItem?.char === item.char
-                            ? 'bg-[var(--dojo-ochre-wash)] border-[var(--dojo-ochre)]'
-                            : isMastered
-                              ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/45'
-                              : 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] hover:border-[var(--dojo-border-strong)]'
-                        }`}
-                      >
-                        <div className="font-display text-lg font-bold text-[var(--dojo-text-bright)] leading-none">
-                          {item.char}
-                        </div>
-                        <div className="font-mono-tabular text-xs font-bold text-[var(--dojo-ochre)] mt-1">
-                          {item.shortCode.toUpperCase()}
-                        </div>
-                      </button>
-                    );
-                  })}
+                  <button
+                    type="button"
+                    onClick={() => setInspectorOpen(false)}
+                    aria-label={t('關閉側欄')}
+                    className="p-1 rounded-md text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text-bright)] hover:bg-[var(--dojo-surface-2)] cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
-              {/* Current Pool Quick Browse */}
-              <div>
-                <div className="flex items-center justify-between text-[11px] text-[var(--dojo-text-muted)] mb-2">
-                  <span>{t('本組簡碼速覽（點擊立即單練）')}</span>
-                  <span className="font-mono-tabular">{masteredInPool}/{pool.length}</span>
+              {rightTab === 'inspect' ? (
+                <div className="flex flex-col gap-4 text-xs">
+                  <p className="text-[var(--dojo-text-sub)] leading-relaxed">
+                    {t(activeTierMeta.desc)}
+                  </p>
+
+                  {/* 1-Key Quick Strip */}
+                  <div>
+                    <div className="text-[11px] font-medium text-[var(--dojo-text-muted)] mb-2">
+                      {t('一碼五字直出（單按元音，無需空格）')}
+                    </div>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {LINGMING_ONE_KEY_CODES.map((item) => {
+                        const isMastered = (mastery.glyphs[`sc_${item.char}`]?.level ?? 0) >= 2;
+                        return (
+                          <button
+                            key={item.char}
+                            type="button"
+                            onClick={() => {
+                              focusSingleChar(item);
+                              setInspectorOpen(false);
+                            }}
+                            className={`p-2 rounded-lg border text-center transition-colors cursor-pointer ${
+                              currentItem?.char === item.char
+                                ? 'bg-[var(--dojo-ochre-wash)] border-[var(--dojo-ochre)]'
+                                : isMastered
+                                  ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/45'
+                                  : 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] hover:border-[var(--dojo-border-strong)]'
+                            }`}
+                          >
+                            <div className="font-display text-lg font-bold text-[var(--dojo-text-bright)] leading-none">
+                              {item.char}
+                            </div>
+                            <div className="font-mono-tabular text-xs font-bold text-[var(--dojo-ochre)] mt-1">
+                              {item.shortCode.toUpperCase()}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Current Pool Quick Browse */}
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] text-[var(--dojo-text-muted)] mb-2">
+                      <span>{t('本組簡碼速覽（點擊立即單練）')}</span>
+                      <span className="font-mono-tabular">{masteredInPool}/{pool.length}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {pool.slice(0, 60).map((item) => {
+                        const lvl = mastery.glyphs[`sc_${item.char}`]?.level ?? 0;
+                        const active = currentItem?.char === item.char;
+                        return (
+                          <button
+                            key={item.char}
+                            type="button"
+                            onClick={() => {
+                              focusSingleChar(item);
+                              setInspectorOpen(false);
+                            }}
+                            className={`px-2 py-1.5 rounded-lg border text-left transition-colors cursor-pointer flex items-center justify-between gap-1 ${
+                              active
+                                ? 'bg-[var(--dojo-ochre-wash)] border-[var(--dojo-ochre)]'
+                                : lvl >= 2
+                                  ? 'bg-[var(--dojo-pine-wash)]/70 border-[var(--dojo-pine)]/40'
+                                  : 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] hover:bg-[var(--dojo-surface-2)]'
+                            }`}
+                          >
+                            <span className="font-display text-sm font-bold text-[var(--dojo-text-bright)]">
+                              {item.char}
+                            </span>
+                            <span className="font-mono-tabular text-[11px] font-semibold text-[var(--dojo-ochre)]">
+                              {item.shortCode.toUpperCase()}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-                <div className="max-h-[300px] overflow-y-auto pr-1 grid grid-cols-4 gap-1.5">
-                  {pool.slice(0, 60).map((item) => {
-                    const lvl = mastery.glyphs[`sc_${item.char}`]?.level ?? 0;
-                    const active = currentItem?.char === item.char;
-                    return (
-                      <button
-                        key={item.char}
-                        type="button"
-                        onClick={() => focusSingleChar(item)}
-                        className={`px-2 py-1.5 rounded-lg border text-left transition-colors cursor-pointer flex items-center justify-between gap-1 ${
-                          active
-                            ? 'bg-[var(--dojo-ochre-wash)] border-[var(--dojo-ochre)]'
-                            : lvl >= 2
-                              ? 'bg-[var(--dojo-pine-wash)]/70 border-[var(--dojo-pine)]/40'
-                              : 'bg-[var(--dojo-surface-inset)] border-[var(--dojo-border)] hover:bg-[var(--dojo-surface-2)]'
-                        }`}
-                      >
-                        <span className="font-display text-sm font-bold text-[var(--dojo-text-bright)]">
-                          {item.char}
-                        </span>
-                        <span className="font-mono-tabular text-[11px] font-semibold text-[var(--dojo-ochre)]">
-                          {item.shortCode.toUpperCase()}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* 20x5 Official Lingming 2-Key Direct Matrix */
-            <div className="flex flex-col gap-2">
-              <div className="text-[11px] text-[var(--dojo-text-muted)]">
-                {t('行＝首根輔音，列＝末根韻碼（A O E I U），點擊任一字立即檢視並專練')}
-              </div>
-              <div className="max-h-[420px] overflow-y-auto pr-1">
-                <table className="w-full text-center border-collapse font-mono-tabular text-xs">
-                  <thead className="sticky top-0 bg-[var(--dojo-surface)] z-10">
-                    <tr className="border-b border-[var(--dojo-border)] text-[11px] text-[var(--dojo-ochre)]">
-                      <th className="py-1 font-bold text-left pl-1">{t('鍵')}</th>
-                      {MATRIX_VOWELS.map((v) => (
-                        <th key={v} className="py-1 font-bold uppercase">
-                          {v}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {MATRIX_CONSONANTS.map((c) => (
-                      <tr
-                        key={c}
-                        className="border-b border-[var(--dojo-border)]/50 last:border-b-0"
-                      >
-                        <td className="py-1 pl-1 text-left font-bold uppercase text-[var(--dojo-text-sub)]">
-                          {c}
-                        </td>
-                        {MATRIX_VOWELS.map((v) => {
-                          const entry = twoKeyMatrix.get(`${c}${v}`);
-                          if (!entry) {
-                            return (
-                              <td
-                                key={v}
-                                className="py-1 text-[var(--dojo-text-muted)]/30"
-                              >
-                                ·
-                              </td>
-                            );
-                          }
-                          const isCurrent = currentItem?.char === entry.char;
-                          const isMastered =
-                            (mastery.glyphs[`sc_${entry.char}`]?.level ?? 0) >= 2;
-                          return (
-                            <td key={v} className="py-0.5">
-                              <button
-                                type="button"
-                                onClick={() => focusSingleChar(entry)}
-                                title={`${entry.char}：簡碼 ${entry.shortCode.toUpperCase()}（全碼 ${entry.fullCode.toUpperCase()}）`}
-                                className={`w-7 h-7 rounded-md font-display text-sm font-bold transition-colors cursor-pointer ${
-                                  isCurrent
-                                    ? 'bg-[var(--dojo-ochre)] text-white'
-                                    : isMastered
-                                      ? 'bg-[var(--dojo-pine-wash)] text-[var(--dojo-pine-text)]'
-                                      : isWash
-                                        ? 'hover:bg-black/10 text-[var(--dojo-text-bright)]'
-                                        : 'hover:bg-white/10 text-[var(--dojo-text-bright)]'
-                                }`}
-                              >
-                                {entry.char}
-                              </button>
+              ) : (
+                /* 20x5 Official Lingming 2-Key Direct Matrix */
+                <div className="flex flex-col gap-2">
+                  <div className="text-[11px] text-[var(--dojo-text-muted)]">
+                    {t('行＝首根輔音，列＝末根韻碼（A O E I U），點擊任一字立即檢視並專練')}
+                  </div>
+                  <div className="overflow-y-auto pr-1">
+                    <table className="w-full text-center border-collapse font-mono-tabular text-xs">
+                      <thead className="sticky top-0 bg-[var(--dojo-surface)] z-10">
+                        <tr className="border-b border-[var(--dojo-border)] text-[11px] text-[var(--dojo-ochre)]">
+                          <th className="py-1 font-bold text-left pl-1">{t('鍵')}</th>
+                          {MATRIX_VOWELS.map((v) => (
+                            <th key={v} className="py-1 font-bold uppercase">
+                              {v}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {MATRIX_CONSONANTS.map((c) => (
+                          <tr
+                            key={c}
+                            className="border-b border-[var(--dojo-border)]/50 last:border-b-0"
+                          >
+                            <td className="py-1 pl-1 text-left font-bold uppercase text-[var(--dojo-text-sub)]">
+                              {c}
                             </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </aside>
+                            {MATRIX_VOWELS.map((v) => {
+                              const entry = twoKeyMatrix.get(`${c}${v}`);
+                              if (!entry) {
+                                return (
+                                  <td
+                                    key={v}
+                                    className="py-1 text-[var(--dojo-text-muted)]/30"
+                                  >
+                                    ·
+                                  </td>
+                                );
+                              }
+                              const isCurrent = currentItem?.char === entry.char;
+                              const isMastered =
+                                (mastery.glyphs[`sc_${entry.char}`]?.level ?? 0) >= 2;
+                              return (
+                                <td key={v} className="py-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      focusSingleChar(entry);
+                                      setInspectorOpen(false);
+                                    }}
+                                    title={`${entry.char}：簡碼 ${entry.shortCode.toUpperCase()}（全碼 ${entry.fullCode.toUpperCase()}）`}
+                                    className={`w-7 h-7 rounded-md font-display text-sm font-bold transition-colors cursor-pointer ${
+                                      isCurrent
+                                        ? 'bg-[var(--dojo-ochre)] text-white'
+                                        : isMastered
+                                          ? 'bg-[var(--dojo-pine-wash)] text-[var(--dojo-pine-text)]'
+                                          : isWash
+                                            ? 'hover:bg-black/10 text-[var(--dojo-text-bright)]'
+                                            : 'hover:bg-white/10 text-[var(--dojo-text-bright)]'
+                                    }`}
+                                  >
+                                    {entry.char}
+                                  </button>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </aside>
+          </div>
+        )}
       </main>
     </div>
   );
