@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FINGER_LABELS,
   KEY_FINGER_MAP,
@@ -9,6 +9,44 @@ import { useUiText } from '../data/uiScript';
 import { ActiveTargetSnapshot } from '../engine/GameCanvas';
 import { SchemeMasteryStore } from '../engine/mastery';
 import { useThemeMode } from '../data/theme';
+
+interface InkDropBloom {
+  id: number;
+  key: string;
+  correct: boolean;
+  tendrils: Array<{
+    tx: number;
+    ty: number;
+    size: number;
+    scale: number;
+    rot: number;
+    delayMs: number;
+    opacity: number;
+  }>;
+}
+
+function createInkTendrils(seed: number, isError: boolean): InkDropBloom['tendrils'] {
+  const count = isError ? 5 : 4;
+  const tendrils: InkDropBloom['tendrils'] = [];
+  for (let i = 0; i < count; i++) {
+    const h = Math.sin((seed + 1) * 12.9898 + i * 78.233) * 43758.5453;
+    const rand = h - Math.floor(h);
+    const h2 = Math.sin((seed + 3) * 41.13 + i * 19.71) * 19341.17;
+    const rand2 = h2 - Math.floor(h2);
+    const angle = (Math.PI * 2 * i) / count + (rand - 0.5) * 0.85;
+    const dist = (isError ? 24 : 19) + rand2 * (isError ? 16 : 14);
+    tendrils.push({
+      tx: Math.round(Math.cos(angle) * dist * 10) / 10,
+      ty: Math.round(Math.sin(angle) * dist * 0.78 * 10) / 10,
+      size: Math.round((isError ? 18 : 15) + rand * 11),
+      scale: Math.round((0.88 + rand2 * 0.48) * 100) / 100,
+      rot: Math.round((rand - 0.5) * 42),
+      delayMs: 35 + i * 28,
+      opacity: isError ? 0.34 : 0.24,
+    });
+  }
+  return tendrils;
+}
 
 interface TactileKeyboardProps {
   scheme: ShapeCodeScheme;
@@ -37,6 +75,38 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
     correct: boolean;
     tick: number;
   } | null>(null);
+  const [inkDrops, setInkDrops] = useState<InkDropBloom[]>([]);
+  const dropSeqRef = useRef(0);
+  const lastHandledTickRef = useRef<number>(0);
+  const dropTimersRef = useRef<number[]>([]);
+
+  const spawnInkDrop = useCallback((key: string, correct: boolean) => {
+    const id = ++dropSeqRef.current;
+    const bloom: InkDropBloom = {
+      id,
+      key,
+      correct,
+      tendrils: createInkTendrils(id * 17 + key.charCodeAt(0), !correct),
+    };
+    setInkDrops((prev) => [...prev.slice(-9), bloom]);
+    const tid = window.setTimeout(() => {
+      setInkDrops((prev) => prev.filter((item) => item.id !== id));
+    }, 980);
+    dropTimersRef.current.push(tid);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      dropTimersRef.current.forEach((tid) => window.clearTimeout(tid));
+      dropTimersRef.current = [];
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isWash) {
+      setInkDrops([]);
+    }
+  }, [isWash]);
 
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
@@ -68,13 +138,17 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
       correct: target.lastStrikeCorrect,
       tick: target.lastStrikeTick,
     });
+    if (isWash && lastHandledTickRef.current !== target.lastStrikeTick) {
+      lastHandledTickRef.current = target.lastStrikeTick;
+      spawnInkDrop(target.lastStrikeKey, target.lastStrikeCorrect);
+    }
     const id = window.setTimeout(() => {
       setStrikeFlash((prev) =>
         prev && prev.tick === target.lastStrikeTick ? null : prev
       );
     }, target.lastStrikeCorrect ? 300 : 380);
     return () => window.clearTimeout(id);
-  }, [target?.lastStrikeKey, target?.lastStrikeCorrect, target?.lastStrikeTick]);
+  }, [target?.lastStrikeKey, target?.lastStrikeCorrect, target?.lastStrikeTick, isWash, spawnInkDrop]);
 
   const scaffoldLevel = target?.scaffoldLevel ?? 0;
   const nextKey = target?.nextKey || '';
@@ -237,6 +311,11 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                       )
                     : 0;
 
+                const keyDrops = isWash
+                  ? inkDrops.filter((drop) => drop.key === k)
+                  : [];
+                const hasActiveInk = keyDrops.length > 0;
+
                 return (
                   <button
                     key={k}
@@ -246,12 +325,17 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                       if (isDisabled) return;
                       e.preventDefault();
                       setPressedKey(k);
+                      if (isWash && !target) {
+                        spawnInkDrop(k, true);
+                      }
                       onVirtualKey(k);
                     }}
                     onMouseUp={() => setPressedKey(null)}
                     onMouseLeave={() => setPressedKey((p) => (p === k ? null : p))}
                     aria-label={`${k.toUpperCase()} ${def?.primary || ''}`}
                     className={`keycap-surface relative flex flex-col justify-between items-center rounded-lg border text-left focus-visible:outline-none focus-visible:ring-2 ${
+                      hasActiveInk || isPressed ? 'z-20' : 'z-0'
+                    } ${
                       isWash
                         ? 'focus-visible:ring-[#181817]'
                         : 'focus-visible:ring-[#D89B3C]'
@@ -338,33 +422,73 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                               : '0 3px 0 #080A0E',
                     }}
                   >
-                    {isWash && (isHitCorrect || isError) && strikeFlash && (
-                      <>
-                        <span
-                          key={`tactile_aura_outer_${strikeFlash.tick}`}
-                          aria-hidden="true"
-                          className="pointer-events-none absolute -inset-4 rounded-full blur-[7px] ink-aura-slow"
-                          style={{
-                            background: isError
-                              ? 'radial-gradient(circle, rgba(20, 20, 18, 0.22) 0%, rgba(44, 44, 40, 0.10) 48%, transparent 78%)'
-                              : 'radial-gradient(circle, rgba(20, 20, 18, 0.16) 0%, rgba(56, 56, 52, 0.07) 50%, transparent 78%)',
-                          }}
-                        />
-                        <span
-                          key={`tactile_aura_core_${strikeFlash.tick}`}
-                          aria-hidden="true"
-                          className="pointer-events-none absolute -inset-2 rounded-full blur-[4px] ink-aura-fade"
-                          style={{
-                            background: isError
-                              ? 'radial-gradient(circle, rgba(16, 16, 15, 0.32) 0%, rgba(36, 36, 34, 0.12) 52%, transparent 76%)'
-                              : 'radial-gradient(circle, rgba(20, 20, 18, 0.24) 0%, rgba(48, 48, 44, 0.09) 54%, transparent 76%)',
-                          }}
-                        />
-                      </>
-                    )}
+                    {/* Pure monochrome sumi ink droplet fall & organic liquid diffusion (zero ring outlines) */}
+                    {hasActiveInk &&
+                      keyDrops.map((drop) => {
+                          const isErr = !drop.correct;
+                          return (
+                            <React.Fragment key={`ink_drop_${drop.id}`}>
+                              {/* Wide outer capillary mist wash */}
+                              <span
+                                aria-hidden="true"
+                                data-ink-diffusion="outer"
+                                className="pointer-events-none absolute -inset-5 z-0 ink-aura-slow"
+                                style={{
+                                  background: isErr
+                                    ? 'radial-gradient(ellipse 58% 50% at 48% 52%, rgba(16, 16, 15, 0.28) 0%, rgba(42, 42, 38, 0.13) 44%, rgba(82, 82, 76, 0.04) 70%, transparent 92%)'
+                                    : 'radial-gradient(ellipse 56% 48% at 52% 48%, rgba(20, 20, 18, 0.21) 0%, rgba(54, 54, 50, 0.09) 46%, rgba(92, 92, 86, 0.03) 72%, transparent 92%)',
+                                }}
+                              />
+                              {/* Mid organic fluid ink bloom */}
+                              <span
+                                aria-hidden="true"
+                                data-ink-diffusion="core"
+                                className="pointer-events-none absolute -inset-2.5 z-0 ink-aura-fade"
+                                style={{
+                                  background: isErr
+                                    ? 'radial-gradient(ellipse 54% 48% at 50% 50%, rgba(12, 12, 11, 0.42) 0%, rgba(34, 34, 31, 0.18) 48%, transparent 82%)'
+                                    : 'radial-gradient(ellipse 52% 46% at 48% 52%, rgba(18, 18, 17, 0.30) 0%, rgba(48, 48, 44, 0.12) 50%, transparent 82%)',
+                                }}
+                              />
+                              {/* Falling calligraphic ink droplet landing onto the keycap & melting into paper */}
+                              <span
+                                aria-hidden="true"
+                                data-ink-droplet="true"
+                                className="pointer-events-none absolute left-1/2 top-1/2 -ml-2.5 -mt-2.5 w-5 h-5 z-20 ink-droplet-fall"
+                                style={{
+                                  background: isErr
+                                    ? 'radial-gradient(ellipse 62% 68% at 48% 56%, rgba(10, 10, 9, 0.88) 0%, rgba(24, 24, 22, 0.52) 52%, transparent 88%)'
+                                    : 'radial-gradient(ellipse 60% 66% at 50% 56%, rgba(16, 16, 15, 0.74) 0%, rgba(38, 38, 35, 0.38) 54%, transparent 88%)',
+                                }}
+                              />
+                              {/* Asymmetric organic ink tendrils seeping outward through paper fibers */}
+                              {drop.tendrils.map((tr, tIdx) => (
+                                <span
+                                  key={`tendril_${drop.id}_${tIdx}`}
+                                  aria-hidden="true"
+                                  className="pointer-events-none absolute left-1/2 top-1/2 z-0 ink-tendril-spread"
+                                  style={
+                                    {
+                                      width: `${tr.size}px`,
+                                      height: `${Math.round(tr.size * 0.82)}px`,
+                                      marginLeft: `${-tr.size / 2}px`,
+                                      marginTop: `${-(tr.size * 0.82) / 2}px`,
+                                      animationDelay: `${tr.delayMs}ms`,
+                                      '--ink-tx': `${tr.tx}px`,
+                                      '--ink-ty': `${tr.ty}px`,
+                                      '--ink-scale': `${tr.scale}`,
+                                      '--ink-rot': `${tr.rot}deg`,
+                                      background: `radial-gradient(ellipse 60% 52% at 46% 52%, rgba(18, 18, 17, ${tr.opacity}) 0%, rgba(56, 56, 52, ${(tr.opacity * 0.42).toFixed(3)}) 52%, transparent 86%)`,
+                                    } as React.CSSProperties
+                                  }
+                                />
+                              ))}
+                            </React.Fragment>
+                          );
+                        })}
                     {/* Top zone accent hairline */}
                     <span
-                      className="block w-8 h-[2px] rounded-full mt-1"
+                      className="relative z-10 block w-8 h-[2px] rounded-full mt-1"
                       style={{
                         backgroundColor: zoneColor,
                         opacity: isDisabled
@@ -379,7 +503,7 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
 
                     {/* Key letter top-left */}
                     <span
-                      className={`absolute top-1 left-1.5 font-mono-tabular text-[10px] font-semibold leading-none ${
+                      className={`absolute z-10 top-1 left-1.5 font-mono-tabular text-[10px] font-semibold leading-none ${
                         isWash
                           ? isTarget
                             ? 'text-[#0E0E0D]'
@@ -398,7 +522,7 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
 
                     {/* Primary Anchor Radical or Vowel label */}
                     <span
-                      className={`font-display font-bold leading-none mt-0.5 ${
+                      className={`relative z-10 font-display font-bold leading-none mt-0.5 ${
                         isVowel || isDisabled ? 'text-xs sm:text-sm' : 'text-base sm:text-lg'
                       } ${
                         isWash
@@ -440,7 +564,7 @@ export const TactileKeyboard: React.FC<TactileKeyboardProps> = ({
                     </span>
 
                     {/* Mini Memory Palace sibling preview + homing bar + latency mastery */}
-                    <div className="w-full px-1.5 pb-1 flex flex-col items-center gap-0.5">
+                    <div className="relative z-10 w-full px-1.5 pb-1 flex flex-col items-center gap-0.5">
                       {def?.sub && !isVowel && !isDisabled && scaffoldLevel <= 1 && (
                         <span
                           className={`text-[9px] truncate max-w-full leading-none hidden sm:block ${
