@@ -46,15 +46,28 @@ interface HuangtingLogStore {
 
 const LOG_STORAGE_KEY = 'lingming_huangting_log_v1';
 const VIEW_MODE_STORAGE_KEY = 'lingming_huangting_view_v1';
+const HESITATION_SEC_STORAGE_KEY = 'lingming_huangting_hesitation_sec_v1';
+const CHROME_IDLE_HIDE_MS = 2400;
 const DEPTH_CELL_PX = 68;
 const DEPTH_ROW_PX = 104;
 
-// Mastery-adaptive hesitation delay before hints gently fade in ("犹豫之后渐显")
-function getHesitationDelayMs(level: number): number {
-  if (level <= 0) return 1100;
-  if (level === 1) return 1600;
-  if (level === 2) return 2100;
-  return 2600;
+// Adjustable thinking-time steps before hints gently fade in (0 = manual Tab/mistype only)
+const HESITATION_OPTIONS = [3, 5, 6, 8, 10, 12, 15, 20, 0] as const;
+const DEFAULT_HESITATION_SEC = 6;
+
+function loadHesitationSec(): number {
+  try {
+    const raw = localStorage.getItem(HESITATION_SEC_STORAGE_KEY);
+    if (raw !== null) {
+      const parsed = Number(raw);
+      if ((HESITATION_OPTIONS as readonly number[]).includes(parsed)) {
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return DEFAULT_HESITATION_SEC;
 }
 
 function loadViewMode(): HuangtingViewMode {
@@ -274,19 +287,109 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
   const [viewMode, setViewMode] = useState<HuangtingViewMode>(() => loadViewMode());
   const [chapterDrawerOpen, setChapterDrawerOpen] = useState(false);
   const [fadeMode, setFadeMode] = useState<FadeMode>('adaptive');
+  const [hesitationSec, setHesitationSec] = useState<number>(() => loadHesitationSec());
   const [allowShortCode, setAllowShortCode] = useState<boolean>(true);
   const [weakDrillChars, setWeakDrillChars] = useState<string[] | null>(null);
 
-  const handleChangeViewMode = useCallback((next: HuangtingViewMode) => {
-    synth.playClick();
-    setViewMode(next);
-    setChapterDrawerOpen(false);
-    try {
-      localStorage.setItem(VIEW_MODE_STORAGE_KEY, next);
-    } catch {
-      // ignore storage errors
+  // Auto-hide top & bottom chrome in Depth mode for true distraction-free chanting
+  const [chromeRevealed, setChromeRevealed] = useState<boolean>(true);
+  const chromeHoveredRef = useRef<boolean>(false);
+  const chromeHideTimerRef = useRef<number | null>(null);
+  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
+
+  const clearChromeTimer = useCallback(() => {
+    if (chromeHideTimerRef.current !== null) {
+      window.clearTimeout(chromeHideTimerRef.current);
+      chromeHideTimerRef.current = null;
     }
   }, []);
+
+  const scheduleChromeHide = useCallback(() => {
+    clearChromeTimer();
+    if (chromeHoveredRef.current) return;
+    chromeHideTimerRef.current = window.setTimeout(() => {
+      if (!chromeHoveredRef.current) {
+        setChromeRevealed(false);
+      }
+    }, CHROME_IDLE_HIDE_MS);
+  }, [clearChromeTimer]);
+
+  const revealChrome = useCallback(() => {
+    setChromeRevealed(true);
+    scheduleChromeHide();
+  }, [scheduleChromeHide]);
+
+  const handleChromeMouseEnter = useCallback(() => {
+    chromeHoveredRef.current = true;
+    clearChromeTimer();
+    setChromeRevealed(true);
+  }, [clearChromeTimer]);
+
+  const handleChromeMouseLeave = useCallback(() => {
+    chromeHoveredRef.current = false;
+    scheduleChromeHide();
+  }, [scheduleChromeHide]);
+
+  const stepHesitationSec = useCallback((delta: -1 | 1) => {
+    synth.playClick();
+    setHesitationSec((prev) => {
+      const idx = (HESITATION_OPTIONS as readonly number[]).indexOf(prev);
+      const safeIdx = idx >= 0 ? idx : (HESITATION_OPTIONS as readonly number[]).indexOf(DEFAULT_HESITATION_SEC);
+      const nextIdx = Math.max(0, Math.min(HESITATION_OPTIONS.length - 1, safeIdx + delta));
+      const next = HESITATION_OPTIONS[nextIdx];
+      try {
+        localStorage.setItem(HESITATION_SEC_STORAGE_KEY, String(next));
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
+  }, []);
+
+  const handleChangeViewMode = useCallback(
+    (next: HuangtingViewMode) => {
+      synth.playClick();
+      setViewMode(next);
+      setChapterDrawerOpen(false);
+      if (next === 'depth') {
+        revealChrome();
+      } else {
+        clearChromeTimer();
+        setChromeRevealed(true);
+      }
+      try {
+        localStorage.setItem(VIEW_MODE_STORAGE_KEY, next);
+      } catch {
+        // ignore storage errors
+      }
+    },
+    [revealChrome, clearChromeTimer]
+  );
+
+  // Wake auto-hidden chrome on intentional mouse movement in Depth mode
+  useEffect(() => {
+    if (viewMode !== 'depth') {
+      clearChromeTimer();
+      setChromeRevealed(true);
+      return;
+    }
+    scheduleChromeHide();
+    const handleMouseMove = (e: MouseEvent) => {
+      const prev = lastMousePosRef.current;
+      const inEdgeZone = e.clientY <= 60 || e.clientY >= window.innerHeight - 60;
+      const movedEnough =
+        !prev || Math.hypot(e.clientX - prev.x, e.clientY - prev.y) >= 6;
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+      if (inEdgeZone || movedEnough) {
+        revealChrome();
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      clearChromeTimer();
+    };
+  }, [viewMode, revealChrome, scheduleChromeHide, clearChromeTimer]);
 
   // Typing cursor & live states
   const [cursor, setCursor] = useState(0);
@@ -391,19 +494,19 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
   const glyphMastery = glyphKey ? mastery.glyphs[glyphKey] : undefined;
   const glyphLevel = glyphMastery?.level ?? 0;
 
-  // Automatic gentle hesitation rescue ("猶豫之後漸顯") in adaptive mode across all mastery levels
+  // Automatic gentle hesitation rescue ("猶豫之後漸顯") using user-adjustable thinking delay
   useEffect(() => {
-    if (chapterDone || !currentItem || fadeMode !== 'adaptive') {
+    if (chapterDone || !currentItem || fadeMode !== 'adaptive' || hesitationSec <= 0) {
       setHesitationRescue(false);
       return;
     }
     setHesitationRescue(false);
-    const delayMs = getHesitationDelayMs(glyphLevel);
+    const delayMs = hesitationSec * 1000;
     const timer = window.setTimeout(() => {
       setHesitationRescue(true);
     }, delayMs);
     return () => window.clearTimeout(timer);
-  }, [cursor, chapterId, script, typed, chapterDone, currentItem, fadeMode, glyphLevel]);
+  }, [cursor, chapterId, script, typed, chapterDone, currentItem, fadeMode, hesitationSec]);
 
   // Core signature: Mastery-adaptive pigment-to-ink fading + instant rescue on error/hesitation/Tab
   const isImmediateRescue = rescueActive || hadError || errorFlash;
@@ -562,6 +665,12 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
       if (!/^[a-zA-Z]$/.test(e.key)) return;
       e.preventDefault();
 
+      // Immediately tuck away top/bottom chrome as soon as chanting begins in Depth mode
+      if (viewMode === 'depth' && !chromeHoveredRef.current) {
+        clearChromeTimer();
+        setChromeRevealed(false);
+      }
+
       const key = e.key.toLowerCase();
       const candidate = typed + key;
       const fullCode = currentItem.info.code;
@@ -673,7 +782,12 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
     onMasteryChange,
     resetChapterSession,
     selectChapter,
+    viewMode,
+    clearChromeTimer,
   ]);
+
+  const showDepthChrome =
+    viewMode !== 'depth' || chromeRevealed || chapterDrawerOpen || chapterDone;
 
   const accuracy = totalKeys > 0 ? Math.round((correctKeys / totalKeys) * 100) : 100;
   const avgMs = completedChars > 0 ? Math.round(totalCharMs / completedChars) : 0;
@@ -694,8 +808,29 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
         viewMode === 'depth' ? 'overflow-hidden' : 'overflow-y-auto'
       }`}
     >
-      {/* Strict 3-Zone Top Header */}
-      <header className="sticky top-0 z-30 shrink-0 h-14 px-4 sm:px-6 border-b border-[var(--dojo-border)] bg-[var(--dojo-header)]/95 wash:bg-[#ECEAE3]/92 backdrop-blur-md flex items-center justify-between gap-3">
+      {/* Subtle Top Edge Hover Wake Strip in Depth Mode */}
+      {viewMode === 'depth' && !showDepthChrome && (
+        <div
+          aria-hidden="true"
+          onMouseEnter={revealChrome}
+          className="fixed top-0 inset-x-0 h-5 z-30"
+        />
+      )}
+
+      {/* Strict 3-Zone Top Header (Auto-hides cleanly in Depth Mode for zero distraction) */}
+      <header
+        onMouseEnter={viewMode === 'depth' ? handleChromeMouseEnter : undefined}
+        onMouseLeave={viewMode === 'depth' ? handleChromeMouseLeave : undefined}
+        className={`${
+          viewMode === 'depth'
+            ? `fixed top-0 inset-x-0 z-30 ${
+                showDepthChrome
+                  ? 'opacity-100 translate-y-0 transition-all duration-200 ease-out'
+                  : 'opacity-0 -translate-y-2 pointer-events-none transition-all duration-500 ease-out'
+              }`
+            : 'sticky top-0 z-30'
+        } shrink-0 h-14 px-4 sm:px-6 border-b border-[var(--dojo-border)] bg-[var(--dojo-header)]/95 wash:bg-[#ECEAE3]/92 backdrop-blur-md flex items-center justify-between gap-3`}
+      >
         {/* Left: Back + Title */}
         <div className="flex items-center gap-3 min-w-0">
           <button
@@ -861,17 +996,17 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
 
       {/* ==================== IMMERSIVE DEPTH-OF-FIELD SHIFTING SCRIPTURE MODE ==================== */}
       {viewMode === 'depth' ? (
-        <main className="relative flex-1 w-full overflow-hidden flex flex-col">
-          {/* Shared Coordinate Stage for Background Scripture + Lower-Anchored Ergonomic Target */}
-          <div className="relative flex-1 w-full overflow-hidden">
+        <main className="relative flex-1 w-full h-full overflow-hidden flex flex-col">
+          {/* Shared Full-Viewport Coordinate Stage for Background Scripture + Lower-Anchored Ergonomic Target */}
+          <div className="relative flex-1 w-full h-full overflow-hidden">
             {/* Layer 1 (Far & Mid Depth): Smoothly Shifting Classical Scripture Scroll (Zero Keyboard) */}
             <div
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
             >
-              {/* Anchored to exact vertical center of the lowered foreground target glyph (202px mobile / 234px desktop from stage bottom) */}
+              {/* Anchored to exact vertical center of the lowered foreground target glyph (238px mobile / 270px desktop from viewport bottom) */}
               <div
-                className="absolute left-1/2 bottom-[202px] sm:bottom-[234px]"
+                className="absolute left-1/2 bottom-[238px] sm:bottom-[270px]"
                 style={{
                   transform: `translate3d(${-(activeGridPos.col * DEPTH_CELL_PX + DEPTH_CELL_PX / 2)}px, ${-(activeGridPos.row * DEPTH_ROW_PX + DEPTH_ROW_PX / 2)}px, 0)`,
                   transition: 'transform 380ms cubic-bezier(0.22, 1, 0.36, 1)',
@@ -1008,7 +1143,7 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
 
               {/* Optical Halo Scrim locked to the lowered target glyph so contrast stays crisp */}
               <div
-                className="absolute left-1/2 bottom-[202px] sm:bottom-[234px] -translate-x-1/2 translate-y-1/2 w-[540px] sm:w-[680px] h-[340px] sm:h-[420px]"
+                className="absolute left-1/2 bottom-[238px] sm:bottom-[270px] -translate-x-1/2 translate-y-1/2 w-[540px] sm:w-[680px] h-[340px] sm:h-[420px]"
                 style={{
                   background: isWash
                     ? 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(243,241,236,0.92) 0%, rgba(243,241,236,0.62) 48%, rgba(243,241,236,0) 76%)'
@@ -1037,7 +1172,7 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
             {/* Layer 2 (Foreground Focal Plane): Ergonomically Lowered Target Glyph for Comfortable Downward Gaze */}
             <div
               className={`relative z-20 h-full w-full flex flex-col items-center px-4 ${
-                chapterDone ? 'justify-center py-6' : 'justify-end pb-2'
+                chapterDone ? 'justify-center py-6' : 'justify-end pb-11'
               }`}
             >
               {chapterDone ? (
@@ -1274,8 +1409,25 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
             </div>
           </div>
 
-          {/* Layer 3 (Quiet Perimeter Footer): Chapter Controls, Progress & Slide-over Directory */}
-          <footer className="relative z-30 shrink-0 px-4 sm:px-6 py-3 border-t border-[var(--dojo-border)]/70 bg-[var(--dojo-header)]/80 wash:bg-[#ECEAE3]/78 backdrop-blur-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+          {/* Subtle Bottom Edge Hover Wake Strip in Depth Mode */}
+          {!showDepthChrome && (
+            <div
+              aria-hidden="true"
+              onMouseEnter={revealChrome}
+              className="fixed bottom-0 inset-x-0 h-5 z-30"
+            />
+          )}
+
+          {/* Layer 3 (Auto-Hiding Quiet Perimeter Footer): Chapter Controls, Thinking Time, Progress & Slide-over Directory */}
+          <footer
+            onMouseEnter={handleChromeMouseEnter}
+            onMouseLeave={handleChromeMouseLeave}
+            className={`fixed bottom-0 inset-x-0 z-30 px-4 sm:px-6 py-2.5 border-t border-[var(--dojo-border)]/70 bg-[var(--dojo-header)]/88 wash:bg-[#ECEAE3]/86 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 text-xs ${
+              showDepthChrome
+                ? 'opacity-100 translate-y-0 transition-all duration-200 ease-out'
+                : 'opacity-0 translate-y-2 pointer-events-none transition-all duration-500 ease-out'
+            }`}
+          >
             {/* Left: Chapter Navigation + Directory Drawer Button */}
             <div className="flex items-center gap-2">
               <button
@@ -1334,8 +1486,39 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
               </span>
             </div>
 
-            {/* Right: Quiet Actions */}
-            <div className="flex items-center gap-3 text-[var(--dojo-text-muted)]">
+            {/* Right: Adjustable Thinking Delay + Quiet Actions */}
+            <div className="flex items-center gap-2.5 text-[var(--dojo-text-muted)]">
+              {fadeMode === 'adaptive' && (
+                <div
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] text-[11px]"
+                  title={t('停頓超過此時長後自動漸顯提示；調至「手動」則僅誤擊或按 Tab 顯影')}
+                >
+                  <span className="text-[var(--dojo-text-muted)] px-0.5 whitespace-nowrap">
+                    {t('思索')}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={hesitationSec === HESITATION_OPTIONS[0]}
+                    onClick={() => stepHesitationSec(-1)}
+                    aria-label={t('縮短思索時長')}
+                    className="w-4 h-4 inline-flex items-center justify-center rounded hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    −
+                  </button>
+                  <span className="font-mono-tabular min-w-[2.2rem] text-center font-semibold text-[var(--dojo-ochre)] whitespace-nowrap">
+                    {hesitationSec === 0 ? t('手動') : `${hesitationSec}s`}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={hesitationSec === HESITATION_OPTIONS[HESITATION_OPTIONS.length - 1]}
+                    onClick={() => stepHesitationSec(1)}
+                    aria-label={t('延長思索時長')}
+                    className="w-4 h-4 inline-flex items-center justify-center rounded hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -1789,7 +1972,36 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
                     )}
 
                     {/* Micro control row */}
-                    <div className="flex items-center gap-3 text-[11px] text-[var(--dojo-text-muted)]">
+                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-[var(--dojo-text-muted)]">
+                      {fadeMode === 'adaptive' && (
+                        <div
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)]"
+                          title={t('停頓超過此時長後自動漸顯提示；調至「手動」則僅誤擊或按 Tab 顯影')}
+                        >
+                          <span className="px-0.5 whitespace-nowrap">{t('思索')}</span>
+                          <button
+                            type="button"
+                            disabled={hesitationSec === HESITATION_OPTIONS[0]}
+                            onClick={() => stepHesitationSec(-1)}
+                            aria-label={t('縮短思索時長')}
+                            className="w-4 h-4 inline-flex items-center justify-center rounded hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            −
+                          </button>
+                          <span className="font-mono-tabular min-w-[2.1rem] text-center font-semibold text-[var(--dojo-ochre)] whitespace-nowrap">
+                            {hesitationSec === 0 ? t('手動') : `${hesitationSec}s`}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={hesitationSec === HESITATION_OPTIONS[HESITATION_OPTIONS.length - 1]}
+                            onClick={() => stepHesitationSec(1)}
+                            aria-label={t('延長思索時長')}
+                            className="w-4 h-4 inline-flex items-center justify-center rounded hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            +
+                          </button>
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
