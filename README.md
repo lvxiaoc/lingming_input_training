@@ -1,12 +1,12 @@
 <div align="center">
 
 <a href="https://lvxiaoc.github.io/lingming_input_training/">
-  <img src="./docs/dojo-reflex-demo.gif" alt="墨键道场 · 宣纸水墨击键墨滴扩散与 60fps 晕入淡出实战演示" width="100%" />
+  <img src="./docs/dojo-reflex-demo.gif" alt="墨键道场 · 玄墨夜练 Alice 分离式键盘三景深记忆宫殿反射实战动画" width="100%" />
 </a>
 
 ### 👉 [即刻开始锻炼](https://lvxiaoc.github.io/lingming_input_training/) 👈
 
-[![即刻开始锻炼](https://img.shields.io/badge/%E2%96%B6_%E5%8D%B3%E5%88%BB%E5%BC%80%E5%A7%8B%E9%94%BB%E7%82%BC-Launch_InkKey_Dojo-181817?style=for-the-badge)](https://lvxiaoc.github.io/lingming_input_training/)
+[![即刻开始锻炼](https://img.shields.io/badge/%E2%96%B6_%E5%8D%B3%E5%88%BB%E5%BC%80%E5%A7%8B%E9%94%BB%E7%82%BC-Launch_InkKey_Dojo-D94A38?style=for-the-badge)](https://lvxiaoc.github.io/lingming_input_training/)
 
 *点击上方动画或 **即刻开始锻炼** 即可免安装直达在线练习：`https://lvxiaoc.github.io/lingming_input_training/`*
 
