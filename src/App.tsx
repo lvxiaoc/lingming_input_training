@@ -183,7 +183,7 @@ export default function App() {
     undefined
   );
   const [huangtingInitialFade, setHuangtingInitialFade] = useState<FadeMode | undefined>(undefined);
-  const [academyInitialTab, setAcademyInitialTab] = useState<AcademyTab>('coach');
+  const [academyInitialTab, setAcademyInitialTab] = useState<AcademyTab>('curriculum');
   const [scheduleVersion, setScheduleVersion] = useState(0);
   const [mode, setMode] = useState<GameMode>('reflex');
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('depth');
@@ -1604,7 +1604,7 @@ export default function App() {
               type="button"
               onClick={() => {
                 synth.playClick();
-                setAcademyInitialTab('coach');
+                setAcademyInitialTab('curriculum');
                 setGameState('NOVICE_ACADEMY');
               }}
               className={`mt-2.5 w-full max-w-2xl flex items-center justify-between gap-3 px-4 py-3 active:scale-[0.995] border rounded-xl transition-all cursor-pointer text-left wash-enter-soft ${
@@ -1824,7 +1824,7 @@ export default function App() {
               }
               onOpenNoviceAcademy={() => {
                 synth.playClick();
-                setAcademyInitialTab('coach');
+                setAcademyInitialTab('curriculum');
                 setGameState('NOVICE_ACADEMY');
               }}
             />
@@ -3153,7 +3153,7 @@ export default function App() {
         onScheduleChanged={() => setScheduleVersion((v) => v + 1)}
         onLaunchAction={handleNoviceAction}
         onOpenCoachCenter={() => {
-          setAcademyInitialTab('coach');
+          setAcademyInitialTab('rhythm');
           setGameState('NOVICE_ACADEMY');
         }}
       />

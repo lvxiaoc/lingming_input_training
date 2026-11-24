@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
   Bell,
   BellRing,
+  BookOpen,
   Brain,
-  Calendar,
   CalendarClock,
   CalendarPlus,
   Check,
@@ -14,6 +14,7 @@ import {
   Clock,
   Compass,
   Flame,
+  ListChecks,
   PenLine,
   Play,
   RotateCcw,
@@ -58,7 +59,7 @@ import {
 } from '../engine/trainingScheduler';
 import { synth } from '../audio/synth';
 
-export type AcademyTab = 'coach' | 'laws' | 'barriers' | 'path' | 'modules';
+export type AcademyTab = 'curriculum' | 'rhythm' | 'guide' | 'freewrite';
 
 const STORAGE_FREEWRITE_DRAFT = 'inkkey_novice_freewrite_draft_v1';
 const STORAGE_STUCK_CHARS = 'inkkey_novice_stuck_chars_v1';
@@ -96,8 +97,9 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
   const t = useUiText();
   const isWash = themeMode === 'wash';
 
-  const [activeTab, setActiveTab] = useState<AcademyTab>(initialTab ?? 'coach');
+  const [activeTab, setActiveTab] = useState<AcademyTab>(initialTab ?? 'curriculum');
   const [phaseFilter, setPhaseFilter] = useState<0 | 1 | 2 | 3 | 4>(0);
+  const [guideSection, setGuideSection] = useState<'laws' | 'barriers'>('laws');
   const [completedDays, setCompletedDays] = useState<number[]>(() => loadCompletedDaysList());
   const [scheduleConfig, setScheduleConfig] = useState<TrainingScheduleConfig>(() =>
     loadTrainingSchedule()
@@ -109,7 +111,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
   const [showAdvancedIcs, setShowAdvancedIcs] = useState(false);
   const [nowTick, setNowTick] = useState<number>(() => Date.now());
 
-  // Free-Writing Isolation Bridge state (Tab 5)
+  // Free-Writing Isolation Bridge state (Tab 4)
   const [promptIdx, setPromptIdx] = useState<number>(0);
   const [freeDraft, setFreeDraft] = useState<string>(() => {
     try {
@@ -125,6 +127,12 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
       return '能 這 說 就 裡';
     }
   });
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNowTick(Date.now()), 30000);
@@ -220,10 +228,55 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
   const nextRecommendedDay = evaluation.currentPlanDay;
   const nextLesson = evaluation.recommendedLesson;
 
-  const visibleLessons = useMemo(() => {
-    if (phaseFilter === 0) return DAILY_CURRICULUM;
-    return DAILY_CURRICULUM.filter((l) => l.phaseId === phaseFilter);
+  // Which day cards are expanded to show 3-step micro-routine & reinforcement modules.
+  // Defaults cleanly to ONLY the active Day so the 14-day ordered curriculum stays scannable at a glance.
+  const [expandedDays, setExpandedDays] = useState<number[]>(() => [nextRecommendedDay]);
+  const [selectedDay, setSelectedDay] = useState<number>(() => nextRecommendedDay);
+  const dayRowRefs = useRef<Record<number, HTMLElement | null>>({});
+
+  useEffect(() => {
+    setSelectedDay(nextRecommendedDay);
+    setExpandedDays((prev) => (prev.includes(nextRecommendedDay) ? prev : [...prev, nextRecommendedDay]));
+  }, [nextRecommendedDay]);
+
+  const toggleExpandDay = (day: number) => {
+    synth.playClick();
+    setExpandedDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  };
+
+  const handleJumpToDay = (day: number) => {
+    synth.playClick();
+    setSelectedDay(day);
+    setPhaseFilter(0);
+    setExpandedDays((prev) => (prev.includes(day) ? prev : [...prev, day]));
+    window.requestAnimationFrame(() => {
+      const el = dayRowRefs.current[day];
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  };
+
+  const visiblePhases = useMemo(() => {
+    const phases = phaseFilter === 0 ? PHASES : PHASES.filter((p) => p.id === phaseFilter);
+    return phases.map((phase) => ({
+      phase,
+      lessons: DAILY_CURRICULUM.filter((l) => l.phaseId === phase.id),
+    }));
   }, [phaseFilter]);
+
+  const completionPct = Math.round((completedDays.length / 14) * 100);
+
+  // Separate pre-lesson adaptive nudges (bottleneck / review / recovery) from the default lesson entry
+  const urgentNudges = useMemo(
+    () =>
+      evaluation.adaptiveTasks.filter(
+        (task) => task.id !== `main-day-${evaluation.currentPlanDay}` && task.priority !== 'core'
+      ),
+    [evaluation.adaptiveTasks, evaluation.currentPlanDay]
+  );
 
   const handleEnableBrowserNotify = async () => {
     synth.playClick();
@@ -331,7 +384,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
     );
   };
 
-  // Parse unique Chinese characters entered in the Stuck-Char Diagnostics box
+  // Stuck-Char Diagnostics
   const stuckDiagnostics = useMemo(() => {
     const unique: string[] = [];
     for (const ch of stuckInput) {
@@ -364,29 +417,39 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
     onLaunchAction(action);
   };
 
+  // High-contrast crisp surfaces in both Xuan-Paper Wash and Night Ink themes
   const surfaceCardClass = isWash
-    ? 'bg-[#FAF9F5]/95 border-[#141413]/14 text-[#141413]'
-    : 'bg-[#121824]/92 border-[#F2EEE6]/10 text-[#F2EEE6]';
+    ? 'bg-white/95 border-[#141413]/18 text-[#141413] shadow-[0_1px_4px_rgba(20,20,18,0.06)]'
+    : 'bg-[#121824]/95 border-[#F2EEE6]/12 text-[#F2EEE6]';
 
   const subtlePanelClass = isWash
-    ? 'bg-[#EFECE4]/70 border-[#141413]/10'
-    : 'bg-[#0C1018]/80 border-[#F2EEE6]/8';
+    ? 'bg-[#F4F1EA] border-[#141413]/12 text-[#141413]'
+    : 'bg-[#0C1018]/85 border-[#F2EEE6]/10 text-[#F2EEE6]';
+
+  const navTabs: Array<{ id: AcademyTab; label: string }> = [
+    { id: 'curriculum', label: '01 訓練課表與進度' },
+    { id: 'rhythm', label: '02 節律與督訓' },
+    { id: 'guide', label: '03 原理與破壁說明' },
+    { id: 'freewrite', label: '04 自由寫與自練庫' },
+  ];
 
   return (
     <div
-      className={`min-h-screen w-full flex flex-col ${
-        isWash ? 'bg-[#F3F1EC] text-[#141413]' : 'bg-[#0B0E14] text-[#F2EEE6]'
+      className={`relative z-10 w-full h-full overflow-y-auto overflow-x-hidden flex flex-col ${
+        isWash
+          ? 'bg-transparent text-[#141413]'
+          : 'bg-[#0B0E14] text-[#F2EEE6]'
       }`}
     >
-      {/* Top 3-Zone Bar */}
+      {/* Top Clean 3-Zone Header */}
       <header
         className={`shrink-0 sticky top-0 z-30 border-b backdrop-blur-md ${
           isWash
-            ? 'bg-[#F3F1EC]/92 border-[#141413]/12'
-            : 'bg-[#0D1119]/92 border-[#F2EEE6]/10'
+            ? 'bg-[#F3F1EC]/94 border-[#141413]/14'
+            : 'bg-[#0D1119]/94 border-[#F2EEE6]/10'
         }`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-14 flex items-center justify-between gap-4">
+        <div className="max-w-6xl mx-auto px-4 sm:px-8 h-14 flex items-center justify-between gap-3">
           {/* Zone 1: Back + Title */}
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -397,33 +460,25 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
               }}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 isWash
-                  ? 'bg-[#FAF9F5] hover:bg-white border-[#141413]/14 text-[#141413]'
-                  : 'bg-[#161D2B] hover:bg-[#1E283B] border-[#F2EEE6]/12 text-[#DCE3F0]'
+                  ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/18 text-[#141413]'
+                  : 'bg-[#161D2B] hover:bg-[#1E283B] border-[#F2EEE6]/14 text-[#DCE3F0]'
               }`}
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>{t('返回道場')}</span>
             </button>
             <h1 className="font-display text-base sm:text-lg font-bold tracking-wide truncate">
-              {t('新手 14 天最短路徑速成學院')}
+              {t('14 天速成學院')}
             </h1>
           </div>
 
-          {/* Zone 2: Clean Text Navigation Tabs */}
+          {/* Zone 2: Clean 4-Tab Navigation */}
           <nav
             role="tablist"
-            aria-label={t('新手教程章節')}
+            aria-label={t('速成學院分區')}
             className="hidden lg:flex items-center gap-1"
           >
-            {(
-              [
-                { id: 'coach', label: '01 彈性節律與督訓' },
-                { id: 'laws', label: '02 記憶規律' },
-                { id: 'barriers', label: '03 七大難點' },
-                { id: 'path', label: '04 14天路徑' },
-                { id: 'modules', label: '05 自練與自由寫' },
-              ] as Array<{ id: AcademyTab; label: string }>
-            ).map((tabItem) => {
+            {navTabs.map((tabItem) => {
               const active = activeTab === tabItem.id;
               return (
                 <button
@@ -441,11 +496,11 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                         ? 'bg-[#181817] text-[#F8F7F3]'
                         : 'bg-[#1F293D] text-[#F7F3EC]'
                       : isWash
-                        ? 'text-[#52524C] hover:text-[#141413] hover:bg-[#141413]/6'
+                        ? 'text-[#4C4C48] hover:text-[#141413] hover:bg-[#141413]/7'
                         : 'text-[#9BA5B6] hover:text-[#F2EEE6] hover:bg-white/5'
                   }`}
                 >
-                  {t(tabItem.label)}
+                  <span>{t(tabItem.label)}</span>
                 </button>
               );
             })}
@@ -458,8 +513,8 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
               aria-label={t('字集與介面切換')}
               className={`hidden sm:inline-flex items-center p-0.5 rounded-lg border ${
                 isWash
-                  ? 'bg-[#FAF9F5] border-[#141413]/12'
-                  : 'bg-[#141A26] border-[#F2EEE6]/10'
+                  ? 'bg-white border-[#141413]/16'
+                  : 'bg-[#141A26] border-[#F2EEE6]/12'
               }`}
             >
               {SCRIPT_MODE_OPTIONS.map((opt) => (
@@ -476,11 +531,11 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                         ? 'bg-[#181817] text-[#F8F7F3]'
                         : 'bg-[#222C3F] text-[#F2EEE6]'
                       : isWash
-                        ? 'text-[#5A5A54] hover:text-[#141413]'
+                        ? 'text-[#52524C] hover:text-[#141413]'
                         : 'text-[#94A0B4] hover:text-[#F2EEE6]'
                   }`}
                 >
-                  {t(opt.short)}
+                  <span>{t(opt.short)}</span>
                 </button>
               ))}
             </div>
@@ -490,8 +545,8 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
               aria-label={t('切換道場視覺色調')}
               className={`inline-flex items-center p-0.5 rounded-lg border ${
                 isWash
-                  ? 'bg-[#FAF9F5] border-[#141413]/12'
-                  : 'bg-[#141A26] border-[#F2EEE6]/10'
+                  ? 'bg-white border-[#141413]/16'
+                  : 'bg-[#141A26] border-[#F2EEE6]/12'
               }`}
             >
               {THEME_OPTIONS.map((opt) => (
@@ -508,11 +563,11 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                         ? 'bg-[#181817] text-[#F8F7F3]'
                         : 'bg-[#222C3F] text-[#F2EEE6]'
                       : isWash
-                        ? 'text-[#5A5A54] hover:text-[#141413]'
+                        ? 'text-[#52524C] hover:text-[#141413]'
                         : 'text-[#94A0B4] hover:text-[#F2EEE6]'
                   }`}
                 >
-                  {t(opt.short)}
+                  <span>{t(opt.short)}</span>
                 </button>
               ))}
             </div>
@@ -521,15 +576,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
 
         {/* Mobile/Tablet Tab Row */}
         <div className="lg:hidden px-4 pb-2.5 flex items-center gap-1.5 overflow-x-auto">
-          {(
-            [
-              { id: 'coach', label: '01 彈性節律與督訓' },
-              { id: 'laws', label: '02 記憶規律' },
-              { id: 'barriers', label: '03 七大難點破壁' },
-              { id: 'path', label: '04 14 天速成路徑' },
-              { id: 'modules', label: '05 自練與自由書寫' },
-            ] as Array<{ id: AcademyTab; label: string }>
-          ).map((tabItem) => {
+          {navTabs.map((tabItem) => {
             const active = activeTab === tabItem.id;
             return (
               <button
@@ -545,143 +592,607 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                       ? 'bg-[#181817] text-[#F8F7F3]'
                       : 'bg-[#1F293D] text-[#F7F3EC]'
                     : isWash
-                      ? 'bg-[#E9E6DD] text-[#4E4E48]'
+                      ? 'bg-white border border-[#141413]/14 text-[#4C4C48]'
                       : 'bg-[#151B27] text-[#9BA5B6]'
                 }`}
               >
-                {t(tabItem.label)}
+                <span>{t(tabItem.label)}</span>
               </button>
             );
           })}
         </div>
       </header>
 
-      {/* Main Content Container */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-8 py-6 space-y-6">
-        {/* Top Actionable Learning Status & Daily Recommendation Strip */}
-        <section className={`rounded-xl border p-5 ${surfaceCardClass}`}>
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="space-y-1.5 min-w-0">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--dojo-text-sub)] font-mono-tabular">
-                <span className="font-sans font-semibold text-[var(--dojo-ochre)]">
-                  {t('目標：8–10 小時分散於 14 天達成自由書寫')}
-                </span>
-                <span aria-hidden="true">·</span>
-                <span>
-                  {t('課表進度')} {completedDays.length}/14 {t('天')}
-                </span>
-                <span aria-hidden="true">·</span>
-                <span>
-                  {t('下一建議')}：Day {nextLesson.day}
-                </span>
-              </div>
-              <h2 className="font-display text-lg sm:text-xl font-bold text-[var(--dojo-text-bright)]">
-                Day {nextLesson.day} · {t(nextLesson.title)}
-              </h2>
-              <p className="text-xs sm:text-sm text-[var(--dojo-text-sub)] leading-relaxed max-w-3xl">
-                {t(nextLesson.focusSummary)}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-              {nextLesson.practiceModules[0] && (
-                <button
-                  type="button"
-                  onClick={() => handleTriggerAction(nextLesson.practiceModules[0].action)}
-                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
-                    isWash
-                      ? 'bg-[#181817] hover:bg-[#2C2C2A] text-[#F8F7F3]'
-                      : 'bg-[#C93E2D] hover:bg-[#DC4B39] text-white'
-                  }`}
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>{t(nextLesson.practiceModules[0].action.label)}</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  synth.playClick();
-                  setActiveTab('path');
-                }}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
-                  isWash
-                    ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
-                    : 'bg-[#182030] hover:bg-[#212C42] border-[#F2EEE6]/14 text-[#E6E2DA]'
-                }`}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>{t('看 14 天完整課表')}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* 14-Day Mini Stepper Progress Bar */}
-          <div className="mt-4 pt-3.5 border-t border-[var(--dojo-border)] flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {DAILY_CURRICULUM.map((lesson) => {
-                const done = completedDays.includes(lesson.day);
-                const isNext = lesson.day === nextRecommendedDay;
-                return (
-                  <button
-                    key={lesson.day}
-                    type="button"
-                    onClick={() => toggleDayCompleted(lesson.day)}
-                    title={t(`點擊標記或取消完成 Day ${lesson.day}：${lesson.title}`)}
-                    className={`w-7 h-7 rounded-md text-[11px] font-mono-tabular font-semibold border transition-colors cursor-pointer flex items-center justify-center ${
-                      done
-                        ? isWash
-                          ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
-                          : 'bg-[#2EA87E]/25 border-[#2EA87E] text-[#8CEBCB]'
-                        : isNext
-                          ? isWash
-                            ? 'bg-[#D89B3C]/18 border-[#B87A18] text-[#141413]'
-                            : 'bg-[#D89B3C]/20 border-[#D89B3C] text-[#F5C56B]'
-                          : isWash
-                            ? 'bg-white border-[#141413]/12 text-[#62625C] hover:border-[#141413]/30'
-                            : 'bg-[#0D1119] border-[#F2EEE6]/10 text-[#848FA2] hover:border-[#F2EEE6]/28'
+      {/* Main Centered Container */}
+      <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-8 py-6 space-y-5">
+        {/* ==================== TAB 1 (CORE DEFAULT): ORDERED 14-DAY CURRICULUM & PROGRESS ==================== */}
+        {activeTab === 'curriculum' && (
+          <div className="space-y-5">
+            {/* 1. Unmistakable Progress-at-a-Glance + Current Active Lesson Strip */}
+            <section className={`rounded-xl border p-5 space-y-4 ${surfaceCardClass}`}>
+              {/* Top Row: Overall Progress Telemetry + Quick Actions */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <span className="font-semibold text-[var(--dojo-ochre)]">
+                      {t('總進度')} {completedDays.length}/14 {t('天')}（{completionPct}%）
+                    </span>
+                    <span className="text-[var(--dojo-text-muted)]" aria-hidden="true">·</span>
+                    <span className="font-mono-tabular text-[var(--dojo-text-sub)]">
+                      {t('當前階段')}：{t(PHASES.find((p) => p.id === nextLesson.phaseId)?.title ?? '')}
+                    </span>
+                    <span className="text-[var(--dojo-text-muted)]" aria-hidden="true">·</span>
+                    <span className="font-mono-tabular text-[var(--dojo-text-sub)]">
+                      {t('今日字數')} {evaluation.todayChars}/{evaluation.todayQuota}
+                    </span>
+                  </div>
+                  {/* Crisp progress bar */}
+                  <div
+                    className={`w-full max-w-md h-1.5 rounded-full overflow-hidden ${
+                      isWash ? 'bg-[#141413]/10' : 'bg-white/10'
                     }`}
                   >
-                    {done ? <Check className="w-3.5 h-3.5" /> : lesson.day}
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{
+                        width: `${Math.max(4, completionPct)}%`,
+                        backgroundColor:
+                          completedDays.length === 14
+                            ? 'var(--dojo-pine)'
+                            : isWash
+                              ? '#181817'
+                              : '#D89B3C',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      synth.playClick();
+                      setActiveTab('rhythm');
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                      isWash
+                        ? 'bg-[#FAF9F5] hover:bg-[#EFECE4] border-[#141413]/16 text-[#141413]'
+                        : 'bg-[#182030] hover:bg-[#222D43] border-[#F2EEE6]/14 text-[#DCE3F0]'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5 text-[var(--dojo-ochre)]" />
+                    <span>
+                      {evaluation.todaySuppressed
+                        ? t('今日已靜音 · 調節律')
+                        : `${t('下個時窗')} ${slotInfo.nextWindowRange}`}
+                    </span>
                   </button>
+
+                  {completedDays.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={resetProgress}
+                      className="inline-flex items-center gap-1 px-2 py-1.5 text-[11px] text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text)] transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>{t('重置')}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Ordered 14-Day Visual Progression Stepper (D1 -> D14 segmented by 4 phases) */}
+              <div className="grid grid-cols-7 sm:grid-cols-14 gap-1.5">
+                {DAILY_CURRICULUM.map((lesson) => {
+                  const done = completedDays.includes(lesson.day);
+                  const isCurrent = lesson.day === nextRecommendedDay && !done;
+                  const isFocused = lesson.day === selectedDay;
+                  const hasReview = evaluation.ebbinghausDue.some(
+                    (eb) => eb.sourceDay === lesson.day
+                  );
+                  return (
+                    <button
+                      key={lesson.day}
+                      type="button"
+                      onClick={() => handleJumpToDay(lesson.day)}
+                      title={t(`跳轉查看 Day ${lesson.day}：${lesson.title}`)}
+                      className={`relative h-9 rounded-lg border font-mono-tabular text-xs font-semibold transition-all cursor-pointer flex flex-col items-center justify-center leading-none ${
+                        done
+                          ? isWash
+                            ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
+                            : 'bg-[#2EA87E]/25 border-[#2EA87E] text-[#8CEBCB]'
+                          : isCurrent
+                            ? isWash
+                              ? 'bg-[#FBF3E2] border-[#B87A18] border-2 text-[#141413]'
+                              : 'bg-[#D89B3C]/22 border-[#D89B3C] border-2 text-[#F5C56B]'
+                            : isFocused
+                              ? isWash
+                                ? 'bg-[#EFECE4] border-[#141413]/45 text-[#141413]'
+                                : 'bg-[#1D273B] border-[#F2EEE6]/40 text-[#F2EEE6]'
+                              : isWash
+                                ? 'bg-[#F8F7F3] border-[#141413]/14 text-[#4C4C48] hover:border-[#141413]/40'
+                                : 'bg-[#0D1119] border-[#F2EEE6]/12 text-[#9BA5B6] hover:border-[#F2EEE6]/35'
+                      }`}
+                    >
+                      {done ? (
+                        <Check className="w-3.5 h-3.5" />
+                      ) : (
+                        <span>{lesson.day}</span>
+                      )}
+                      {hasReview && !done && (
+                        <span
+                          aria-hidden="true"
+                          className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${
+                            isWash ? 'bg-[#B83226]' : 'bg-[#D94A38]'
+                          }`}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Active Next-Step Focus Strip */}
+              <div
+                className={`pt-4 border-t flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+                  isWash ? 'border-[#141413]/12' : 'border-[var(--dojo-border)]'
+                }`}
+              >
+                <div className="space-y-1.5 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span
+                      className={`font-semibold px-2 py-0.5 rounded ${
+                        isWash
+                          ? 'bg-[#181817] text-[#F8F7F3]'
+                          : 'bg-[#D89B3C]/20 text-[#F5C56B]'
+                      }`}
+                    >
+                      {t('當前第')} {nextLesson.day} {t('課')}
+                    </span>
+                    <span className="font-mono-tabular text-[var(--dojo-text-sub)]">
+                      {t('建議')} {nextLesson.durationMin} {t('分鐘')}
+                    </span>
+                    {evaluation.ebbinghausDue.length > 0 && (
+                      <span className="text-[var(--dojo-crimson)] font-medium">
+                        · {t('另有')} {evaluation.ebbinghausDue.length} {t('項遺忘曲線複習到期')}
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="font-display text-lg sm:text-xl font-bold text-[var(--dojo-text-bright)]">
+                    Day {nextLesson.day} · {t(nextLesson.title)}
+                  </h2>
+                  <p className="text-xs sm:text-[13px] text-[var(--dojo-text-sub)] leading-relaxed max-w-3xl">
+                    {t(nextLesson.focusSummary)}
+                  </p>
+
+                  {/* Inline Compact Urgent Nudge (if a bottleneck / review prerequisite exists) */}
+                  {urgentNudges.length > 0 && (
+                    <div className="pt-1 flex flex-wrap items-center gap-2">
+                      {urgentNudges.slice(0, 2).map((nudge) => (
+                        <button
+                          key={nudge.id}
+                          type="button"
+                          onClick={() => handleTriggerAction(nudge.action)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-medium transition-colors cursor-pointer ${
+                            nudge.priority === 'critical'
+                              ? isWash
+                                ? 'bg-[#FDF4F3] hover:bg-[#FAE7E5] border-[#B83226]/35 text-[#9B261C]'
+                                : 'bg-[#221519] hover:bg-[#2E1B20] border-[#D94A38]/45 text-[#F28E80]'
+                              : isWash
+                                ? 'bg-[#FCF9F0] hover:bg-[#F7F0DC] border-[#B87A18]/35 text-[#7A510C]'
+                                : 'bg-[#1B1A14] hover:bg-[#26241B] border-[#D89B3C]/40 text-[#F5C56B]'
+                          }`}
+                        >
+                          <Flame className="w-3 h-3 shrink-0" />
+                          <span>
+                            {t('建議課前先補')}：{t(nudge.action.label)}（{nudge.minutes}m）
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {nextLesson.practiceModules[0] && (
+                    <button
+                      type="button"
+                      onClick={() => handleTriggerAction(nextLesson.practiceModules[0].action)}
+                      className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                        isWash
+                          ? 'bg-[#181817] hover:bg-[#2C2C2A] text-[#F8F7F3]'
+                          : 'bg-[#C93E2D] hover:bg-[#DC4B39] text-white'
+                      }`}
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>{t(nextLesson.practiceModules[0].action.label)}</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => toggleDayCompleted(nextLesson.day)}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
+                      completedDays.includes(nextLesson.day)
+                        ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/45 text-[var(--dojo-pine-text)]'
+                        : isWash
+                          ? 'bg-white hover:bg-[#EFECE4] border-[#141413]/20 text-[#141413]'
+                          : 'bg-[#182030] hover:bg-[#212C42] border-[#F2EEE6]/14 text-[#E6E2DA]'
+                    }`}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>
+                      {completedDays.includes(nextLesson.day)
+                        ? t(`已完成 Day ${nextLesson.day}`)
+                        : t(`打卡完成 Day ${nextLesson.day}`)}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            {/* 2. Phase Filter Toolbar (Simple Segmented Switch) */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    synth.playClick();
+                    setPhaseFilter(0);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                    phaseFilter === 0
+                      ? isWash
+                        ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
+                        : 'bg-[#1F293D] border-[#D89B3C] text-[#F7F3EC]'
+                      : isWash
+                        ? 'bg-white border-[#141413]/16 text-[#4C4C48] hover:text-[#141413]'
+                        : 'bg-[#121824] border-[#F2EEE6]/12 text-[#9BA5B6] hover:text-[#F2EEE6]'
+                  }`}
+                >
+                  <span>{t('全部 14 課（按順序）')}</span>
+                </button>
+                {PHASES.map((phase) => {
+                  const active = phaseFilter === phase.id;
+                  const phaseLessons = DAILY_CURRICULUM.filter((d) => d.phaseId === phase.id);
+                  const phaseDone = phaseLessons.filter((d) =>
+                    completedDays.includes(d.day)
+                  ).length;
+                  return (
+                    <button
+                      key={phase.id}
+                      type="button"
+                      onClick={() => {
+                        synth.playClick();
+                        setPhaseFilter((prev) => (prev === phase.id ? 0 : phase.id));
+                      }}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                        active
+                          ? isWash
+                            ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
+                            : 'bg-[#1F293D] border-[#D89B3C] text-[#F7F3EC]'
+                          : isWash
+                            ? 'bg-white border-[#141413]/16 text-[#4C4C48] hover:text-[#141413]'
+                            : 'bg-[#121824] border-[#F2EEE6]/12 text-[#9BA5B6] hover:text-[#F2EEE6]'
+                      }`}
+                    >
+                      <span>
+                        {phase.dayRange} · {phaseDone}/{phaseLessons.length}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <span className="text-[11px] text-[var(--dojo-text-muted)]">
+                {t('點擊左側編號打卡 · 點開「練法詳情」看 3 步微循環與額外模組')}
+              </span>
+            </div>
+
+            {/* 3. Ordered 4-Phase Curriculum Sequence (Day 1 -> Day 14) */}
+            <div className="space-y-6">
+              {visiblePhases.map(({ phase, lessons }) => {
+                const phaseDone = lessons.filter((d) => completedDays.includes(d.day)).length;
+                const isCurrentPhase = nextLesson.phaseId === phase.id;
+                return (
+                  <section key={phase.id} className="space-y-2.5">
+                    {/* Crisp Phase Section Header */}
+                    <div
+                      className={`flex flex-col sm:flex-row sm:items-end justify-between gap-1 pb-2 border-b ${
+                        isWash ? 'border-[#141413]/15' : 'border-[#F2EEE6]/12'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono-tabular text-xs font-bold text-[var(--dojo-ochre)]">
+                          {phase.dayRange}
+                        </span>
+                        <h3 className="font-display text-base sm:text-lg font-bold">
+                          {t(phase.title)}
+                        </h3>
+                        {isCurrentPhase && (
+                          <span
+                            className={`text-[11px] font-medium px-2 py-0.5 rounded ${
+                              isWash
+                                ? 'bg-[#FBF3E2] border border-[#B87A18]/40 text-[#7A510C]'
+                                : 'bg-[#D89B3C]/18 text-[#F5C56B]'
+                            }`}
+                          >
+                            {t('所在階段')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs font-mono-tabular text-[var(--dojo-text-muted)]">
+                        {t('完成')} {phaseDone}/{lessons.length} · {t(phase.cumulativeTime)}
+                      </div>
+                    </div>
+
+                    {/* Concise Ordered Course Rows */}
+                    <div className="space-y-2.5">
+                      {lessons.map((lesson) => {
+                        const done = completedDays.includes(lesson.day);
+                        const isNext = lesson.day === nextRecommendedDay && !done;
+                        const isExpanded = expandedDays.includes(lesson.day);
+                        const reviewDue = evaluation.ebbinghausDue.some(
+                          (eb) => eb.sourceDay === lesson.day
+                        );
+
+                        return (
+                          <article
+                            key={lesson.day}
+                            ref={(el) => {
+                              dayRowRefs.current[lesson.day] = el;
+                            }}
+                            className={`rounded-xl border transition-colors ${
+                              isNext
+                                ? isWash
+                                  ? 'bg-white border-[#B87A18] border-2 shadow-sm'
+                                  : 'bg-[#161F30] border-[#D89B3C]/70'
+                                : done
+                                  ? isWash
+                                    ? 'bg-[#F8F7F3]/90 border-[#141413]/12 opacity-90'
+                                    : 'bg-[#0F1520]/90 border-[#2EA87E]/25 opacity-90'
+                                  : surfaceCardClass
+                            }`}
+                          >
+                            {/* Compact Primary Row */}
+                            <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+                              <div className="flex items-start gap-3 min-w-0 flex-1">
+                                {/* Order Index / Completion Checkbox */}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleDayCompleted(lesson.day)}
+                                  aria-label={t(`標記 Day ${lesson.day} 完成狀態`)}
+                                  title={t(
+                                    done
+                                      ? `取消 Day ${lesson.day} 完成標記`
+                                      : `標記 Day ${lesson.day} 已完成`
+                                  )}
+                                  className={`mt-0.5 w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 transition-colors cursor-pointer font-mono-tabular text-xs font-bold ${
+                                    done
+                                      ? isWash
+                                        ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
+                                        : 'bg-[#2EA87E] border-[#2EA87E] text-[#0B0E14]'
+                                      : isNext
+                                        ? isWash
+                                          ? 'bg-[#FBF3E2] border-[#B87A18] text-[#141413]'
+                                          : 'bg-[#D89B3C]/22 border-[#D89B3C] text-[#F5C56B]'
+                                        : isWash
+                                          ? 'bg-[#F4F1EA] border-[#141413]/20 text-[#3E3E3A] hover:border-[#141413]'
+                                          : 'bg-[#0D1119] border-[#F2EEE6]/16 text-[#AEB6C4] hover:border-[#F2EEE6]/40'
+                                  }`}
+                                >
+                                  {done ? <Check className="w-4 h-4" /> : `D${lesson.day}`}
+                                </button>
+
+                                <div className="min-w-0 flex-1 space-y-1">
+                                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                                    <span className="font-mono-tabular font-semibold text-[var(--dojo-ochre)]">
+                                      Day {lesson.day}
+                                    </span>
+                                    <span className="text-[var(--dojo-text-muted)]" aria-hidden="true">·</span>
+                                    <span className="font-mono-tabular text-[var(--dojo-text-sub)]">
+                                      {lesson.durationMin} {t('分鐘')}
+                                    </span>
+                                    {isNext && (
+                                      <span
+                                        className={`font-semibold ${
+                                          isWash ? 'text-[#9B5E0A]' : 'text-[#F5C56B]'
+                                        }`}
+                                      >
+                                        · {t('當前主課')}
+                                      </span>
+                                    )}
+                                    {done && (
+                                      <span className="font-semibold text-[var(--dojo-pine-text)]">
+                                        · {t('已打卡')}
+                                      </span>
+                                    )}
+                                    {reviewDue && (
+                                      <span className="font-semibold text-[var(--dojo-crimson)]">
+                                        · {t('到期複習')}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <h4 className="font-display text-base font-bold leading-snug">
+                                    {t(lesson.title)}
+                                  </h4>
+
+                                  <p className="text-xs text-[var(--dojo-text-sub)] leading-relaxed">
+                                    {t(lesson.focusSummary)}
+                                  </p>
+
+                                  <div className="text-[11px] text-[var(--dojo-text-muted)]">
+                                    <span className="font-semibold text-[var(--dojo-text-sub)]">
+                                      {t('過關標準')}：
+                                    </span>
+                                    <span>{t(lesson.passCriteria)}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Clean Primary Start Button + Collapsible Details Toggle */}
+                              <div className="flex sm:flex-col items-center sm:items-end justify-end gap-2 shrink-0 pl-12 sm:pl-0">
+                                {lesson.practiceModules[0] && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleTriggerAction(lesson.practiceModules[0].action)
+                                    }
+                                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                                      isNext
+                                        ? isWash
+                                          ? 'bg-[#181817] hover:bg-[#2C2C2A] text-[#F8F7F3]'
+                                          : 'bg-[#C93E2D] hover:bg-[#DC4B39] text-white'
+                                        : isWash
+                                          ? 'bg-[#F4F1EA] hover:bg-[#181817] hover:text-[#F8F7F3] border border-[#141413]/18 text-[#141413]'
+                                          : 'bg-[#192233] hover:bg-[#233048] border border-[#F2EEE6]/14 text-[#E6E2DA]'
+                                    }`}
+                                  >
+                                    <Play className="w-3 h-3 fill-current" />
+                                    <span>{t(lesson.practiceModules[0].action.label)}</span>
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpandDay(lesson.day)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors cursor-pointer"
+                                >
+                                  <span>
+                                    {isExpanded
+                                      ? t('收合練法詳情')
+                                      : `${t('練法與模組')} (${lesson.practiceModules.length})`}
+                                  </span>
+                                  {isExpanded ? (
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Collapsible 3-Step Routine & Extra Practice Modules Drawer */}
+                            {isExpanded && (
+                              <div
+                                className={`px-4 pb-4 pt-3 border-t space-y-3 ${
+                                  isWash ? 'border-[#141413]/12' : 'border-[var(--dojo-border)]'
+                                }`}
+                              >
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                                  <div
+                                    className={`rounded-lg border p-2.5 text-xs leading-relaxed ${subtlePanelClass}`}
+                                  >
+                                    <div className="font-semibold text-[var(--dojo-text-bright)] mb-0.5">
+                                      01 · {t('喚醒 3 分鐘')}
+                                    </div>
+                                    <div className="text-[var(--dojo-text-sub)]">
+                                      {t(lesson.microRoutine.warmup3m)}
+                                    </div>
+                                  </div>
+                                  <div
+                                    className={`rounded-lg border p-2.5 text-xs leading-relaxed ${subtlePanelClass}`}
+                                  >
+                                    <div className="font-semibold text-[var(--dojo-ochre)] mb-0.5">
+                                      02 · {t('主練 8–12 分鐘')}
+                                    </div>
+                                    <div className="text-[var(--dojo-text-sub)]">
+                                      {t(lesson.microRoutine.core8m)}
+                                    </div>
+                                  </div>
+                                  <div
+                                    className={`rounded-lg border p-2.5 text-xs leading-relaxed ${subtlePanelClass}`}
+                                  >
+                                    <div className="font-semibold text-[var(--dojo-pine-text)] mb-0.5">
+                                      03 · {t('固化 4 分鐘')}
+                                    </div>
+                                    <div className="text-[var(--dojo-text-sub)]">
+                                      {t(lesson.microRoutine.solidify4m)}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                  <span className="text-[11px] font-semibold text-[var(--dojo-text-muted)] mr-1">
+                                    {t('本課相關練習模組')}：
+                                  </span>
+                                  {lesson.practiceModules.map((mod, idx) => (
+                                    <button
+                                      key={idx}
+                                      type="button"
+                                      onClick={() => handleTriggerAction(mod.action)}
+                                      title={t(mod.usageTip)}
+                                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                                        isWash
+                                          ? 'bg-white hover:bg-[#181817] hover:text-[#F8F7F3] border-[#141413]/18 text-[#141413]'
+                                          : 'bg-[#182030] hover:bg-[#222D43] border-[#F2EEE6]/14 text-[#E6E2DA]'
+                                      }`}
+                                    >
+                                      <Play className="w-3 h-3 fill-current" />
+                                      <span>{t(mod.action.label)}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
                 );
               })}
             </div>
 
-            <div className="flex items-center gap-3 text-[11px] text-[var(--dojo-text-muted)]">
-              <span className="font-mono-tabular">
-                {t('今日完成')} {evaluation.todayChars}/{evaluation.todayQuota} {t('字')} ·{' '}
-                {evaluation.todaySuppressed
-                  ? t('今日提醒已靜音')
-                  : `${t('下個時窗')} ${slotInfo.nextWindowRange}`}
-              </span>
-              {completedDays.length > 0 && (
+            {/* Quiet Helper Links at Bottom */}
+            <div
+              className={`pt-4 border-t flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--dojo-text-sub)] ${
+                isWash ? 'border-[#141413]/14' : 'border-[var(--dojo-border)]'
+              }`}
+            >
+              <span>{t('想進一步了解課程設計原理、彈性提醒排程或自由寫實戰？')}</span>
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={resetProgress}
-                  className="inline-flex items-center gap-1 hover:text-[var(--dojo-text)] transition-colors cursor-pointer"
+                  onClick={() => {
+                    synth.playClick();
+                    setActiveTab('rhythm');
+                  }}
+                  className="inline-flex items-center gap-1 font-medium text-[var(--dojo-ochre)] hover:underline cursor-pointer"
                 >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>{t('重置進度')}</span>
+                  <span>{t('彈性節律與提醒')}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    synth.playClick();
+                    setActiveTab('guide');
+                  }}
+                  className="inline-flex items-center gap-1 font-medium text-[var(--dojo-ochre)] hover:underline cursor-pointer"
+                >
+                  <span>{t('記憶規律與七大破壁')}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
-        </section>
+        )}
 
-        {/* ==================== TAB 0 (COACH): DEVIL-MODE EVALUATION, ADAPTIVE PLAN & ALARMS ==================== */}
-        {activeTab === 'coach' && (
+        {/* ==================== TAB 2: FLEXIBLE RHYTHM & COACHING DIAGNOSTICS ==================== */}
+        {activeTab === 'rhythm' && (
           <div className="space-y-5">
-            {/* Top Evaluation Verdict + Quantitative Readiness Telemetry */}
+            {/* Concise Quantitative Telemetry Strip */}
             <section
               className={`rounded-xl border p-5 space-y-4 ${
                 evaluation.statusLevel === 'devil_lock'
                   ? isWash
-                    ? 'bg-[#FAF5F4] border-[#B83226]/45 text-[#141413]'
+                    ? 'bg-[#FDF4F3] border-[#B83226]/45 text-[#141413]'
                     : 'bg-[#1A1318] border-[#D94A38]/55 text-[#F6F2EA]'
                   : evaluation.statusLevel === 'warning'
                     ? isWash
-                      ? 'bg-[#FAF8F2] border-[#B87A18]/40 text-[#141413]'
+                      ? 'bg-[#FCF9F0] border-[#B87A18]/45 text-[#141413]'
                       : 'bg-[#191714] border-[#D89B3C]/45 text-[#F6F2EA]'
                     : surfaceCardClass
               }`}
@@ -723,27 +1234,35 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                   </p>
                 </div>
 
-                {/* Readiness Score Dial Summary */}
+                {/* Readiness Dial Summary */}
                 <div
                   className={`shrink-0 rounded-xl border px-4 py-3 flex items-center gap-4 ${subtlePanelClass}`}
                 >
                   <div className="text-center">
-                    <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('掌握準備度')}</div>
-                    <div className="font-mono-tabular text-2xl font-bold text-[var(--dojo-ochre)]">
+                    <span className="block text-[11px] text-[var(--dojo-text-muted)]">
+                      {t('掌握準備度')}
+                    </span>
+                    <span className="font-mono-tabular text-2xl font-bold text-[var(--dojo-ochre)]">
                       {evaluation.readinessScore}
                       <span className="text-xs text-[var(--dojo-text-muted)]">/100</span>
-                    </div>
+                    </span>
                   </div>
                   <div className="h-8 w-px bg-[var(--dojo-border)]" aria-hidden="true" />
                   <div className="text-xs space-y-0.5 font-mono-tabular">
                     <div>
-                      {t('連練紀錄')}：{evaluation.streakDays} {t('天')}
+                      <span>
+                        {t('連練紀錄')}：{evaluation.streakDays} {t('天')}
+                      </span>
                     </div>
                     <div>
-                      {t('慢字池')}：{evaluation.slowPoolCount} {t('字')}
+                      <span>
+                        {t('慢字池')}：{evaluation.slowPoolCount} {t('字')}
+                      </span>
                     </div>
                     <div>
-                      {t('自動化率')}：{evaluation.masteredRatePct}%
+                      <span>
+                        {t('自動化率')}：{evaluation.masteredRatePct}%
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -752,14 +1271,20 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
               {/* 5 Quantitative Telemetry Tiles */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                 <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
-                  <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('今日字數紅線')}</div>
+                  <span className="block text-[11px] text-[var(--dojo-text-muted)]">
+                    {t('今日字數紅線')}
+                  </span>
                   <div className="font-mono-tabular text-lg font-bold mt-0.5">
-                    {evaluation.todayChars}
+                    <span>{evaluation.todayChars}</span>
                     <span className="text-xs font-normal text-[var(--dojo-text-muted)]">
                       /{evaluation.todayQuota}
                     </span>
                   </div>
-                  <div className="mt-1.5 h-1.5 rounded-full bg-black/20 overflow-hidden">
+                  <div
+                    className={`mt-1.5 h-1.5 rounded-full overflow-hidden ${
+                      isWash ? 'bg-[#141413]/12' : 'bg-black/30'
+                    }`}
+                  >
                     <div
                       className="h-full rounded-full transition-all duration-300"
                       style={{
@@ -774,71 +1299,80 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                 </div>
 
                 <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
-                  <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('今日準確率')}</div>
-                  <div
-                    className={`font-mono-tabular text-lg font-bold mt-0.5 ${
+                  <span className="block text-[11px] text-[var(--dojo-text-muted)]">
+                    {t('今日準確率')}
+                  </span>
+                  <span
+                    className={`block font-mono-tabular text-lg font-bold mt-0.5 ${
                       evaluation.todayAccuracy !== null && evaluation.todayAccuracy < 92
                         ? 'text-[var(--dojo-crimson)]'
                         : 'text-[var(--dojo-pine-text)]'
                     }`}
                   >
                     {evaluation.todayAccuracy !== null ? `${evaluation.todayAccuracy}%` : '--'}
-                  </div>
-                  <div className="text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
+                  </span>
+                  <span className="block text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
                     {t('紅線 ≥ 92%')}
-                  </div>
+                  </span>
                 </div>
 
                 <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
-                  <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('字根均速')}</div>
-                  <div className="font-mono-tabular text-lg font-bold mt-0.5">
+                  <span className="block text-[11px] text-[var(--dojo-text-muted)]">
+                    {t('字根均速')}
+                  </span>
+                  <span className="block font-mono-tabular text-lg font-bold mt-0.5">
                     {evaluation.todayAvgKeyMs ?? (evaluation.overallAvgKeyMs || '--')}
-                    {(evaluation.todayAvgKeyMs || evaluation.overallAvgKeyMs) ? 'ms' : ''}
-                  </div>
-                  <div className="text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
+                    {evaluation.todayAvgKeyMs || evaluation.overallAvgKeyMs ? 'ms' : ''}
+                  </span>
+                  <span className="block text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
                     {t('目標 < 450ms')}
-                  </div>
+                  </span>
                 </div>
 
                 <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
-                  <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('今日流速')}</div>
-                  <div className="font-mono-tabular text-lg font-bold mt-0.5">
+                  <span className="block text-[11px] text-[var(--dojo-text-muted)]">
+                    {t('今日流速')}
+                  </span>
+                  <span className="block font-mono-tabular text-lg font-bold mt-0.5">
                     {evaluation.todayCpm ?? '--'}
                     {evaluation.todayCpm ? (
-                      <span className="text-[11px] font-normal text-[var(--dojo-text-muted)]"> CPM</span>
+                      <span className="text-[11px] font-normal text-[var(--dojo-text-muted)]">
+                        {' '}
+                        CPM
+                      </span>
                     ) : null}
-                  </div>
-                  <div className="text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
+                  </span>
+                  <span className="block text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
                     {t('14天終點 35+')}
-                  </div>
+                  </span>
                 </div>
 
                 <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
-                  <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('記憶到期複習')}</div>
-                  <div className="font-mono-tabular text-lg font-bold mt-0.5 text-[var(--dojo-ochre)]">
+                  <span className="block text-[11px] text-[var(--dojo-text-muted)]">
+                    {t('記憶到期複習')}
+                  </span>
+                  <span className="block font-mono-tabular text-lg font-bold mt-0.5 text-[var(--dojo-ochre)]">
                     {evaluation.ebbinghausDue.length} {t('項')}
-                  </div>
-                  <div className="text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
+                  </span>
+                  <span className="block text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
                     {t('+1/+2/+4/+7 天間隔')}
-                  </div>
+                  </span>
                 </div>
               </div>
             </section>
 
-            {/* Two-Column Core: Left Auto-Added Adaptive Plan + Weak Keys; Right Alarms & Calendar Export */}
+            {/* Two-Column Core: Left Adaptive Remediation Queue + Right Flexible Rhythm Planner */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              {/* Left 7 cols: Adaptive Remediation & Today's Enforced Micro-Plan */}
+              {/* Left 7 cols */}
               <section className={`lg:col-span-7 rounded-xl border p-5 space-y-4 ${surfaceCardClass}`}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="font-display text-lg font-bold flex items-center gap-2">
-                      <Flame className="w-5 h-5 text-[var(--dojo-crimson)]" />
-                      <span>{t('系統依記憶規律自動排入的「今日強制執行課表」')}</span>
-                    </h3>
-                    <p className="text-xs text-[var(--dojo-text-sub)] mt-0.5">
-                      {t('偵測到低準確率、慢字堆積、斷練或遺忘曲線節點時，自動在主課前插入補訓項目。')}
-                    </p>
-                  </div>
+                <div>
+                  <h3 className="font-display text-lg font-bold flex items-center gap-2">
+                    <ListChecks className="w-5 h-5 text-[var(--dojo-crimson)]" />
+                    <span>{t('今日自動診斷補訓隊列')}</span>
+                  </h3>
+                  <p className="text-xs text-[var(--dojo-text-sub)] mt-0.5">
+                    {t('偵測到低準確率、慢字堆積、斷練或遺忘曲線節點時，自動排在主課前優先消化。')}
+                  </p>
                 </div>
 
                 <div className="space-y-2.5">
@@ -891,7 +1425,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                               ? 'bg-[#181817] hover:bg-[#2C2C2A] text-[#F8F7F3]'
                               : 'bg-[#C93E2D] hover:bg-[#DC4B39] text-white'
                             : isWash
-                              ? 'bg-white hover:bg-[#FAF9F5] border border-[#141413]/16 text-[#141413]'
+                              ? 'bg-white hover:bg-[#FAF9F5] border border-[#141413]/18 text-[#141413]'
                               : 'bg-[#192233] hover:bg-[#233048] border border-[#F2EEE6]/14 text-[#E6E2DA]'
                         }`}
                       >
@@ -905,7 +1439,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                 {/* Weakest Chambers Instant Target Row */}
                 <div className="pt-3 border-t border-[var(--dojo-border)] space-y-2">
                   <div className="text-xs font-semibold text-[var(--dojo-text-sub)]">
-                    {t('當前最弱輔音宮殿（點鍵立即單鍵覆寫肌肉記憶）：')}
+                    <span>{t('當前最弱輔音宮殿（點鍵立即單鍵覆寫肌肉記憶）：')}</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {evaluation.weakestKeys.map((wk) => (
@@ -921,8 +1455,8 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                         }
                         className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs transition-colors cursor-pointer ${
                           isWash
-                            ? 'bg-white hover:bg-[#181817] hover:text-[#F8F7F3] border-[#141413]/14'
-                            : 'bg-[#161E2E] hover:bg-[#222E46] border-[#F2EEE6]/12'
+                            ? 'bg-white hover:bg-[#181817] hover:text-[#F8F7F3] border-[#141413]/18'
+                            : 'bg-[#161E2E] hover:bg-[#222E46] border-[#F2EEE6]/14'
                         }`}
                       >
                         <span className="font-mono-tabular font-bold text-[var(--dojo-ochre)]">
@@ -938,16 +1472,16 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                 </div>
               </section>
 
-              {/* Right 5 cols: Flexible Habit-Anchor Rhythm Planner (Low-Intrusiveness Alternative to Google Calendar) */}
+              {/* Right 5 cols: Flexible Habit-Anchor Rhythm Planner */}
               <section className={`lg:col-span-5 rounded-xl border p-5 space-y-4 ${surfaceCardClass}`}>
                 <div>
                   <h3 className="font-display text-lg font-bold flex items-center gap-2">
                     <BellRing className="w-5 h-5 text-[var(--dojo-ochre)]" />
-                    <span>{t('輕擾動彈性節律規劃（不塞爆主日曆）')}</span>
+                    <span>{t('輕擾動彈性節律規劃')}</span>
                   </h3>
                   <p className="text-xs text-[var(--dojo-text-sub)] mt-1 leading-relaxed">
                     {t(
-                      '固定日曆鬧鐘太死板且容易令人煩躁。這裡改用「生活習慣錨點 ＋ 彈性時窗 ＋ 達標即靜音」：在你的自然空檔輕提醒，練夠今日字數就自動閉嘴。'
+                      '固定日曆鬧鐘容易令人煩躁。這裡改用「習慣錨點 ＋ 彈性時窗 ＋ 達標即靜音」：只在自然空檔輕提醒，練夠今日字數就自動安靜。'
                     )}
                   </p>
                 </div>
@@ -957,7 +1491,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                   className={`rounded-xl border p-3.5 space-y-2.5 text-xs ${
                     evaluation.isRestDayToday
                       ? isWash
-                        ? 'bg-[#EDF5F1] border-[#2EA87E]/40'
+                        ? 'bg-[#EDF5F1] border-[#2EA87E]/45'
                         : 'bg-[#12201C] border-[#2EA87E]/45'
                       : subtlePanelClass
                   }`}
@@ -980,8 +1514,8 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                         evaluation.isLowDoseToday
                           ? 'bg-[var(--dojo-pine)] border-[var(--dojo-pine)] text-white'
                           : isWash
-                            ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/15 text-[#141413]'
-                            : 'bg-[#161E2E] hover:bg-[#1E2940] border-[#F2EEE6]/12 text-[#E6E2DA]'
+                            ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/18 text-[#141413]'
+                            : 'bg-[#161E2E] hover:bg-[#1E2940] border-[#F2EEE6]/14 text-[#E6E2DA]'
                       }`}
                     >
                       <Sparkles className="w-3.5 h-3.5 shrink-0" />
@@ -997,8 +1531,8 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                         evaluation.isRestDayToday
                           ? 'bg-[var(--dojo-ochre)] border-[var(--dojo-ochre)] text-[#0B0E14] font-semibold'
                           : isWash
-                            ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/15 text-[#141413]'
-                            : 'bg-[#161E2E] hover:bg-[#1E2940] border-[#F2EEE6]/12 text-[#E6E2DA]'
+                            ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/18 text-[#141413]'
+                            : 'bg-[#161E2E] hover:bg-[#1E2940] border-[#F2EEE6]/14 text-[#E6E2DA]'
                       }`}
                     >
                       <CalendarClock className="w-3.5 h-3.5 shrink-0" />
@@ -1009,10 +1543,10 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                   </div>
                 </div>
 
-                {/* 3 Rhythm Templates (1-Click Habit Stacking Setup) */}
+                {/* 3 Rhythm Templates */}
                 <div className="space-y-2">
                   <div className="text-xs font-semibold text-[var(--dojo-text-sub)]">
-                    {t('1. 選擇最貼近你作息的生活節律模板')}
+                    <span>{t('1. 選擇最貼近你作息的生活節律模板')}</span>
                   </div>
                   <div className="space-y-1.5">
                     {RHYTHM_PRESETS.map((preset) => {
@@ -1028,8 +1562,8 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                                 ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
                                 : 'bg-[#1C2638] border-[#D89B3C] text-[#F7F3EC]'
                               : isWash
-                                ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/14 text-[#141413]'
-                                : 'bg-[#0E131D] hover:bg-[#161E2E] border-[#F2EEE6]/10 text-[#DCE3F0]'
+                                ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/18 text-[#141413]'
+                                : 'bg-[#0E131D] hover:bg-[#161E2E] border-[#F2EEE6]/12 text-[#DCE3F0]'
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2 text-xs font-bold">
@@ -1041,7 +1575,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                             </span>
                           </div>
                           <div className="text-[11px] opacity-80 mt-0.5 leading-relaxed">
-                            {t(preset.subtitle)}
+                            <span>{t(preset.subtitle)}</span>
                           </div>
                         </button>
                       );
@@ -1068,11 +1602,11 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                         scheduleConfig.morningEnabled
                           ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/40 text-[var(--dojo-pine-text)]'
                           : isWash
-                            ? 'bg-white border-[#141413]/14 text-[#666]'
-                            : 'bg-[#121824] border-[#F2EEE6]/10 text-[#888]'
+                            ? 'bg-white border-[#141413]/18 text-[#52524C]'
+                            : 'bg-[#121824] border-[#F2EEE6]/12 text-[#888]'
                       }`}
                     >
-                      {t(scheduleConfig.morningEnabled ? '早／午段：啟用' : '早／午段：關閉（僅夜訓）')}
+                      <span>{t(scheduleConfig.morningEnabled ? '早／午段：啟用' : '早／午段：關閉（僅夜訓）')}</span>
                     </button>
                   </div>
 
@@ -1094,7 +1628,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                             }
                             className={`px-2 py-1 rounded-md border font-mono-tabular text-[11px] outline-none ${
                               isWash
-                                ? 'bg-white border-[#141413]/18 text-[#141413]'
+                                ? 'bg-white border-[#141413]/20 text-[#141413]'
                                 : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
                             }`}
                           />
@@ -1110,7 +1644,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                             }
                             className={`px-2 py-1 rounded-md border font-mono-tabular text-[11px] outline-none ${
                               isWash
-                                ? 'bg-white border-[#141413]/18 text-[#141413]'
+                                ? 'bg-white border-[#141413]/20 text-[#141413]'
                                 : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
                             }`}
                           />
@@ -1128,7 +1662,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                         placeholder={t('例如：早起喝完水／咖啡後 10 分鐘')}
                         className={`w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none ${
                           isWash
-                            ? 'bg-white border-[#141413]/16 text-[#141413]'
+                            ? 'bg-white border-[#141413]/18 text-[#141413]'
                             : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
                         }`}
                       />
@@ -1152,7 +1686,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                           }
                           className={`px-2 py-1 rounded-md border font-mono-tabular text-[11px] outline-none ${
                             isWash
-                              ? 'bg-white border-[#141413]/18 text-[#141413]'
+                              ? 'bg-white border-[#141413]/20 text-[#141413]'
                               : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
                           }`}
                         />
@@ -1168,7 +1702,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                           }
                           className={`px-2 py-1 rounded-md border font-mono-tabular text-[11px] outline-none ${
                             isWash
-                              ? 'bg-white border-[#141413]/18 text-[#141413]'
+                              ? 'bg-white border-[#141413]/20 text-[#141413]'
                               : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
                           }`}
                         />
@@ -1186,13 +1720,13 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                       placeholder={t('例如：洗漱後／睡前放下手機前 15 分鐘')}
                       className={`w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none ${
                         isWash
-                          ? 'bg-white border-[#141413]/16 text-[#141413]'
+                          ? 'bg-white border-[#141413]/18 text-[#141413]'
                           : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
                       }`}
                     />
                   </div>
 
-                  {/* Base Daily Quota & Strictness */}
+                  {/* Base Daily Quota & Start Date */}
                   <div className="pt-2.5 border-t border-[var(--dojo-border)] grid grid-cols-2 gap-3">
                     <label className="space-y-1">
                       <span className="block text-[11px] text-[var(--dojo-text-sub)]">
@@ -1204,7 +1738,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                         onChange={(e) => updateScheduleConfig({ startDate: e.target.value })}
                         className={`w-full px-2.5 py-1.5 rounded-lg border font-mono-tabular text-xs outline-none ${
                           isWash
-                            ? 'bg-white border-[#141413]/18 text-[#141413]'
+                            ? 'bg-white border-[#141413]/20 text-[#141413]'
                             : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
                         }`}
                       />
@@ -1228,18 +1762,18 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                                   ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
                                   : 'bg-[#D89B3C]/22 border-[#D89B3C] text-[#F5C56B]'
                                 : isWash
-                                  ? 'bg-white border-[#141413]/14 text-[#52524C]'
-                                  : 'bg-[#121824] border-[#F2EEE6]/10 text-[#9BA5B6]'
+                                  ? 'bg-white border-[#141413]/18 text-[#52524C]'
+                                  : 'bg-[#121824] border-[#F2EEE6]/12 text-[#9BA5B6]'
                             }`}
                           >
-                            {quota}
+                            <span>{quota}</span>
                           </button>
                         ))}
                       </div>
                     </div>
                   </div>
 
-                  {/* Delivery Mode (Non-Intrusive Grading) */}
+                  {/* Delivery Mode */}
                   <div className="pt-2.5 border-t border-[var(--dojo-border)] space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[11px] font-semibold text-[var(--dojo-text-sub)]">
@@ -1259,7 +1793,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                             : 'border-[var(--dojo-border)] text-[var(--dojo-text-muted)]'
                         }`}
                       >
-                        {t(scheduleConfig.notificationsEnabled ? '提醒開啟中' : '完全靜默')}
+                        <span>{t(scheduleConfig.notificationsEnabled ? '提醒開啟中' : '完全靜默')}</span>
                       </button>
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
@@ -1288,12 +1822,12 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                                   ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
                                   : 'bg-[#1F293D] border-[#D89B3C] text-[#F7F3EC]'
                                 : isWash
-                                  ? 'bg-white border-[#141413]/14 text-[#52524C]'
-                                  : 'bg-[#121824] border-[#F2EEE6]/10 text-[#9BA5B6]'
+                                  ? 'bg-white border-[#141413]/18 text-[#52524C]'
+                                  : 'bg-[#121824] border-[#F2EEE6]/12 text-[#9BA5B6]'
                             }`}
                           >
-                            <div className="text-[11px] font-semibold">{t(dm.label)}</div>
-                            <div className="text-[10px] opacity-75">{t(dm.hint)}</div>
+                            <span className="block text-[11px] font-semibold">{t(dm.label)}</span>
+                            <span className="block text-[10px] opacity-75">{t(dm.hint)}</span>
                           </button>
                         );
                       })}
@@ -1306,7 +1840,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                     <div className="inline-flex items-center gap-1">
                       {(
                         [
-                          { id: 'devil', label: '魔鬼防退行（自動插單補救）' },
+                          { id: 'devil', label: '魔鬼防退行（自動插單）' },
                           { id: 'standard', label: '標準柔和' },
                         ] as const
                       ).map((opt) => (
@@ -1325,11 +1859,11 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                                   ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
                                   : 'bg-[#1F293D] border-[#D89B3C] text-[#F6F2EA]'
                               : isWash
-                                ? 'bg-white border-[#141413]/14 text-[#52524C]'
-                                : 'bg-[#121824] border-[#F2EEE6]/10 text-[#9BA5B6]'
+                                ? 'bg-white border-[#141413]/18 text-[#52524C]'
+                                : 'bg-[#121824] border-[#F2EEE6]/12 text-[#9BA5B6]'
                           }`}
                         >
-                          {t(opt.label)}
+                          <span>{t(opt.label)}</span>
                         </button>
                       ))}
                     </div>
@@ -1347,7 +1881,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                           notifyStatus === 'granted'
                             ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/40 text-[var(--dojo-pine-text)]'
                             : isWash
-                              ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
+                              ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/18 text-[#141413]'
                               : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
                         }`}
                       >
@@ -1368,7 +1902,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                         onClick={handleTestReminder}
                         className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
                           isWash
-                            ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
+                            ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/18 text-[#141413]'
                             : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
                         }`}
                       >
@@ -1385,7 +1919,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                       }}
                       className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
                         isWash
-                          ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
+                          ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/18 text-[#141413]'
                           : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
                       }`}
                     >
@@ -1416,18 +1950,18 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                               : 'bg-[#D89B3C] hover:brightness-110 text-[#0B0E14]'
                           }`}
                         >
-                          {t('僅匯出未來 3 天 (.ics)')}
+                          <span>{t('僅匯出未來 3 天 (.ics)')}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleExportIcs(14)}
                           className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
                             isWash
-                              ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
+                              ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/18 text-[#141413]'
                               : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
                           }`}
                         >
-                          {t('匯出完整 14 天 (.ics)')}
+                          <span>{t('匯出完整 14 天 (.ics)')}</span>
                         </button>
                       </div>
                     </div>
@@ -1435,7 +1969,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
 
                   {notifyFeedback && (
                     <div className="text-[11px] leading-relaxed text-[var(--dojo-pine-text)] px-1">
-                      {t(notifyFeedback)}
+                      <span>{t(notifyFeedback)}</span>
                     </div>
                   )}
                 </div>
@@ -1444,202 +1978,125 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
           </div>
         )}
 
-        {/* ==================== TAB 2: COGNITIVE & MOTOR MEMORY LAWS ==================== */}
-        {activeTab === 'laws' && (
+        {/* ==================== TAB 3: SUPPORTING PRINCIPLES & 7 BARRIERS ==================== */}
+        {activeTab === 'guide' && (
           <div className="space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+            {/* Guide Header + Sub-Switch */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="font-display text-xl font-bold flex items-center gap-2">
-                  <Brain className="w-5 h-5 text-[var(--dojo-ochre)]" />
-                  <span>{t('一、記憶強化與打字肌肉記憶的底層規律')}</span>
+                  <BookOpen className="w-5 h-5 text-[var(--dojo-ochre)]" />
+                  <span>{t('訓練方法論與破壁參考說明')}</span>
                 </h2>
-                <p className="text-xs sm:text-sm text-[var(--dojo-text-sub)] mt-1">
-                  {t('先看懂大腦如何形成「見形直出」的運動組塊，再使用右下方對應模組驗證並強化每條規律。')}
+                <p className="text-xs sm:text-sm text-[var(--dojo-text-sub)] mt-0.5">
+                  {t('課表為主、說明為輔——練法卡頓或好奇底層原理時，來這裡對照破壁指南即可。')}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  synth.playClick();
-                  setActiveTab('barriers');
-                }}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--dojo-ochre)] hover:underline whitespace-nowrap cursor-pointer"
+
+              <div
+                role="group"
+                className={`inline-flex items-center p-1 rounded-lg border shrink-0 ${
+                  isWash ? 'bg-white border-[#141413]/18' : 'bg-[#121824] border-[#F2EEE6]/14'
+                }`}
               >
-                <span>{t('下一步：看七大真實難點破壁法')}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {COGNITIVE_LAWS.map((law) => (
-                <article
-                  key={law.id}
-                  className={`rounded-xl border p-5 flex flex-col justify-between gap-4 ${surfaceCardClass}`}
+                <button
+                  type="button"
+                  onClick={() => {
+                    synth.playClick();
+                    setGuideSection('laws');
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                    guideSection === 'laws'
+                      ? isWash
+                        ? 'bg-[#181817] text-[#F8F7F3]'
+                        : 'bg-[#1F293D] text-[#F7F3EC]'
+                      : 'text-[var(--dojo-text-sub)]'
+                  }`}
                 >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2 text-xs font-mono-tabular">
-                      <span className="font-semibold text-[var(--dojo-ochre)]">
-                        {t('規律')} {law.index}
-                      </span>
-                      <span className="text-[var(--dojo-text-sub)]">{t(law.contrastBadge)}</span>
-                    </div>
-
-                    <h3 className="font-display text-base sm:text-lg font-bold leading-snug">
-                      {t(law.title)}
-                    </h3>
-
-                    <p className="text-xs sm:text-[13px] leading-relaxed text-[var(--dojo-text-sub)]">
-                      {t(law.mechanism)}
-                    </p>
-
-                    <div className={`rounded-lg border p-3 space-y-1.5 text-xs ${subtlePanelClass}`}>
-                      <div className="leading-relaxed">
-                        <span className="font-semibold text-[var(--dojo-crimson)]">
-                          {t('常見彎路')}：
-                        </span>
-                        <span className="text-[var(--dojo-text-sub)]">{t(law.antiPattern)}</span>
-                      </div>
-                      <div className="leading-relaxed">
-                        <span className="font-semibold text-[var(--dojo-pine-text)]">
-                          {t('正確練法')}：
-                        </span>
-                        <span>{t(law.protocol)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Direct Self-Practice Module Recommendations */}
-                  <div className="pt-3 border-t border-[var(--dojo-border)] space-y-2">
-                    <div className="text-[11px] font-semibold text-[var(--dojo-text-muted)]">
-                      {t('想強化這條規律？直接點進對應模組自己練習：')}
-                    </div>
-                    <div className="space-y-2">
-                      {law.reinforcementModules.map((mod, idx) => (
-                        <div
-                          key={idx}
-                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-                        >
-                          <div className="min-w-0 text-xs">
-                            <span className="font-semibold">{t(mod.moduleName)}</span>
-                            <span className="text-[var(--dojo-text-sub)]"> — {t(mod.usageTip)}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleTriggerAction(mod.action)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                              isWash
-                                ? 'bg-white hover:bg-[#181817] hover:text-[#F8F7F3] border-[#141413]/16 text-[#141413]'
-                                : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
-                            }`}
-                          >
-                            <Play className="w-3 h-3 fill-current" />
-                            <span>{t(mod.action.label)}</span>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ==================== TAB 2: 7 BEGINNER BARRIERS & REMEDIES ==================== */}
-        {activeTab === 'barriers' && (
-          <div className="space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
-              <div>
-                <h2 className="font-display text-xl font-bold flex items-center gap-2">
-                  <ShieldAlert className="w-5 h-5 text-[var(--dojo-crimson)]" />
-                  <span>{t('二、克服過程中大大小小的「七大真實難點」')}</span>
-                </h2>
-                <p className="text-xs sm:text-sm text-[var(--dojo-text-sub)] mt-1">
-                  {t('哪個環節卡住了，不用重頭再來——對照下表找到對應破壁方法，點按鈕直接進入靶向模組精修。')}
-                </p>
+                  <Brain className="w-3.5 h-3.5" />
+                  <span>{t('六大記憶底層規律')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    synth.playClick();
+                    setGuideSection('barriers');
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                    guideSection === 'barriers'
+                      ? isWash
+                        ? 'bg-[#181817] text-[#F8F7F3]'
+                        : 'bg-[#1F293D] text-[#F7F3EC]'
+                      : 'text-[var(--dojo-text-sub)]'
+                  }`}
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <span>{t('七大真實難點破壁法')}</span>
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  synth.playClick();
-                  setActiveTab('path');
-                }}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--dojo-ochre)] hover:underline whitespace-nowrap cursor-pointer"
-              >
-                <span>{t('下一步：看 14 天最短訓練路徑')}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
             </div>
 
-            <div className="space-y-3.5">
-              {BARRIER_REMEDIES.map((item) => (
-                <section
-                  key={item.id}
-                  className={`rounded-xl border p-5 ${surfaceCardClass}`}
-                >
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-                    {/* Left: Diagnosis & Breakthrough Method */}
-                    <div className="lg:col-span-7 space-y-2.5">
-                      <div className="flex items-center gap-2 text-xs font-mono-tabular text-[var(--dojo-ochre)]">
-                        <span className="font-semibold">{t(item.number)}</span>
+            {/* Sub-View A: 6 Cognitive Laws */}
+            {guideSection === 'laws' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {COGNITIVE_LAWS.map((law) => (
+                  <article
+                    key={law.id}
+                    className={`rounded-xl border p-5 flex flex-col justify-between gap-4 ${surfaceCardClass}`}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2 text-xs font-mono-tabular">
+                        <span className="font-semibold text-[var(--dojo-ochre)]">
+                          {t('規律')} {law.index}
+                        </span>
+                        <span className="text-[var(--dojo-text-sub)]">{t(law.contrastBadge)}</span>
                       </div>
-                      <h3 className="font-display text-base sm:text-lg font-bold">
-                        {t(item.title)}
+
+                      <h3 className="font-display text-base sm:text-lg font-bold leading-snug">
+                        {t(law.title)}
                       </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                        <div className={`rounded-lg border p-3 text-xs leading-relaxed ${subtlePanelClass}`}>
-                          <div className="font-semibold mb-1 text-[var(--dojo-text-bright)]">
-                            {t('卡點表現')}
-                          </div>
-                          <p className="text-[var(--dojo-text-sub)]">{t(item.symptom)}</p>
+
+                      <p className="text-xs sm:text-[13px] leading-relaxed text-[var(--dojo-text-sub)]">
+                        {t(law.mechanism)}
+                      </p>
+
+                      <div className={`rounded-lg border p-3 space-y-1.5 text-xs ${subtlePanelClass}`}>
+                        <div className="leading-relaxed">
+                          <span className="font-semibold text-[var(--dojo-crimson)]">
+                            {t('常見彎路')}：
+                          </span>
+                          <span className="text-[var(--dojo-text-sub)]">{t(law.antiPattern)}</span>
                         </div>
-                        <div className={`rounded-lg border p-3 text-xs leading-relaxed ${subtlePanelClass}`}>
-                          <div className="font-semibold mb-1 text-[var(--dojo-text-bright)]">
-                            {t('心理與生理成因')}
-                          </div>
-                          <p className="text-[var(--dojo-text-sub)]">{t(item.psychologyCause)}</p>
+                        <div className="leading-relaxed">
+                          <span className="font-semibold text-[var(--dojo-pine-text)]">
+                            {t('正確練法')}：
+                          </span>
+                          <span>{t(law.protocol)}</span>
                         </div>
-                      </div>
-                      <div className="text-xs sm:text-[13px] leading-relaxed pt-1">
-                        <span className="font-semibold text-[var(--dojo-pine-text)]">
-                          {t('精準破壁方法')}：
-                        </span>
-                        <span>{t(item.breakthroughMethod)}</span>
                       </div>
                     </div>
 
-                    {/* Right: Dedicated Self-Practice Modules */}
-                    <div
-                      className={`lg:col-span-5 rounded-xl border p-4 space-y-3 ${subtlePanelClass}`}
-                    >
-                      <div className="text-xs font-semibold flex items-center gap-1.5">
-                        <Target className="w-3.5 h-3.5 text-[var(--dojo-ochre)]" />
-                        <span>{t('對應自練強化模組（附建議練法）')}</span>
+                    <div className="pt-3 border-t border-[var(--dojo-border)] space-y-2">
+                      <div className="text-[11px] font-semibold text-[var(--dojo-text-muted)]">
+                        <span>{t('想強化這條規律？直接點進對應模組自己練習：')}</span>
                       </div>
-
-                      <div className="space-y-3">
-                        {item.recommendedModules.map((mod, idx) => (
+                      <div className="space-y-2">
+                        {law.reinforcementModules.map((mod, idx) => (
                           <div
                             key={idx}
-                            className="space-y-1.5 pb-2.5 last:pb-0 border-b last:border-b-0 border-[var(--dojo-border)]"
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2"
                           >
-                            <div className="text-xs font-semibold text-[var(--dojo-text-bright)]">
-                              {t(mod.moduleName)}
+                            <div className="min-w-0 text-xs">
+                              <span className="font-semibold">{t(mod.moduleName)}</span>
+                              <span className="text-[var(--dojo-text-sub)]"> — {t(mod.usageTip)}</span>
                             </div>
-                            <p className="text-[11px] leading-relaxed text-[var(--dojo-text-sub)]">
-                              {t(mod.usageTip)}
-                            </p>
                             <button
                               type="button"
                               onClick={() => handleTriggerAction(mod.action)}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
-                                idx === 0
-                                  ? isWash
-                                    ? 'bg-[#181817] hover:bg-[#2C2C2A] text-[#F8F7F3]'
-                                    : 'bg-[#C93E2D] hover:bg-[#DC4B39] text-white'
-                                  : isWash
-                                    ? 'bg-white hover:bg-[#FAF9F5] border border-[#141413]/16 text-[#141413]'
-                                    : 'bg-[#192233] hover:bg-[#233048] border border-[#F2EEE6]/14 text-[#E6E2DA]'
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                                isWash
+                                  ? 'bg-white hover:bg-[#181817] hover:text-[#F8F7F3] border-[#141413]/18 text-[#141413]'
+                                  : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
                               }`}
                             >
                               <Play className="w-3 h-3 fill-current" />
@@ -1649,260 +2106,132 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                         ))}
                       </div>
                     </div>
-                  </div>
-                </section>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ==================== TAB 3: 14-DAY SHORTEST PATH CURRICULUM ==================== */}
-        {activeTab === 'path' && (
-          <div className="space-y-5">
-            {/* 4-Phase Roadmap Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {PHASES.map((phase) => {
-                const selected = phaseFilter === phase.id;
-                const phaseLessons = DAILY_CURRICULUM.filter((d) => d.phaseId === phase.id);
-                const phaseDone = phaseLessons.filter((d) => completedDays.includes(d.day)).length;
-                return (
-                  <button
-                    key={phase.id}
-                    type="button"
-                    onClick={() => {
-                      synth.playClick();
-                      setPhaseFilter((prev) => (prev === phase.id ? 0 : phase.id));
-                    }}
-                    className={`rounded-xl border p-4 text-left transition-colors cursor-pointer flex flex-col justify-between gap-2 ${
-                      selected
-                        ? isWash
-                          ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
-                          : 'bg-[#1D273B] border-[#D89B3C] text-[#F6F2EA]'
-                        : surfaceCardClass
-                    }`}
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[11px] font-mono-tabular">
-                        <span className={selected ? 'opacity-90' : 'text-[var(--dojo-ochre)]'}>
-                          {phase.dayRange}
-                        </span>
-                        <span className="opacity-75">
-                          {phaseDone}/{phaseLessons.length} · {t(phase.cumulativeTime)}
-                        </span>
-                      </div>
-                      <div className="font-display text-sm font-bold">{t(phase.title)}</div>
-                      <p className="text-[11px] leading-relaxed opacity-80">{t(phase.subtitle)}</p>
-                    </div>
-                    <div className="pt-2 border-t border-current/12 text-[11px] leading-snug opacity-85">
-                      {t('階段指標')}：{t(phase.milestone)}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Filter indicator + Show All */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs text-[var(--dojo-text-sub)]">
-                {phaseFilter === 0
-                  ? t('顯示全部 14 天最短路徑課表（點擊左側方框可打卡記錄已完成天數）')
-                  : `${t('正在篩選第')} ${phaseFilter} ${t('階段課表')}（${visibleLessons.length} ${t('天')}）`}
-              </div>
-              {phaseFilter !== 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    synth.playClick();
-                    setPhaseFilter(0);
-                  }}
-                  className="text-xs font-medium text-[var(--dojo-ochre)] hover:underline cursor-pointer"
-                >
-                  {t('顯示全部 14 天')}
-                </button>
-              )}
-            </div>
-
-            {/* Daily Lesson Cards */}
-            <div className="space-y-3.5">
-              {visibleLessons.map((lesson) => {
-                const done = completedDays.includes(lesson.day);
-                const isNext = lesson.day === nextRecommendedDay;
-                return (
-                  <article
-                    key={lesson.day}
-                    className={`rounded-xl border p-5 transition-colors ${
-                      isNext && !done
-                        ? isWash
-                          ? 'bg-[#FAF9F5] border-[#181817]/45 shadow-sm'
-                          : 'bg-[#151D2C] border-[#D89B3C]/55'
-                        : surfaceCardClass
-                    }`}
-                  >
-                    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                      <div className="flex items-start gap-3.5 flex-1 min-w-0">
-                        {/* Completion Checkbox */}
-                        <button
-                          type="button"
-                          onClick={() => toggleDayCompleted(lesson.day)}
-                          aria-label={t(`標記 Day ${lesson.day} 完成狀態`)}
-                          className={`mt-0.5 w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 transition-colors cursor-pointer font-mono-tabular text-xs font-bold ${
-                            done
-                              ? isWash
-                                ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
-                                : 'bg-[#2EA87E] border-[#2EA87E] text-[#0B0E14]'
-                              : isWash
-                                ? 'bg-white border-[#141413]/20 text-[#52524C] hover:border-[#141413]'
-                                : 'bg-[#0D1119] border-[#F2EEE6]/16 text-[#AEB6C4] hover:border-[#F2EEE6]/40'
-                          }`}
-                        >
-                          {done ? <Check className="w-4 h-4" /> : `D${lesson.day}`}
-                        </button>
-
-                        <div className="min-w-0 space-y-2 flex-1">
-                          <div className="flex flex-wrap items-center gap-2 text-xs font-mono-tabular">
-                            <span className="font-semibold text-[var(--dojo-ochre)]">
-                              Day {lesson.day} · {t(`第 ${lesson.phaseId} 階`)}
-                            </span>
-                            <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
-                            <span className="text-[var(--dojo-text-sub)]">
-                              {lesson.durationMin} {t('分鐘')}
-                            </span>
-                            {isNext && !done && (
-                              <>
-                                <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
-                                <span className="font-sans font-semibold text-[var(--dojo-pine-text)]">
-                                  {t('今日推薦任務')}
-                                </span>
-                              </>
-                            )}
-                            {evaluation.ebbinghausDue.some((eb) => eb.sourceDay === lesson.day) && (
-                              <>
-                                <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
-                                <span className="font-sans font-semibold text-[var(--dojo-ochre)]">
-                                  {t('今日艾賓浩斯到期複習')}
-                                </span>
-                              </>
-                            )}
-                          </div>
-
-                          <h3 className="font-display text-base sm:text-lg font-bold">
-                            {t(lesson.title)}
-                          </h3>
-                          <p className="text-xs sm:text-[13px] text-[var(--dojo-text-sub)] leading-relaxed">
-                            {t(lesson.focusSummary)}
-                          </p>
-
-                          {/* 3-Step 15-Minute Golden Routine */}
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-1">
-                            <div className={`rounded-lg border p-2.5 text-xs leading-relaxed ${subtlePanelClass}`}>
-                              <div className="font-semibold text-[var(--dojo-text-bright)] mb-0.5">
-                                01 · {t('喚醒 3 分鐘')}
-                              </div>
-                              <div className="text-[var(--dojo-text-sub)]">
-                                {t(lesson.microRoutine.warmup3m)}
-                              </div>
-                            </div>
-                            <div className={`rounded-lg border p-2.5 text-xs leading-relaxed ${subtlePanelClass}`}>
-                              <div className="font-semibold text-[var(--dojo-ochre)] mb-0.5">
-                                02 · {t('推進 8–12 分鐘')}
-                              </div>
-                              <div className="text-[var(--dojo-text-sub)]">
-                                {t(lesson.microRoutine.core8m)}
-                              </div>
-                            </div>
-                            <div className={`rounded-lg border p-2.5 text-xs leading-relaxed ${subtlePanelClass}`}>
-                              <div className="font-semibold text-[var(--dojo-pine-text)] mb-0.5">
-                                03 · {t('固化 4 分鐘')}
-                              </div>
-                              <div className="text-[var(--dojo-text-sub)]">
-                                {t(lesson.microRoutine.solidify4m)}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="text-xs text-[var(--dojo-text-sub)] pt-0.5">
-                            <span className="font-semibold text-[var(--dojo-text-bright)]">
-                              {t('過關標準')}：
-                            </span>
-                            {t(lesson.passCriteria)}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right Launch Column */}
-                      <div className="lg:w-72 shrink-0 flex flex-col gap-2 pt-2 lg:pt-0 lg:border-l lg:border-[var(--dojo-border)] lg:pl-4">
-                        <div className="text-[11px] font-semibold text-[var(--dojo-text-muted)]">
-                          {t('今日強化使用模組')}
-                        </div>
-                        {lesson.practiceModules.map((mod, idx) => (
-                          <div key={idx} className="space-y-1">
-                            <button
-                              type="button"
-                              onClick={() => handleTriggerAction(mod.action)}
-                              className={`w-full inline-flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                                idx === 0
-                                  ? isWash
-                                    ? 'bg-[#181817] hover:bg-[#2C2C2A] text-[#F8F7F3]'
-                                    : 'bg-[#C93E2D] hover:bg-[#DC4B39] text-white'
-                                  : isWash
-                                    ? 'bg-white hover:bg-[#FAF9F5] border border-[#141413]/14 text-[#141413]'
-                                    : 'bg-[#182030] hover:bg-[#222D43] border border-[#F2EEE6]/12 text-[#E6E2DA]'
-                              }`}
-                            >
-                              <span className="truncate">{t(mod.action.label)}</span>
-                              <Play className="w-3 h-3 fill-current shrink-0" />
-                            </button>
-                            <div className="text-[11px] text-[var(--dojo-text-muted)] leading-snug px-0.5">
-                              {t(mod.moduleName)} · {t(mod.usageTip)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
                   </article>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
 
-            {/* Three Anti-Detour Iron Rules */}
+            {/* Sub-View B: 7 Beginner Barriers */}
+            {guideSection === 'barriers' && (
+              <div className="space-y-3.5">
+                {BARRIER_REMEDIES.map((item) => (
+                  <section
+                    key={item.id}
+                    className={`rounded-xl border p-5 ${surfaceCardClass}`}
+                  >
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                      <div className="lg:col-span-7 space-y-2.5">
+                        <div className="flex items-center gap-2 text-xs font-mono-tabular text-[var(--dojo-ochre)]">
+                          <span className="font-semibold">{t(item.number)}</span>
+                        </div>
+                        <h3 className="font-display text-base sm:text-lg font-bold">
+                          {t(item.title)}
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                          <div className={`rounded-lg border p-3 text-xs leading-relaxed ${subtlePanelClass}`}>
+                            <span className="block font-semibold mb-1 text-[var(--dojo-text-bright)]">
+                              {t('卡點表現')}
+                            </span>
+                            <p className="text-[var(--dojo-text-sub)]">{t(item.symptom)}</p>
+                          </div>
+                          <div className={`rounded-lg border p-3 text-xs leading-relaxed ${subtlePanelClass}`}>
+                            <span className="block font-semibold mb-1 text-[var(--dojo-text-bright)]">
+                              {t('心理與生理成因')}
+                            </span>
+                            <p className="text-[var(--dojo-text-sub)]">{t(item.psychologyCause)}</p>
+                          </div>
+                        </div>
+                        <div className="text-xs sm:text-[13px] leading-relaxed pt-1">
+                          <span className="font-semibold text-[var(--dojo-pine-text)]">
+                            {t('精準破壁方法')}：
+                          </span>
+                          <span>{t(item.breakthroughMethod)}</span>
+                        </div>
+                      </div>
+
+                      <div className={`lg:col-span-5 rounded-xl border p-4 space-y-3 ${subtlePanelClass}`}>
+                        <div className="text-xs font-semibold flex items-center gap-1.5">
+                          <Target className="w-3.5 h-3.5 text-[var(--dojo-ochre)]" />
+                          <span>{t('對應自練強化模組（附建議練法）')}</span>
+                        </div>
+
+                        <div className="space-y-3">
+                          {item.recommendedModules.map((mod, idx) => (
+                            <div
+                              key={idx}
+                              className="space-y-1.5 pb-2.5 last:pb-0 border-b last:border-b-0 border-[var(--dojo-border)]"
+                            >
+                              <span className="block text-xs font-semibold text-[var(--dojo-text-bright)]">
+                                {t(mod.moduleName)}
+                              </span>
+                              <p className="text-[11px] leading-relaxed text-[var(--dojo-text-sub)]">
+                                {t(mod.usageTip)}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => handleTriggerAction(mod.action)}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
+                                  idx === 0
+                                    ? isWash
+                                      ? 'bg-[#181817] hover:bg-[#2C2C2A] text-[#F8F7F3]'
+                                      : 'bg-[#C93E2D] hover:bg-[#DC4B39] text-white'
+                                    : isWash
+                                      ? 'bg-white hover:bg-[#FAF9F5] border border-[#141413]/18 text-[#141413]'
+                                      : 'bg-[#192233] hover:bg-[#233048] border border-[#F2EEE6]/14 text-[#E6E2DA]'
+                                }`}
+                              >
+                                <Play className="w-3 h-3 fill-current" />
+                                <span>{t(mod.action.label)}</span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
+
+            {/* Compact 3 Anti-Detour Iron Rules */}
             <section className={`rounded-xl border p-5 ${surfaceCardClass}`}>
-              <h3 className="font-display text-base font-bold mb-2">
+              <h3 className="font-display text-base font-bold mb-2.5">
                 {t('防走彎路「三不守則」')}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs leading-relaxed text-[var(--dojo-text-sub)]">
                 <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
-                  <div className="font-semibold text-[var(--dojo-text-bright)] mb-1">
+                  <span className="block font-semibold text-[var(--dojo-text-bright)] mb-1">
                     01 · {t('不低頭看鍵盤')}
-                  </div>
-                  {t('卡住哪怕停 3 秒，也只靠腦海空間與目標重合位雲圖回想，絕不低頭破壞手指本體感覺。')}
+                  </span>
+                  <p>{t('卡住哪怕停 3 秒，也只靠腦海空間與目標重合位雲圖回想，絕不低頭破壞手指本體感覺。')}</p>
                 </div>
                 <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
-                  <div className="font-semibold text-[var(--dojo-text-bright)] mb-1">
+                  <span className="block font-semibold text-[var(--dojo-text-bright)] mb-1">
                     02 · {t('不帶疲勞硬練')}
-                  </div>
-                  {t('單次練超過 25 分鐘、頻頻錯鍵時立刻停手；睡一覺再回來，你會發現昨天卡住的鍵突然變順了。')}
+                  </span>
+                  <p>{t('單次練超過 25 分鐘、頻頻錯鍵時立刻停手；睡一覺再回來，你會發現昨天卡住的鍵突然變順了。')}</p>
                 </div>
                 <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
-                  <div className="font-semibold text-[var(--dojo-text-bright)] mb-1">
+                  <span className="block font-semibold text-[var(--dojo-text-bright)] mb-1">
                     03 · {t('不在低準確率下衝速')}
-                  </div>
-                  {t('準確率低於 92% 時所有搶快都在強化錯誤記憶；開著節拍器守住「慢即是勻，勻即是快」。')}
+                  </span>
+                  <p>{t('準確率低於 92% 時所有搶快都在強化錯誤記憶；開著節拍器守住「慢即是勻，勻即是快」。')}</p>
                 </div>
               </div>
             </section>
           </div>
         )}
 
-        {/* ==================== TAB 4: MODULE SELF-DRILL DIRECTORY & FREE-WRITING BRIDGE ==================== */}
-        {activeTab === 'modules' && (
+        {/* ==================== TAB 4: FREE WRITING BRIDGE & MODULE DIRECTORY ==================== */}
+        {activeTab === 'freewrite' && (
           <div className="space-y-6">
-            {/* Free-Writing Isolation Bridge (Day 10-14 Core Transfer Tool) */}
+            {/* Free-Writing Isolation Bridge */}
             <section className={`rounded-xl border p-5 space-y-4 ${surfaceCardClass}`}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div className="text-xs font-mono-tabular text-[var(--dojo-ochre)] mb-1">
+                  <span className="block text-xs font-mono-tabular text-[var(--dojo-ochre)] mb-1">
                     {t('第四階實戰遷移核心')} · {t('每日 200 字絕對禁切拼音區')}
-                  </div>
+                  </span>
                   <h2 className="font-display text-lg sm:text-xl font-bold flex items-center gap-2">
                     <PenLine className="w-5 h-5 text-[var(--dojo-pine-text)]" />
                     <span>{t('自由書寫遷移橋：無提示自主思考造句區')}</span>
@@ -1928,11 +2257,11 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                             ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
                             : 'bg-[#1F293D] border-[#D89B3C] text-[#F6F2EA]'
                           : isWash
-                            ? 'bg-white border-[#141413]/14 text-[#52524C]'
-                            : 'bg-[#0D1119] border-[#F2EEE6]/10 text-[#9BA5B6]'
+                            ? 'bg-white border-[#141413]/18 text-[#52524C]'
+                            : 'bg-[#0D1119] border-[#F2EEE6]/12 text-[#9BA5B6]'
                       }`}
                     >
-                      {t(p.title)}
+                      <span>{t(p.title)}</span>
                     </button>
                   ))}
                 </div>
@@ -1955,7 +2284,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                     rows={7}
                     className={`w-full rounded-xl border p-4 text-sm leading-relaxed resize-y focus:outline-none focus:ring-2 ${
                       isWash
-                        ? 'bg-white border-[#141413]/16 text-[#141413] placeholder:text-[#8E8E86] focus:ring-[#181817]/20'
+                        ? 'bg-white border-[#141413]/18 text-[#141413] placeholder:text-[#8E8E86] focus:ring-[#181817]/20'
                         : 'bg-[#0B0E15] border-[#F2EEE6]/14 text-[#F2EEE6] placeholder:text-[#5F6A7D] focus:ring-[#D89B3C]/30'
                     }`}
                   />
@@ -1964,16 +2293,16 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                     <div className="flex items-center gap-3 flex-1 min-w-[200px]">
                       <div
                         className={`flex-1 h-2 rounded-full overflow-hidden ${
-                          isWash ? 'bg-[#141413]/10' : 'bg-white/10'
+                          isWash ? 'bg-[#141413]/12' : 'bg-white/10'
                         }`}
                       >
                         <div
-                          className={`h-full transition-all duration-300 ${
-                            freeChineseCount >= 200
-                              ? 'bg-[var(--dojo-pine)]'
-                              : 'bg-[var(--dojo-ochre)]'
-                          }`}
-                          style={{ width: `${freeGoalPct}%` }}
+                          className="h-full transition-all duration-300"
+                          style={{
+                            width: `${freeGoalPct}%`,
+                            backgroundColor:
+                              freeChineseCount >= 200 ? 'var(--dojo-pine)' : 'var(--dojo-ochre)',
+                          }}
                         />
                       </div>
                       <span className="text-xs font-mono-tabular text-[var(--dojo-text-sub)] shrink-0">
@@ -1996,7 +2325,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                             }
                             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
                               isWash
-                                ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
+                                ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/18 text-[#141413]'
                                 : 'bg-[#182030] hover:bg-[#232F46] border-[#F2EEE6]/14 text-[#E6E2DA]'
                             }`}
                           >
@@ -2011,7 +2340,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                             }}
                             className="px-2.5 py-1.5 text-xs text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text)] transition-colors cursor-pointer"
                           >
-                            {t('清空')}
+                            <span>{t('清空')}</span>
                           </button>
                         </>
                       )}
@@ -2019,13 +2348,13 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                   </div>
                 </div>
 
-                {/* Right: Stuck-Character Instant Split Inspector + One-Click Targeted Drill */}
+                {/* Right: Stuck-Character Instant Split Inspector */}
                 <div className={`lg:col-span-5 rounded-xl border p-4 flex flex-col justify-between gap-3 ${subtlePanelClass}`}>
                   <div className="space-y-3">
                     <div>
-                      <div className="text-xs font-semibold text-[var(--dojo-text-bright)]">
+                      <span className="block text-xs font-semibold text-[var(--dojo-text-bright)]">
                         {t('造句卡殼字即時拆碼診斷')}
-                      </div>
+                      </span>
                       <p className="text-[11px] text-[var(--dojo-text-muted)] mt-0.5">
                         {t('寫作時遇到一時想不起拆法的字，貼或打在這裡查全碼與字根，並一鍵送入專屬複訓：')}
                       </p>
@@ -2038,7 +2367,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                       placeholder={t('輸入卡殼漢字（例：能 這 說 隨 隱）')}
                       className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
                         isWash
-                          ? 'bg-white border-[#141413]/16 text-[#141413] focus:ring-[#181817]/20'
+                          ? 'bg-white border-[#141413]/18 text-[#141413] focus:ring-[#181817]/20'
                           : 'bg-[#111622] border-[#F2EEE6]/14 text-[#F2EEE6] focus:ring-[#D89B3C]/30'
                       }`}
                     />
@@ -2046,7 +2375,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                     <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
                       {stuckDiagnostics.length === 0 ? (
                         <div className="text-xs text-[var(--dojo-text-muted)] py-4 text-center">
-                          {t('請輸入漢字以即時檢視字根與靈明全碼')}
+                          <span>{t('請輸入漢字以即時檢視字根與靈明全碼')}</span>
                         </div>
                       ) : (
                         stuckDiagnostics.map(({ char, entry }) => {
@@ -2057,8 +2386,8 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                               key={char}
                               className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border text-xs ${
                                 isWash
-                                  ? 'bg-white border-[#141413]/10'
-                                  : 'bg-[#121824] border-[#F2EEE6]/8'
+                                  ? 'bg-white border-[#141413]/14'
+                                  : 'bg-[#121824] border-[#F2EEE6]/10'
                               }`}
                             >
                               <div className="flex items-center gap-2 min-w-0">
@@ -2134,9 +2463,9 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                     className={`rounded-xl border p-5 flex flex-col justify-between gap-4 ${surfaceCardClass}`}
                   >
                     <div className="space-y-2.5">
-                      <div className="text-[11px] font-mono-tabular text-[var(--dojo-ochre)] font-semibold">
+                      <span className="block text-[11px] font-mono-tabular text-[var(--dojo-ochre)] font-semibold">
                         {t(mod.roleTag)}
-                      </div>
+                      </span>
                       <h3 className="font-display text-base font-bold leading-snug">
                         {t(mod.moduleName)}
                       </h3>
@@ -2147,16 +2476,16 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                         <span className="text-[var(--dojo-text-sub)]">{t(mod.bestFor)}</span>
                       </div>
                       <div className={`rounded-lg border p-3 text-xs leading-relaxed ${subtlePanelClass}`}>
-                        <div className="font-semibold text-[var(--dojo-pine-text)] mb-1">
+                        <span className="block font-semibold text-[var(--dojo-pine-text)] mb-1">
                           {t('怎麼自己強化練習')}
-                        </div>
+                        </span>
                         <p className="text-[var(--dojo-text-sub)]">{t(mod.howToSelfDrill)}</p>
                       </div>
                       <div className="text-[11px] text-[var(--dojo-text-muted)]">
                         <span className="font-semibold text-[var(--dojo-text-sub)]">
                           {t('建議設置')}：
                         </span>
-                        {t(mod.recommendedSettings)}
+                        <span>{t(mod.recommendedSettings)}</span>
                       </div>
                     </div>
 
@@ -2165,7 +2494,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                       onClick={() => handleTriggerAction(mod.launchAction)}
                       className={`w-full inline-flex items-center justify-between gap-2 px-4 py-2.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
                         isWash
-                          ? 'bg-white hover:bg-[#181817] hover:text-[#F8F7F3] border-[#141413]/16 text-[#141413]'
+                          ? 'bg-white hover:bg-[#181817] hover:text-[#F8F7F3] border-[#141413]/18 text-[#141413]'
                           : 'bg-[#182030] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#F2EEE6]'
                       }`}
                     >
