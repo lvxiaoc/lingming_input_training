@@ -2,9 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
+  Bell,
+  BellRing,
   Brain,
   Calendar,
+  CalendarPlus,
   Check,
+  Clock,
   Compass,
   Flame,
   PenLine,
@@ -13,6 +17,7 @@ import {
   ShieldAlert,
   Target,
 } from 'lucide-react';
+import { CampaignProgressStore } from '../data/campaign';
 import {
   BARRIER_REMEDIES,
   COGNITIVE_LAWS,
@@ -27,33 +32,28 @@ import { LINGMING_CHAMBER_BY_KEY } from '../data/lingming';
 import { SCRIPT_MODE_OPTIONS, ScriptMode } from '../data/scriptFilter';
 import { THEME_OPTIONS, ThemeMode } from '../data/theme';
 import { useUiText } from '../data/uiScript';
+import { getLocalDateKey, SchemeMasteryStore } from '../engine/mastery';
+import {
+  BrowserNotifyStatus,
+  buildTrainingIcsContent,
+  computeSlotCountdown,
+  evaluateTrainingState,
+  fireBrowserNotification,
+  formatMinutesUntil,
+  getBrowserNotifyStatus,
+  loadCompletedDaysList,
+  loadTrainingSchedule,
+  requestBrowserNotifyPermission,
+  saveCompletedDaysList,
+  saveTrainingSchedule,
+  TrainingScheduleConfig,
+} from '../engine/trainingScheduler';
 import { synth } from '../audio/synth';
 
-type AcademyTab = 'laws' | 'barriers' | 'path' | 'modules';
+export type AcademyTab = 'coach' | 'laws' | 'barriers' | 'path' | 'modules';
 
-const STORAGE_COMPLETED_DAYS = 'inkkey_novice_completed_days_v1';
 const STORAGE_FREEWRITE_DRAFT = 'inkkey_novice_freewrite_draft_v1';
 const STORAGE_STUCK_CHARS = 'inkkey_novice_stuck_chars_v1';
-
-function loadCompletedDays(): number[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_COMPLETED_DAYS);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((n): n is number => typeof n === 'number' && n >= 1 && n <= 14);
-  } catch {
-    return [];
-  }
-}
-
-function saveCompletedDays(days: number[]): void {
-  try {
-    localStorage.setItem(STORAGE_COMPLETED_DAYS, JSON.stringify(days));
-  } catch {
-    // Ignore storage errors
-  }
-}
 
 function countChineseChars(text: string): number {
   const matches = text.match(/[\u4e00-\u9fff]/g);
@@ -61,30 +61,46 @@ function countChineseChars(text: string): number {
 }
 
 interface NoviceAcademyProps {
+  mastery: SchemeMasteryStore;
+  campaignProgress: CampaignProgressStore;
+  initialTab?: AcademyTab;
   scriptMode: ScriptMode;
   onChangeScriptMode: (next: ScriptMode) => void;
   themeMode: ThemeMode;
   onChangeThemeMode: (next: ThemeMode) => void;
+  onScheduleChanged?: () => void;
   onBack: () => void;
   onLaunchAction: (action: NovicePracticeAction) => void;
 }
 
 export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
+  mastery,
+  campaignProgress,
+  initialTab,
   scriptMode,
   onChangeScriptMode,
   themeMode,
   onChangeThemeMode,
+  onScheduleChanged,
   onBack,
   onLaunchAction,
 }) => {
   const t = useUiText();
   const isWash = themeMode === 'wash';
 
-  const [activeTab, setActiveTab] = useState<AcademyTab>('laws');
+  const [activeTab, setActiveTab] = useState<AcademyTab>(initialTab ?? 'coach');
   const [phaseFilter, setPhaseFilter] = useState<0 | 1 | 2 | 3 | 4>(0);
-  const [completedDays, setCompletedDays] = useState<number[]>(() => loadCompletedDays());
+  const [completedDays, setCompletedDays] = useState<number[]>(() => loadCompletedDaysList());
+  const [scheduleConfig, setScheduleConfig] = useState<TrainingScheduleConfig>(() =>
+    loadTrainingSchedule()
+  );
+  const [notifyStatus, setNotifyStatus] = useState<BrowserNotifyStatus>(() =>
+    getBrowserNotifyStatus()
+  );
+  const [notifyFeedback, setNotifyFeedback] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState<number>(() => Date.now());
 
-  // Free-Writing Isolation Bridge state (Tab 4)
+  // Free-Writing Isolation Bridge state (Tab 5)
   const [promptIdx, setPromptIdx] = useState<number>(0);
   const [freeDraft, setFreeDraft] = useState<string>(() => {
     try {
@@ -100,6 +116,11 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
       return '能 這 說 就 裡';
     }
   });
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 30000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     try {
@@ -133,13 +154,31 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onBack]);
 
+  const updateScheduleConfig = (patch: Partial<TrainingScheduleConfig>) => {
+    setScheduleConfig((prev) => {
+      const next = { ...prev, ...patch };
+      saveTrainingSchedule(next);
+      return next;
+    });
+    onScheduleChanged?.();
+  };
+
   const toggleDayCompleted = (day: number) => {
     synth.playClick();
+    const todayKey = getLocalDateKey();
     setCompletedDays((prev) => {
-      const next = prev.includes(day)
+      const removing = prev.includes(day);
+      const next = removing
         ? prev.filter((d) => d !== day)
         : [...prev, day].sort((a, b) => a - b);
-      saveCompletedDays(next);
+      saveCompletedDaysList(next);
+      const nextDates = { ...scheduleConfig.dayCompletedDates };
+      if (removing) {
+        delete nextDates[day];
+      } else {
+        nextDates[day] = todayKey;
+      }
+      updateScheduleConfig({ dayCompletedDates: nextDates });
       return next;
     });
   };
@@ -147,25 +186,81 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
   const resetProgress = () => {
     synth.playClick();
     setCompletedDays([]);
-    saveCompletedDays([]);
+    saveCompletedDaysList([]);
+    updateScheduleConfig({ dayCompletedDates: {} });
   };
 
-  const nextRecommendedDay = useMemo(() => {
-    for (let d = 1; d <= 14; d++) {
-      if (!completedDays.includes(d)) return d;
-    }
-    return 14;
-  }, [completedDays]);
-
-  const nextLesson = useMemo(
-    () => DAILY_CURRICULUM.find((l) => l.day === nextRecommendedDay) || DAILY_CURRICULUM[0],
-    [nextRecommendedDay]
+  const nowDate = useMemo(() => new Date(nowTick), [nowTick]);
+  const slotInfo = useMemo(
+    () => computeSlotCountdown(scheduleConfig, nowDate),
+    [scheduleConfig, nowDate]
   );
+  const evaluation = useMemo(
+    () =>
+      evaluateTrainingState({
+        mastery,
+        campaignProgress,
+        completedDays,
+        scriptMode,
+        config: scheduleConfig,
+        now: nowDate,
+      }),
+    [mastery, campaignProgress, completedDays, scriptMode, scheduleConfig, nowDate]
+  );
+
+  const nextRecommendedDay = evaluation.currentPlanDay;
+  const nextLesson = evaluation.recommendedLesson;
 
   const visibleLessons = useMemo(() => {
     if (phaseFilter === 0) return DAILY_CURRICULUM;
     return DAILY_CURRICULUM.filter((l) => l.phaseId === phaseFilter);
   }, [phaseFilter]);
+
+  const handleEnableBrowserNotify = async () => {
+    synth.playClick();
+    const res = await requestBrowserNotifyPermission();
+    setNotifyStatus(res);
+    if (res === 'granted') {
+      updateScheduleConfig({ notificationsEnabled: true });
+      fireBrowserNotification(
+        t('墨鍵道場 · 魔鬼督訓鬧鐘已啟用'),
+        t(`每日 ${scheduleConfig.morningTime} 與 ${scheduleConfig.eveningTime} 將準時督促練功。`)
+      );
+      setNotifyFeedback('瀏覽器系統通知已啟用並發送測試提示；若關閉本頁建議同時匯出 .ics 行事曆。');
+    } else if (res === 'denied') {
+      setNotifyFeedback('瀏覽器通知權限被拒（或於內嵌視窗受限），站內鬧鐘鈴聲仍可用，建議下載 .ics 行事曆鬧鐘。');
+    } else if (res === 'unsupported') {
+      setNotifyFeedback('當前瀏覽器環境不支援原生通知，已啟用站內鈴聲與提醒，並可匯出 .ics 行事曆。');
+    }
+  };
+
+  const handleTestReminder = () => {
+    synth.playMilestone();
+    const fired = fireBrowserNotification(
+      t(`墨鍵道場 · Day ${evaluation.currentPlanDay} 練功提醒`),
+      t(`今日目標 ${evaluation.todayChars}/${evaluation.todayQuota} 字 · ${evaluation.adaptiveTasks[0]?.title || ''}`)
+    );
+    setNotifyFeedback(
+      fired
+        ? '已觸發鬧鐘鈴聲與系統彈窗通知！'
+        : '已觸發站內鬧鐘鈴聲！若需離開網頁後依然準時響鈴，請點右側「匯出 14 天行事曆」。'
+    );
+  };
+
+  const handleExportIcs = () => {
+    synth.playClick();
+    const content = buildTrainingIcsContent(scheduleConfig);
+    const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lingming-14day-devil-plan-${scheduleConfig.startDate}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setNotifyFeedback('已下載 14 天早晚共 28 場訓練 .ics 行事曆檔案，雙擊即可匯入手機或電腦日曆自動響鈴。');
+  };
 
   // Parse unique Chinese characters entered in the Stuck-Char Diagnostics box
   const stuckDiagnostics = useMemo(() => {
@@ -253,10 +348,11 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
           >
             {(
               [
-                { id: 'laws', label: '01 記憶規律' },
-                { id: 'barriers', label: '02 七大難點破壁' },
-                { id: 'path', label: '03 14 天速成路徑' },
-                { id: 'modules', label: '04 自練模組與自由書寫' },
+                { id: 'coach', label: '01 督訓評估與鬧鐘' },
+                { id: 'laws', label: '02 記憶規律' },
+                { id: 'barriers', label: '03 七大難點' },
+                { id: 'path', label: '04 14天路徑' },
+                { id: 'modules', label: '05 自練與自由寫' },
               ] as Array<{ id: AcademyTab; label: string }>
             ).map((tabItem) => {
               const active = activeTab === tabItem.id;
@@ -358,10 +454,11 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
         <div className="lg:hidden px-4 pb-2.5 flex items-center gap-1.5 overflow-x-auto">
           {(
             [
-              { id: 'laws', label: '01 記憶規律' },
-              { id: 'barriers', label: '02 七大難點破壁' },
-              { id: 'path', label: '03 14 天速成路徑' },
-              { id: 'modules', label: '04 自練模組與自由書寫' },
+              { id: 'coach', label: '01 督訓評估與鬧鐘' },
+              { id: 'laws', label: '02 記憶規律' },
+              { id: 'barriers', label: '03 七大難點破壁' },
+              { id: 'path', label: '04 14 天速成路徑' },
+              { id: 'modules', label: '05 自練與自由書寫' },
             ] as Array<{ id: AcademyTab; label: string }>
           ).map((tabItem) => {
             const active = activeTab === tabItem.id;
@@ -483,7 +580,10 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
             </div>
 
             <div className="flex items-center gap-3 text-[11px] text-[var(--dojo-text-muted)]">
-              <span>{t('每日 15–25 分鐘：3m 慢字喚醒 ＋ 8m 主線推進 ＋ 4m 勻速固化')}</span>
+              <span className="font-mono-tabular">
+                {t('今日完成')} {evaluation.todayChars}/{evaluation.todayQuota} {t('字')} ·{' '}
+                {t('下次鬧鐘')} {slotInfo.nextSlotTime}
+              </span>
               {completedDays.length > 0 && (
                 <button
                   type="button"
@@ -498,7 +598,489 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
           </div>
         </section>
 
-        {/* ==================== TAB 1: COGNITIVE & MOTOR MEMORY LAWS ==================== */}
+        {/* ==================== TAB 0 (COACH): DEVIL-MODE EVALUATION, ADAPTIVE PLAN & ALARMS ==================== */}
+        {activeTab === 'coach' && (
+          <div className="space-y-5">
+            {/* Top Evaluation Verdict + Quantitative Readiness Telemetry */}
+            <section
+              className={`rounded-xl border p-5 space-y-4 ${
+                evaluation.statusLevel === 'devil_lock'
+                  ? isWash
+                    ? 'bg-[#FAF5F4] border-[#B83226]/45 text-[#141413]'
+                    : 'bg-[#1A1318] border-[#D94A38]/55 text-[#F6F2EA]'
+                  : evaluation.statusLevel === 'warning'
+                    ? isWash
+                      ? 'bg-[#FAF8F2] border-[#B87A18]/40 text-[#141413]'
+                      : 'bg-[#191714] border-[#D89B3C]/45 text-[#F6F2EA]'
+                    : surfaceCardClass
+              }`}
+            >
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="space-y-1.5 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-mono-tabular">
+                    <span
+                      className={`font-sans font-bold ${
+                        evaluation.statusLevel === 'devil_lock'
+                          ? 'text-[var(--dojo-crimson)]'
+                          : evaluation.statusLevel === 'ahead'
+                            ? 'text-[var(--dojo-pine-text)]'
+                            : 'text-[var(--dojo-ochre)]'
+                      }`}
+                    >
+                      {t(
+                        scheduleConfig.strictness === 'devil'
+                          ? '魔鬼督訓引擎 · 實時診斷'
+                          : '標準督訓引擎 · 實時診斷'
+                      )}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      {t('掌握度綜合評分')} {evaluation.readinessScore}/100
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      {t('下次鬧鐘')} {slotInfo.nextSlotTime}（{t(formatMinutesUntil(slotInfo.minutesUntilNext))}）
+                    </span>
+                  </div>
+                  <h2 className="font-display text-xl font-bold">{t(evaluation.statusTitle)}</h2>
+                  <p className="text-xs sm:text-sm text-[var(--dojo-text-sub)] leading-relaxed max-w-3xl">
+                    {t(evaluation.statusSummary)}
+                  </p>
+                </div>
+
+                {/* Readiness Score Dial Summary */}
+                <div
+                  className={`shrink-0 rounded-xl border px-4 py-3 flex items-center gap-4 ${subtlePanelClass}`}
+                >
+                  <div className="text-center">
+                    <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('掌握準備度')}</div>
+                    <div className="font-mono-tabular text-2xl font-bold text-[var(--dojo-ochre)]">
+                      {evaluation.readinessScore}
+                      <span className="text-xs text-[var(--dojo-text-muted)]">/100</span>
+                    </div>
+                  </div>
+                  <div className="h-8 w-px bg-[var(--dojo-border)]" aria-hidden="true" />
+                  <div className="text-xs space-y-0.5 font-mono-tabular">
+                    <div>
+                      {t('連練紀錄')}：{evaluation.streakDays} {t('天')}
+                    </div>
+                    <div>
+                      {t('慢字池')}：{evaluation.slowPoolCount} {t('字')}
+                    </div>
+                    <div>
+                      {t('自動化率')}：{evaluation.masteredRatePct}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5 Quantitative Telemetry Tiles */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
+                  <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('今日字數紅線')}</div>
+                  <div className="font-mono-tabular text-lg font-bold mt-0.5">
+                    {evaluation.todayChars}
+                    <span className="text-xs font-normal text-[var(--dojo-text-muted)]">
+                      /{evaluation.todayQuota}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 rounded-full bg-black/20 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{
+                        width: `${evaluation.todayQuotaPct}%`,
+                        backgroundColor:
+                          evaluation.todayQuotaPct >= 100
+                            ? 'var(--dojo-pine)'
+                            : 'var(--dojo-ochre)',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
+                  <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('今日準確率')}</div>
+                  <div
+                    className={`font-mono-tabular text-lg font-bold mt-0.5 ${
+                      evaluation.todayAccuracy !== null && evaluation.todayAccuracy < 92
+                        ? 'text-[var(--dojo-crimson)]'
+                        : 'text-[var(--dojo-pine-text)]'
+                    }`}
+                  >
+                    {evaluation.todayAccuracy !== null ? `${evaluation.todayAccuracy}%` : '--'}
+                  </div>
+                  <div className="text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
+                    {t('紅線 ≥ 92%')}
+                  </div>
+                </div>
+
+                <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
+                  <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('字根均速')}</div>
+                  <div className="font-mono-tabular text-lg font-bold mt-0.5">
+                    {evaluation.todayAvgKeyMs ?? (evaluation.overallAvgKeyMs || '--')}
+                    {(evaluation.todayAvgKeyMs || evaluation.overallAvgKeyMs) ? 'ms' : ''}
+                  </div>
+                  <div className="text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
+                    {t('目標 < 450ms')}
+                  </div>
+                </div>
+
+                <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
+                  <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('今日流速')}</div>
+                  <div className="font-mono-tabular text-lg font-bold mt-0.5">
+                    {evaluation.todayCpm ?? '--'}
+                    {evaluation.todayCpm ? (
+                      <span className="text-[11px] font-normal text-[var(--dojo-text-muted)]"> CPM</span>
+                    ) : null}
+                  </div>
+                  <div className="text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
+                    {t('14天終點 35+')}
+                  </div>
+                </div>
+
+                <div className={`rounded-lg border p-3 ${subtlePanelClass}`}>
+                  <div className="text-[11px] text-[var(--dojo-text-muted)]">{t('記憶到期複習')}</div>
+                  <div className="font-mono-tabular text-lg font-bold mt-0.5 text-[var(--dojo-ochre)]">
+                    {evaluation.ebbinghausDue.length} {t('項')}
+                  </div>
+                  <div className="text-[10px] text-[var(--dojo-text-muted)] mt-0.5">
+                    {t('+1/+2/+4/+7 天間隔')}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Two-Column Core: Left Auto-Added Adaptive Plan + Weak Keys; Right Alarms & Calendar Export */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* Left 7 cols: Adaptive Remediation & Today's Enforced Micro-Plan */}
+              <section className={`lg:col-span-7 rounded-xl border p-5 space-y-4 ${surfaceCardClass}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-display text-lg font-bold flex items-center gap-2">
+                      <Flame className="w-5 h-5 text-[var(--dojo-crimson)]" />
+                      <span>{t('系統依記憶規律自動排入的「今日強制執行課表」')}</span>
+                    </h3>
+                    <p className="text-xs text-[var(--dojo-text-sub)] mt-0.5">
+                      {t('偵測到低準確率、慢字堆積、斷練或遺忘曲線節點時，自動在主課前插入補訓項目。')}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  {evaluation.adaptiveTasks.map((task, idx) => (
+                    <div
+                      key={task.id}
+                      className={`rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        task.priority === 'critical'
+                          ? isWash
+                            ? 'bg-[#FDF4F3] border-[#B83226]/35'
+                            : 'bg-[#1D1418] border-[#D94A38]/40'
+                          : task.priority === 'review'
+                            ? isWash
+                              ? 'bg-[#FCF9F0] border-[#B87A18]/35'
+                              : 'bg-[#191B17] border-[#D89B3C]/35'
+                            : subtlePanelClass
+                      }`}
+                    >
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono-tabular">
+                          <span
+                            className={`font-sans font-bold ${
+                              task.priority === 'critical'
+                                ? 'text-[var(--dojo-crimson)]'
+                                : task.priority === 'review'
+                                  ? 'text-[var(--dojo-ochre)]'
+                                  : 'text-[var(--dojo-pine-text)]'
+                            }`}
+                          >
+                            #{idx + 1} · {t(task.tag)}
+                          </span>
+                          <span className="text-[var(--dojo-text-muted)]">
+                            · {t('建議')} {task.minutes} {t('分鐘')}
+                          </span>
+                        </div>
+                        <div className="font-display text-sm sm:text-base font-bold">
+                          {t(task.title)}
+                        </div>
+                        <p className="text-xs text-[var(--dojo-text-sub)] leading-relaxed">
+                          {t(task.reason)}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleTriggerAction(task.action)}
+                        className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                          task.priority === 'critical' || idx === 0
+                            ? isWash
+                              ? 'bg-[#181817] hover:bg-[#2C2C2A] text-[#F8F7F3]'
+                              : 'bg-[#C93E2D] hover:bg-[#DC4B39] text-white'
+                            : isWash
+                              ? 'bg-white hover:bg-[#FAF9F5] border border-[#141413]/16 text-[#141413]'
+                              : 'bg-[#192233] hover:bg-[#233048] border border-[#F2EEE6]/14 text-[#E6E2DA]'
+                        }`}
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>{t(task.action.label)}</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Weakest Chambers Instant Target Row */}
+                <div className="pt-3 border-t border-[var(--dojo-border)] space-y-2">
+                  <div className="text-xs font-semibold text-[var(--dojo-text-sub)]">
+                    {t('當前最弱輔音宮殿（點鍵立即單鍵覆寫肌肉記憶）：')}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {evaluation.weakestKeys.map((wk) => (
+                      <button
+                        key={wk.key}
+                        type="button"
+                        onClick={() =>
+                          handleTriggerAction({
+                            kind: 'chamber_drill',
+                            chamberKey: wk.key,
+                            label: `單鍵攻克 ${wk.key.toUpperCase()}`,
+                          })
+                        }
+                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs transition-colors cursor-pointer ${
+                          isWash
+                            ? 'bg-white hover:bg-[#181817] hover:text-[#F8F7F3] border-[#141413]/14'
+                            : 'bg-[#161E2E] hover:bg-[#222E46] border-[#F2EEE6]/12'
+                        }`}
+                      >
+                        <span className="font-mono-tabular font-bold text-[var(--dojo-ochre)]">
+                          {wk.key.toUpperCase()}
+                        </span>
+                        <span className="font-display font-bold">{wk.primary}</span>
+                        <span className="font-mono-tabular text-[11px] opacity-75">
+                          {wk.attempts > 0 ? `${wk.emaLatencyMs}ms` : t('待測')}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              {/* Right 5 cols: Training Alarm Schedule, Browser Notifications & .ics Export */}
+              <section className={`lg:col-span-5 rounded-xl border p-5 space-y-4 ${surfaceCardClass}`}>
+                <div>
+                  <h3 className="font-display text-lg font-bold flex items-center gap-2">
+                    <BellRing className="w-5 h-5 text-[var(--dojo-ochre)]" />
+                    <span>{t('14 天訓練時段鬧鐘與行事曆督促')}</span>
+                  </h3>
+                  <p className="text-xs text-[var(--dojo-text-sub)] mt-0.5">
+                    {t('符合睡眠離線鞏固規律：早喚醒 10 分鐘 ＋ 睡前固化 15 分鐘。到點自動響鈴彈出。')}
+                  </p>
+                </div>
+
+                {/* Schedule Config Controls */}
+                <div className={`rounded-xl border p-4 space-y-3 text-xs ${subtlePanelClass}`}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1">
+                      <span className="block text-[11px] text-[var(--dojo-text-sub)]">
+                        {t('晨間黃金喚醒時間')}
+                      </span>
+                      <input
+                        type="time"
+                        value={scheduleConfig.morningTime}
+                        onChange={(e) => updateScheduleConfig({ morningTime: e.target.value })}
+                        className={`w-full px-2.5 py-1.5 rounded-lg border font-mono-tabular text-xs outline-none ${
+                          isWash
+                            ? 'bg-white border-[#141413]/18 text-[#141413]'
+                            : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
+                        }`}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="block text-[11px] text-[var(--dojo-text-sub)]">
+                        {t('晚間睡前固化時間')}
+                      </span>
+                      <input
+                        type="time"
+                        value={scheduleConfig.eveningTime}
+                        onChange={(e) => updateScheduleConfig({ eveningTime: e.target.value })}
+                        className={`w-full px-2.5 py-1.5 rounded-lg border font-mono-tabular text-xs outline-none ${
+                          isWash
+                            ? 'bg-white border-[#141413]/18 text-[#141413]'
+                            : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
+                        }`}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1">
+                      <span className="block text-[11px] text-[var(--dojo-text-sub)]">
+                        {t('14 天計劃起跑日')}
+                      </span>
+                      <input
+                        type="date"
+                        value={scheduleConfig.startDate}
+                        onChange={(e) => updateScheduleConfig({ startDate: e.target.value })}
+                        className={`w-full px-2.5 py-1.5 rounded-lg border font-mono-tabular text-xs outline-none ${
+                          isWash
+                            ? 'bg-white border-[#141413]/18 text-[#141413]'
+                            : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
+                        }`}
+                      />
+                    </label>
+                    <div className="space-y-1">
+                      <span className="block text-[11px] text-[var(--dojo-text-sub)]">
+                        {t('每日最低字數紅線')}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {[60, 80, 120, 200].map((quota) => (
+                          <button
+                            key={quota}
+                            type="button"
+                            onClick={() => {
+                              synth.playClick();
+                              updateScheduleConfig({ dailyCharQuota: quota });
+                            }}
+                            className={`flex-1 py-1.5 rounded-md border text-[11px] font-mono-tabular transition-colors cursor-pointer ${
+                              scheduleConfig.dailyCharQuota === quota
+                                ? isWash
+                                  ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
+                                  : 'bg-[#D89B3C]/22 border-[#D89B3C] text-[#F5C56B]'
+                                : isWash
+                                  ? 'bg-white border-[#141413]/14 text-[#52524C]'
+                                  : 'bg-[#121824] border-[#F2EEE6]/10 text-[#9BA5B6]'
+                            }`}
+                          >
+                            {quota}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Strictness & In-App Alarm Switches */}
+                  <div className="pt-2 border-t border-[var(--dojo-border)] flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[var(--dojo-text-sub)]">{t('督訓強度')}</span>
+                    <div className="inline-flex items-center gap-1">
+                      {(
+                        [
+                          { id: 'devil', label: '魔鬼嚴苛（自動懲罰補訓）' },
+                          { id: 'standard', label: '標準提醒' },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            synth.playClick();
+                            updateScheduleConfig({ strictness: opt.id });
+                          }}
+                          className={`px-2.5 py-1 rounded-md border text-[11px] font-medium transition-colors cursor-pointer ${
+                            scheduleConfig.strictness === opt.id
+                              ? opt.id === 'devil'
+                                ? 'bg-[var(--dojo-crimson)] border-[var(--dojo-crimson)] text-white'
+                                : isWash
+                                  ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
+                                  : 'bg-[#1F293D] border-[#D89B3C] text-[#F6F2EA]'
+                              : isWash
+                                ? 'bg-white border-[#141413]/14 text-[#52524C]'
+                                : 'bg-[#121824] border-[#F2EEE6]/10 text-[#9BA5B6]'
+                          }`}
+                        >
+                          {t(opt.label)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-[var(--dojo-text-sub)]">
+                      {t('開頁自動鬧鐘提醒與音效')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        synth.playClick();
+                        updateScheduleConfig({
+                          notificationsEnabled: !scheduleConfig.notificationsEnabled,
+                        });
+                      }}
+                      className={`px-3 py-1 rounded-md border text-[11px] font-semibold transition-colors cursor-pointer ${
+                        scheduleConfig.notificationsEnabled
+                          ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/45 text-[var(--dojo-pine-text)]'
+                          : isWash
+                            ? 'bg-white border-[#141413]/14 text-[#666]'
+                            : 'bg-[#121824] border-[#F2EEE6]/10 text-[#888]'
+                      }`}
+                    >
+                      {t(scheduleConfig.notificationsEnabled ? '已開啟' : '已暫停')}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Browser Notification & .ics Calendar Actions */}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleEnableBrowserNotify}
+                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                        notifyStatus === 'granted'
+                          ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/40 text-[var(--dojo-pine-text)]'
+                          : isWash
+                            ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
+                            : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
+                      }`}
+                    >
+                      <Bell className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        {t(
+                          notifyStatus === 'granted'
+                            ? '系統通知已授權'
+                            : notifyStatus === 'denied'
+                              ? '通知權限受限'
+                              : '開啟系統彈窗通知'
+                        )}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleTestReminder}
+                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                        isWash
+                          ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
+                          : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
+                      }`}
+                    >
+                      <Clock className="w-3.5 h-3.5 shrink-0" />
+                      <span>{t('立即測試鬧鐘鈴聲')}</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleExportIcs}
+                    className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                      isWash
+                        ? 'bg-[#181817] hover:bg-[#2C2C2A] text-[#F8F7F3]'
+                        : 'bg-[#D89B3C] hover:brightness-110 text-[#0B0E14]'
+                    }`}
+                  >
+                    <CalendarPlus className="w-4 h-4 shrink-0" />
+                    <span>{t('匯出 14 天行事曆鬧鐘 (.ics · 關網頁也準時響)')}</span>
+                  </button>
+
+                  {notifyFeedback && (
+                    <div className="text-[11px] leading-relaxed text-[var(--dojo-pine-text)] px-1">
+                      {t(notifyFeedback)}
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== TAB 2: COGNITIVE & MOTOR MEMORY LAWS ==================== */}
         {activeTab === 'laws' && (
           <div className="space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
@@ -826,6 +1408,14 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                                 <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
                                 <span className="font-sans font-semibold text-[var(--dojo-pine-text)]">
                                   {t('今日推薦任務')}
+                                </span>
+                              </>
+                            )}
+                            {evaluation.ebbinghausDue.some((eb) => eb.sourceDay === lesson.day) && (
+                              <>
+                                <span aria-hidden="true" className="text-[var(--dojo-text-muted)]">·</span>
+                                <span className="font-sans font-semibold text-[var(--dojo-ochre)]">
+                                  {t('今日艾賓浩斯到期複習')}
                                 </span>
                               </>
                             )}

@@ -578,6 +578,15 @@ const CHAR_MAP: Record<string, string> = {
   凍: '冻',
   藉: '借',
   觀: '观',
+  嚴: '严',
+  鈴: '铃',
+  懲: '惩',
+  滾: '滚',
+  傾: '倾',
+  墜: '坠',
+  檔: '档',
+  曆: '历',
+  蘋: '苹',
 };
 
 const MNEMONIC_PROSE_TOKENS: Array<[string, string]> = [

@@ -100,8 +100,15 @@ import { DrillTab, ExtremeDrillStudio } from './components/ExtremeDrillStudio';
 import { ShortCodeDojo, ShortCodeTier } from './components/ShortCodeDojo';
 import { FadeMode, HuangtingDojo } from './components/HuangtingDojo';
 import { HomeTutorialModal, TutorialTabId } from './components/HomeTutorialModal';
-import { NoviceAcademy } from './components/NoviceAcademy';
+import { AcademyTab, NoviceAcademy } from './components/NoviceAcademy';
 import { NovicePracticeAction } from './data/noviceCurriculum';
+import { TrainingReminderBanner } from './components/TrainingReminderBanner';
+import {
+  computeSlotCountdown,
+  evaluateTrainingState,
+  loadCompletedDaysList,
+  loadTrainingSchedule,
+} from './engine/trainingScheduler';
 import { WeakKeyRadarCard } from './components/WeakKeyRadarCard';
 import { CorrectionReportCard } from './components/CorrectionReportCard';
 import { GrowthAnalyticsPanel } from './components/GrowthAnalyticsPanel';
@@ -176,6 +183,8 @@ export default function App() {
     undefined
   );
   const [huangtingInitialFade, setHuangtingInitialFade] = useState<FadeMode | undefined>(undefined);
+  const [academyInitialTab, setAcademyInitialTab] = useState<AcademyTab>('coach');
+  const [scheduleVersion, setScheduleVersion] = useState(0);
   const [mode, setMode] = useState<GameMode>('reflex');
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('depth');
   const [trainingScope, setTrainingScope] = useState<TrainingScope>('root');
@@ -760,6 +769,20 @@ export default function App() {
     },
     [handleLaunchChamberDrill, launchCampaignStage, openPalaceCloud, startPlay]
   );
+
+  const homeScheduleSummary = useMemo(() => {
+    const cfg = loadTrainingSchedule();
+    const completedDays = loadCompletedDaysList();
+    const evalState = evaluateTrainingState({
+      mastery,
+      campaignProgress,
+      completedDays,
+      scriptMode,
+      config: cfg,
+    });
+    const slot = computeSlotCountdown(cfg);
+    return { cfg, evalState, slot };
+  }, [mastery, campaignProgress, scriptMode, scheduleVersion, gameState]);
 
   const singleChamberKey =
     focusKeys && focusKeys.length === 1 && activeScheme.isLingming ? focusKeys[0] : null;
@@ -1581,35 +1604,63 @@ export default function App() {
               type="button"
               onClick={() => {
                 synth.playClick();
+                setAcademyInitialTab('coach');
                 setGameState('NOVICE_ACADEMY');
               }}
               className={`mt-2.5 w-full max-w-2xl flex items-center justify-between gap-3 px-4 py-3 active:scale-[0.995] border rounded-xl transition-all cursor-pointer text-left wash-enter-soft ${
                 isWash
-                  ? 'bg-[#F9F8F5]/94 hover:bg-[#FFFFFF] border-[#141413]/24 text-[#141413] shadow-xs'
-                  : 'bg-gradient-to-r from-[#172133]/92 via-[#151D2B]/92 to-[#1D2434]/92 hover:border-[#D89B3C]/55 border-[#D89B3C]/34 text-[#F2EEE6]'
+                  ? homeScheduleSummary.evalState.statusLevel === 'devil_lock'
+                    ? 'bg-[#FAF5F4]/96 hover:bg-[#FFFFFF] border-[#B83226]/42 text-[#141413] shadow-xs'
+                    : 'bg-[#F9F8F5]/94 hover:bg-[#FFFFFF] border-[#141413]/24 text-[#141413] shadow-xs'
+                  : homeScheduleSummary.evalState.statusLevel === 'devil_lock'
+                    ? 'bg-gradient-to-r from-[#26161B]/92 via-[#191A26]/92 to-[#1D2434]/92 hover:border-[#D94A38]/65 border-[#D94A38]/45 text-[#F2EEE6]'
+                    : 'bg-gradient-to-r from-[#172133]/92 via-[#151D2B]/92 to-[#1D2434]/92 hover:border-[#D89B3C]/55 border-[#D89B3C]/34 text-[#F2EEE6]'
               }`}
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div
                   className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${
                     isWash
-                      ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
-                      : 'bg-[#D89B3C]/14 border-[#D89B3C]/35 text-[#E8C57B]'
+                      ? homeScheduleSummary.evalState.statusLevel === 'devil_lock'
+                        ? 'bg-[#B83226] border-[#B83226] text-[#F8F7F3]'
+                        : 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
+                      : homeScheduleSummary.evalState.statusLevel === 'devil_lock'
+                        ? 'bg-[#D94A38]/20 border-[#D94A38]/45 text-[#FF8A7A]'
+                        : 'bg-[#D89B3C]/14 border-[#D89B3C]/35 text-[#E8C57B]'
                   }`}
                 >
                   <GraduationCap className="w-4.5 h-4.5" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-sm font-bold whitespace-nowrap">
-                    <span>{t('新手 14 天速成學院（從零到自由書寫）')}</span>
+                    <span>{t('新手 14 天速成學院 · 魔鬼督訓鬧鐘')}</span>
+                    <span className="text-[11px] font-mono-tabular font-normal text-[var(--dojo-ochre)]">
+                      Day {homeScheduleSummary.evalState.currentPlanDay}/14
+                    </span>
                   </div>
-                  <div className="text-[11px] text-[var(--dojo-text-sub)] mt-0.5 truncate">
-                    {t('記憶規律 · 肌肉記憶心理特徵 · 7 大難點破壁 · 每日自練模組直達')}
+                  <div className="text-[11px] text-[var(--dojo-text-sub)] mt-0.5 truncate font-mono-tabular">
+                    {`${t('今日')} ${homeScheduleSummary.evalState.todayChars}/${homeScheduleSummary.evalState.todayQuota} ${t('字')} · ${t('掌握度')} ${homeScheduleSummary.evalState.readinessScore}% · ${
+                      homeScheduleSummary.cfg.notificationsEnabled
+                        ? `${t('鬧鐘')} ${homeScheduleSummary.cfg.morningTime} / ${homeScheduleSummary.cfg.eveningTime}`
+                        : t('鬧鐘已暫停')
+                    }`}
                   </div>
                 </div>
               </div>
-              <div className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--dojo-ochre)] shrink-0 whitespace-nowrap">
-                <span>{t('進入課程')}</span>
+              <div
+                className={`inline-flex items-center gap-1 text-xs font-semibold shrink-0 whitespace-nowrap ${
+                  homeScheduleSummary.evalState.statusLevel === 'devil_lock'
+                    ? 'text-[var(--dojo-crimson)]'
+                    : 'text-[var(--dojo-ochre)]'
+                }`}
+              >
+                <span>
+                  {t(
+                    homeScheduleSummary.evalState.statusLevel === 'devil_lock'
+                      ? '魔鬼鎖定中'
+                      : '進入督訓'
+                  )}
+                </span>
                 <ArrowRight className="w-4 h-4" />
               </div>
             </button>
@@ -1769,6 +1820,7 @@ export default function App() {
               }
               onOpenNoviceAcademy={() => {
                 synth.playClick();
+                setAcademyInitialTab('coach');
                 setGameState('NOVICE_ACADEMY');
               }}
             />
@@ -1780,10 +1832,14 @@ export default function App() {
       {/* ==================== 14-DAY NOVICE SPEED-MASTERY ACADEMY ==================== */}
       {gameState === 'NOVICE_ACADEMY' && (
         <NoviceAcademy
+          mastery={mastery}
+          campaignProgress={campaignProgress}
+          initialTab={academyInitialTab}
           scriptMode={scriptMode}
           onChangeScriptMode={(next) => handleChangeScriptMode(next)}
           themeMode={themeMode}
           onChangeThemeMode={handleChangeThemeMode}
+          onScheduleChanged={() => setScheduleVersion((v) => v + 1)}
           onBack={() => setGameState('TITLE_MENU')}
           onLaunchAction={handleNoviceAction}
         />
@@ -3078,6 +3134,25 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <TrainingReminderBanner
+        visibleScreen={
+          gameState === 'TITLE_MENU' ||
+          gameState === 'CAMPAIGN_MAP' ||
+          gameState === 'PALACE_CLOUD' ||
+          gameState === 'NOVICE_ACADEMY'
+        }
+        mastery={mastery}
+        campaignProgress={campaignProgress}
+        scriptMode={scriptMode}
+        scheduleVersion={scheduleVersion}
+        onScheduleChanged={() => setScheduleVersion((v) => v + 1)}
+        onLaunchAction={handleNoviceAction}
+        onOpenCoachCenter={() => {
+          setAcademyInitialTab('coach');
+          setGameState('NOVICE_ACADEMY');
+        }}
+      />
 
     </div>
     </ThemeContext.Provider>
