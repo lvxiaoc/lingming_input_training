@@ -15,17 +15,80 @@ import {
 export type CoachStrictness = 'standard' | 'devil';
 export type TrainingSlotKind = 'morning' | 'evening';
 export type CoachStatusLevel = 'ahead' | 'on_track' | 'warning' | 'devil_lock';
+export type RhythmPresetId = 'early_bird' | 'commute_night' | 'night_owl' | 'custom';
+export type ReminderDeliveryMode = 'quiet_banner' | 'soft_chime' | 'browser_push';
+
+export interface RhythmPresetOption {
+  id: Exclude<RhythmPresetId, 'custom'>;
+  title: string;
+  subtitle: string;
+  morningEnabled: boolean;
+  morningTime: string;
+  morningWindowEnd: string;
+  morningAnchorCue: string;
+  eveningTime: string;
+  eveningWindowEnd: string;
+  eveningAnchorCue: string;
+}
+
+export const RHYTHM_PRESETS: RhythmPresetOption[] = [
+  {
+    id: 'early_bird',
+    title: '晨醒 ＋ 睡前（腦科學黃金節律）',
+    subtitle: '早 10 分鐘喚醒神經 ＋ 睡前 15 分鐘借睡眠離線鞏固，記憶保留率最高。',
+    morningEnabled: true,
+    morningTime: '08:00',
+    morningWindowEnd: '10:30',
+    morningAnchorCue: '早起喝完水／咖啡後 10 分鐘',
+    eveningTime: '20:30',
+    eveningWindowEnd: '22:45',
+    eveningAnchorCue: '洗漱後／睡前放下手機前 15 分鐘',
+  },
+  {
+    id: 'commute_night',
+    title: '午休碎片 ＋ 晚間靜心（上班／上課族）',
+    subtitle: '上午完全免打擾！午休抽出 8 分鐘清慢字，下班後再專心完成主課。',
+    morningEnabled: true,
+    morningTime: '12:15',
+    morningWindowEnd: '14:00',
+    morningAnchorCue: '午飯後休息空檔 8 分鐘',
+    eveningTime: '21:00',
+    eveningWindowEnd: '23:30',
+    eveningAnchorCue: '晚間結束工作與雜務後 15 分鐘',
+  },
+  {
+    id: 'night_owl',
+    title: '僅夜靜單段精修（零白天打擾）',
+    subtitle: '白天 100% 安靜不催促，僅在晚間舒適窗口一次完成 20 分鐘練功。',
+    morningEnabled: false,
+    morningTime: '08:30',
+    morningWindowEnd: '10:00',
+    morningAnchorCue: '白天免打擾',
+    eveningTime: '20:30',
+    eveningWindowEnd: '23:55',
+    eveningAnchorCue: '夜深環境安靜下來後 20 分鐘',
+  },
+];
 
 export interface TrainingScheduleConfig {
   startDate: string; // YYYY-MM-DD
-  morningTime: string; // HH:MM
-  eveningTime: string; // HH:MM
+  rhythmPreset: RhythmPresetId;
+  deliveryMode: ReminderDeliveryMode;
+  morningEnabled: boolean;
+  morningTime: string; // HH:MM window start
+  morningWindowEnd: string; // HH:MM window end
+  morningAnchorCue: string;
+  eveningTime: string; // HH:MM window start
+  eveningWindowEnd: string; // HH:MM window end
+  eveningAnchorCue: string;
   dailyCharQuota: number;
   notificationsEnabled: boolean;
   strictness: CoachStrictness;
   snoozedUntilMs: number;
   lastNotifiedSlotKey: string;
   dayCompletedDates: Record<number, string>;
+  restDates: string[]; // Flex rest / postponed days (YYYY-MM-DD)
+  lowDoseDates: string[]; // Half-quota 5-min maintenance days (YYYY-MM-DD)
 }
 
 export interface AdaptivePlanTask {
@@ -48,9 +111,13 @@ export interface EbbinghausDueItem {
 export interface SlotCountdownInfo {
   nextSlot: TrainingSlotKind;
   nextSlotTime: string;
+  nextWindowRange: string;
+  nextAnchorCue: string;
   minutesUntilNext: number;
   activeSlotNow: TrainingSlotKind | null;
   activeSlotKey: string | null;
+  activeWindowRange: string | null;
+  activeAnchorCue: string | null;
 }
 
 export interface TrainingEvaluation {
@@ -63,6 +130,9 @@ export interface TrainingEvaluation {
   todayChars: number;
   todayQuota: number;
   todayQuotaPct: number;
+  isRestDayToday: boolean;
+  isLowDoseToday: boolean;
+  todaySuppressed: boolean;
   todayAccuracy: number | null;
   todayAvgKeyMs: number | null;
   todayCpm: number | null;
@@ -132,34 +202,66 @@ export function saveCompletedDaysList(days: number[]): void {
 
 export function loadTrainingSchedule(): TrainingScheduleConfig {
   const today = getLocalDateKey();
+  const basePreset = RHYTHM_PRESETS[0];
   const defaults: TrainingScheduleConfig = {
     startDate: today,
-    morningTime: '08:30',
-    eveningTime: '20:30',
+    rhythmPreset: 'early_bird',
+    deliveryMode: 'quiet_banner',
+    morningEnabled: basePreset.morningEnabled,
+    morningTime: basePreset.morningTime,
+    morningWindowEnd: basePreset.morningWindowEnd,
+    morningAnchorCue: basePreset.morningAnchorCue,
+    eveningTime: basePreset.eveningTime,
+    eveningWindowEnd: basePreset.eveningWindowEnd,
+    eveningAnchorCue: basePreset.eveningAnchorCue,
     dailyCharQuota: 80,
     notificationsEnabled: true,
     strictness: 'devil',
     snoozedUntilMs: 0,
     lastNotifiedSlotKey: '',
     dayCompletedDates: {},
+    restDates: [],
+    lowDoseDates: [],
   };
   try {
     const raw = localStorage.getItem(STORAGE_SCHEDULE_CONFIG);
     if (!raw) return defaults;
     const parsed = JSON.parse(raw) as Partial<TrainingScheduleConfig>;
+    const validTime = (v: unknown, fb: string) =>
+      typeof v === 'string' && /^\d{1,2}:\d{2}$/.test(v) ? v : fb;
+    const validDateList = (v: unknown) =>
+      Array.isArray(v)
+        ? v.filter((d): d is string => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)).slice(-45)
+        : [];
     return {
       startDate:
         typeof parsed.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.startDate)
           ? parsed.startDate
           : today,
-      morningTime:
-        typeof parsed.morningTime === 'string' && /^\d{1,2}:\d{2}$/.test(parsed.morningTime)
-          ? parsed.morningTime
-          : defaults.morningTime,
-      eveningTime:
-        typeof parsed.eveningTime === 'string' && /^\d{1,2}:\d{2}$/.test(parsed.eveningTime)
-          ? parsed.eveningTime
-          : defaults.eveningTime,
+      rhythmPreset:
+        parsed.rhythmPreset === 'commute_night' ||
+        parsed.rhythmPreset === 'night_owl' ||
+        parsed.rhythmPreset === 'custom'
+          ? parsed.rhythmPreset
+          : 'early_bird',
+      deliveryMode:
+        parsed.deliveryMode === 'soft_chime' || parsed.deliveryMode === 'browser_push'
+          ? parsed.deliveryMode
+          : 'quiet_banner',
+      morningEnabled:
+        typeof parsed.morningEnabled === 'boolean' ? parsed.morningEnabled : defaults.morningEnabled,
+      morningTime: validTime(parsed.morningTime, defaults.morningTime),
+      morningWindowEnd: validTime(parsed.morningWindowEnd, defaults.morningWindowEnd),
+      morningAnchorCue:
+        typeof parsed.morningAnchorCue === 'string' && parsed.morningAnchorCue.trim()
+          ? parsed.morningAnchorCue.trim()
+          : defaults.morningAnchorCue,
+      eveningTime: validTime(parsed.eveningTime, defaults.eveningTime),
+      eveningWindowEnd: validTime(parsed.eveningWindowEnd, defaults.eveningWindowEnd),
+      eveningAnchorCue:
+        typeof parsed.eveningAnchorCue === 'string' && parsed.eveningAnchorCue.trim()
+          ? parsed.eveningAnchorCue.trim()
+          : defaults.eveningAnchorCue,
       dailyCharQuota:
         typeof parsed.dailyCharQuota === 'number' && parsed.dailyCharQuota >= 30
           ? Math.min(400, Math.round(parsed.dailyCharQuota))
@@ -176,10 +278,30 @@ export function loadTrainingSchedule(): TrainingScheduleConfig {
         parsed.dayCompletedDates && typeof parsed.dayCompletedDates === 'object'
           ? parsed.dayCompletedDates
           : {},
+      restDates: validDateList(parsed.restDates),
+      lowDoseDates: validDateList(parsed.lowDoseDates),
     };
   } catch {
     return defaults;
   }
+}
+
+export function applyRhythmPreset(
+  config: TrainingScheduleConfig,
+  presetId: Exclude<RhythmPresetId, 'custom'>
+): TrainingScheduleConfig {
+  const preset = RHYTHM_PRESETS.find((p) => p.id === presetId) || RHYTHM_PRESETS[0];
+  return {
+    ...config,
+    rhythmPreset: preset.id,
+    morningEnabled: preset.morningEnabled,
+    morningTime: preset.morningTime,
+    morningWindowEnd: preset.morningWindowEnd,
+    morningAnchorCue: preset.morningAnchorCue,
+    eveningTime: preset.eveningTime,
+    eveningWindowEnd: preset.eveningWindowEnd,
+    eveningAnchorCue: preset.eveningAnchorCue,
+  };
 }
 
 export function saveTrainingSchedule(config: TrainingScheduleConfig): void {
@@ -227,52 +349,101 @@ export function fireBrowserNotification(title: string, body: string): boolean {
   }
 }
 
+function isWithinFlexibleWindow(nowMin: number, startMin: number, endMin: number): boolean {
+  if (endMin >= startMin) {
+    return nowMin >= startMin && nowMin <= endMin;
+  }
+  // Wraps past midnight (e.g. 22:00 - 00:30)
+  return nowMin >= startMin || nowMin <= endMin;
+}
+
 export function computeSlotCountdown(
   config: TrainingScheduleConfig,
   now: Date = new Date()
 ): SlotCountdownInfo {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const morningMin = parseTimeMinutes(config.morningTime, 8 * 60 + 30);
-  const eveningMin = parseTimeMinutes(config.eveningTime, 20 * 60 + 30);
+  const morningStart = parseTimeMinutes(config.morningTime, 8 * 60);
+  const morningEnd = parseTimeMinutes(config.morningWindowEnd, 10 * 60 + 30);
+  const eveningStart = parseTimeMinutes(config.eveningTime, 20 * 60 + 30);
+  const eveningEnd = parseTimeMinutes(config.eveningWindowEnd, 22 * 60 + 45);
   const todayKey = getLocalDateKey(now);
 
-  // Check if currently inside a 45-min active window for morning or evening
+  const morningRange = `${config.morningTime}–${config.morningWindowEnd}`;
+  const eveningRange = `${config.eveningTime}–${config.eveningWindowEnd}`;
+
+  // Check if currently inside either flexible training window
   let activeSlotNow: TrainingSlotKind | null = null;
   let activeSlotKey: string | null = null;
-  if (nowMinutes >= morningMin && nowMinutes <= morningMin + 45) {
+  let activeWindowRange: string | null = null;
+  let activeAnchorCue: string | null = null;
+
+  if (config.morningEnabled && isWithinFlexibleWindow(nowMinutes, morningStart, morningEnd)) {
     activeSlotNow = 'morning';
     activeSlotKey = `${todayKey}_morning`;
-  } else if (nowMinutes >= eveningMin && nowMinutes <= eveningMin + 45) {
+    activeWindowRange = morningRange;
+    activeAnchorCue = config.morningAnchorCue;
+  } else if (isWithinFlexibleWindow(nowMinutes, eveningStart, eveningEnd)) {
     activeSlotNow = 'evening';
     activeSlotKey = `${todayKey}_evening`;
+    activeWindowRange = eveningRange;
+    activeAnchorCue = config.eveningAnchorCue;
   }
 
-  // Pick next upcoming slot
-  const candidates: Array<{ slot: TrainingSlotKind; time: string; min: number }> = [
-    { slot: 'morning' as TrainingSlotKind, time: config.morningTime, min: morningMin },
-    { slot: 'evening' as TrainingSlotKind, time: config.eveningTime, min: eveningMin },
-  ].sort((a, b) => a.min - b.min);
+  const candidates: Array<{
+    slot: TrainingSlotKind;
+    time: string;
+    range: string;
+    cue: string;
+    min: number;
+  }> = [];
+
+  if (config.morningEnabled) {
+    candidates.push({
+      slot: 'morning',
+      time: config.morningTime,
+      range: morningRange,
+      cue: config.morningAnchorCue,
+      min: morningStart,
+    });
+  }
+  candidates.push({
+    slot: 'evening',
+    time: config.eveningTime,
+    range: eveningRange,
+    cue: config.eveningAnchorCue,
+    min: eveningStart,
+  });
+
+  candidates.sort((a, b) => a.min - b.min);
 
   for (const c of candidates) {
     if (c.min > nowMinutes) {
       return {
         nextSlot: c.slot,
         nextSlotTime: c.time,
+        nextWindowRange: c.range,
+        nextAnchorCue: c.cue,
         minutesUntilNext: c.min - nowMinutes,
         activeSlotNow,
         activeSlotKey,
+        activeWindowRange,
+        activeAnchorCue,
       };
     }
   }
 
-  // Otherwise next slot is tomorrow's earliest slot
+  // Otherwise next slot is tomorrow's earliest enabled slot
   const first = candidates[0];
   return {
     nextSlot: first.slot,
     nextSlotTime: first.time,
+    nextWindowRange: first.range,
+    nextAnchorCue: first.cue,
     minutesUntilNext: 1440 - nowMinutes + first.min,
     activeSlotNow,
     activeSlotKey,
+    activeWindowRange,
+    activeAnchorCue,
   };
 }
 
@@ -323,7 +494,13 @@ export function evaluateTrainingState({
         )
       : null;
 
-  // Compute current plan day (1..14)
+  const isRestDayToday = config.restDates.includes(todayKey);
+  const isLowDoseToday = config.lowDoseDates.includes(todayKey);
+  const pastRestCount = config.restDates.filter(
+    (dk) => dk >= config.startDate && dk < todayKey
+  ).length;
+
+  // Compute current plan day (1..14), smoothly shifting out planned flex rest days
   let firstUncompleted = 14;
   for (let d = 1; d <= 14; d++) {
     if (!completedDays.includes(d)) {
@@ -331,23 +508,22 @@ export function evaluateTrainingState({
       break;
     }
   }
-  const calendarDay = Math.max(
-    1,
-    Math.min(14, diffDaysBetweenKeys(config.startDate, todayKey) + 1)
-  );
+  const rawElapsed = Math.max(0, diffDaysBetweenKeys(config.startDate, todayKey) - pastRestCount);
+  const calendarDay = Math.max(1, Math.min(14, rawElapsed + 1));
   const currentPlanDay = Math.max(firstUncompleted, Math.min(14, firstUncompleted));
   const recommendedLesson =
     DAILY_CURRICULUM.find((l) => l.day === currentPlanDay) || DAILY_CURRICULUM[0];
 
-  // Streak days (>= 15 chars counts as active daily training)
+  // Streak days (>= 15 chars OR explicit planned rest day bridges streak)
   let streakDays = 0;
   for (let offset = 0; offset < 30; offset++) {
     const dk = addDaysToDateKey(todayKey, -offset);
     const st = dailyMap[dk];
     if (st && st.charsCleared >= 15) {
       streakDays++;
+    } else if (config.restDates.includes(dk)) {
+      continue;
     } else if (offset === 0) {
-      // Allow today not finished yet without breaking yesterday's streak
       continue;
     } else {
       break;
@@ -356,8 +532,11 @@ export function evaluateTrainingState({
 
   const hasAnyHistory =
     mastery.totalCleared > 0 || completedDays.length > 0 || Object.keys(dailyMap).length > 0;
+  const yesterdayPlannedRest = config.restDates.includes(yesterdayKey);
   const missedYesterday =
     hasAnyHistory &&
+    !yesterdayPlannedRest &&
+    !isRestDayToday &&
     calendarDay > 1 &&
     (!yesterdayStat || yesterdayStat.charsCleared < 15) &&
     todayChars < 20;
@@ -373,11 +552,15 @@ export function evaluateTrainingState({
   const campaignSummary = getCampaignSummary(campaignProgress);
   const growth = getLast7DaysGrowthSeries(mastery, now);
   const baseQuota = config.dailyCharQuota;
-  // Devil mode adds +25% recovery quota if yesterday was missed or slow pool piled up
-  const recoveryBoost =
-    config.strictness === 'devil' && (missedYesterday || slowPoolCount >= 6) ? 1.25 : 1;
-  const todayQuota = Math.round(baseQuota * recoveryBoost);
+  // Low-dose day halves the daily threshold into a 5-min anti-forgetting warm-up; Devil mode boosts only if missed unexcused
+  const recoveryBoost = isLowDoseToday
+    ? 0.5
+    : config.strictness === 'devil' && (missedYesterday || slowPoolCount >= 6)
+      ? 1.25
+      : 1;
+  const todayQuota = Math.max(30, Math.round(baseQuota * recoveryBoost));
   const todayQuotaPct = Math.min(100, Math.round((todayChars / Math.max(1, todayQuota)) * 100));
+  const todaySuppressed = isRestDayToday || todayChars >= todayQuota;
 
   // Ebbinghaus spaced-repetition check for completed days
   const ebbinghausDue: EbbinghausDueItem[] = [];
@@ -554,7 +737,12 @@ export function evaluateTrainingState({
   let statusSummary = `今日目標 ${todayChars}/${todayQuota} 字。維持 94%+ 高純度準確率，睡前完成主課即可讓肌肉記憶離線鞏固。`;
 
   const behindSchedule = calendarDay > currentPlanDay + 1 && completedDays.length < calendarDay - 1;
-  if (config.strictness === 'devil' && (dirtyMemoryRisk || slowPoolCount >= 6 || missedYesterday)) {
+  if (isRestDayToday) {
+    statusLevel = 'on_track';
+    statusTitle = '今日已啟用彈性調休 · 全天靜音免打擾';
+    statusSummary =
+      '已為你把 14 天課表平順後移 1 天，今天好好休息或處理要事，不觸發斷練懲罰，明日再開練即可。';
+  } else if (config.strictness === 'devil' && (dirtyMemoryRisk || slowPoolCount >= 6 || missedYesterday)) {
     statusLevel = 'devil_lock';
     statusTitle = dirtyMemoryRisk
       ? '魔鬼熔斷警報：準確率失守，禁止盲目衝速'
@@ -563,6 +751,11 @@ export function evaluateTrainingState({
         : `魔鬼熔斷警報：慢字池堆積 ${slowPoolCount} 字，須先清剿再推新課`;
     statusSummary =
       '已根據記憶培養規律自動在今日計劃頂部插入強制補訓任務；先完成紅色標記任務再進主線，確保每小時訓練都不白費。';
+  } else if (isLowDoseToday) {
+    statusLevel = 'on_track';
+    statusTitle = `忙碌半量保溫模式進行中（目標 ${todayChars}/${todayQuota} 字）`;
+    statusSummary =
+      '只需完成一半字數（約 5 分鐘）即可維持肌肉記憶熱度不退行；若待會還有時間也可繼續推進主課。';
   } else if (slowPoolCount >= 3 || behindSchedule || (growth.cpmDelta !== null && growth.cpmDelta < 0)) {
     statusLevel = 'warning';
     statusTitle = behindSchedule
@@ -572,8 +765,8 @@ export function evaluateTrainingState({
       '建議先清掉慢字池與系統排出的艾賓浩斯複習節點，將今日字數補齊至達標線。';
   } else if (todayQuotaPct >= 100 && (todayAccuracy === null || todayAccuracy >= 94)) {
     statusLevel = 'ahead';
-    statusTitle = '今日達標碾壓 · 記憶純度極佳';
-    statusSummary = `今日已完成 ${todayChars} 字且準確率出色。注意單次練功不超過 25 分鐘，適時收手讓大腦在睡眠期固化成果。`;
+    statusTitle = '今日達標碾壓 · 後續提醒已自動靜音';
+    statusSummary = `今日已完成 ${todayChars} 字且準確率出色。所有後續時段通知已自動取消，讓大腦在睡眠期安心固化成果。`;
   }
 
   return {
@@ -586,6 +779,9 @@ export function evaluateTrainingState({
     todayChars,
     todayQuota,
     todayQuotaPct,
+    isRestDayToday,
+    isLowDoseToday,
+    todaySuppressed,
     todayAccuracy,
     todayAvgKeyMs,
     todayCpm,
@@ -608,11 +804,14 @@ function formatIcsDateTimeLocal(dateKey: string, hhmm: string): string {
   return `${y}${m}${d}T${hh}${mm}00`;
 }
 
-export function buildTrainingIcsContent(config: TrainingScheduleConfig): string {
+export function buildTrainingIcsContent(
+  config: TrainingScheduleConfig,
+  maxDays: number = 14
+): string {
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//InkKey Dojo//Lingming 14-Day Devil Plan//ZH',
+    'PRODID:-//InkKey Dojo//Lingming 14-Day Rhythm Plan//ZH',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
   ];
@@ -622,32 +821,34 @@ export function buildTrainingIcsContent(config: TrainingScheduleConfig): string 
     .replace(/[-:]/g, '')
     .replace(/\.\d{3}Z$/, 'Z');
 
-  for (const lesson of DAILY_CURRICULUM) {
+  const lessonsToExport = DAILY_CURRICULUM.slice(0, Math.max(1, Math.min(14, maxDays)));
+  for (const lesson of lessonsToExport) {
     const dateKey = addDaysToDateKey(config.startDate, lesson.day - 1);
 
-    // Morning 10-minute consolidation / warmup alarm
-    const mStart = formatIcsDateTimeLocal(dateKey, config.morningTime);
-    const mEndMin = parseTimeMinutes(config.morningTime, 8 * 60 + 30) + 10;
-    const mEndTime = `${String(Math.floor(mEndMin / 60) % 24).padStart(2, '0')}:${String(
-      mEndMin % 60
-    ).padStart(2, '0')}`;
-    const mEnd = formatIcsDateTimeLocal(dateKey, mEndTime);
+    if (config.morningEnabled) {
+      const mStart = formatIcsDateTimeLocal(dateKey, config.morningTime);
+      const mEndMin = parseTimeMinutes(config.morningTime, 8 * 60) + 10;
+      const mEndTime = `${String(Math.floor(mEndMin / 60) % 24).padStart(2, '0')}:${String(
+        mEndMin % 60
+      ).padStart(2, '0')}`;
+      const mEnd = formatIcsDateTimeLocal(dateKey, mEndTime);
 
-    lines.push(
-      'BEGIN:VEVENT',
-      `UID:inkkey-d${lesson.day}-am-${config.startDate}@inkkey.dojo`,
-      `DTSTAMP:${stamp}`,
-      `DTSTART:${mStart}`,
-      `DTEND:${mEnd}`,
-      `SUMMARY:[墨鍵道場 Day ${lesson.day}/14 晨練10分] ${lesson.title}`,
-      `DESCRIPTION:晨間黃金喚醒：${lesson.microRoutine.warmup3m}（目標：先清慢字池再進入主課）`,
-      'BEGIN:VALARM',
-      'TRIGGER:-PT5M',
-      'ACTION:DISPLAY',
-      `DESCRIPTION:墨鍵道場晨練即將開始（Day ${lesson.day}）`,
-      'END:VALARM',
-      'END:VEVENT'
-    );
+      lines.push(
+        'BEGIN:VEVENT',
+        `UID:inkkey-d${lesson.day}-am-${config.startDate}@inkkey.dojo`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART:${mStart}`,
+        `DTEND:${mEnd}`,
+        `SUMMARY:[墨鍵道場 Day ${lesson.day}/14 晨練10分] ${lesson.title}`,
+        `DESCRIPTION:習慣錨點：${config.morningAnchorCue}\\n晨間喚醒：${lesson.microRoutine.warmup3m}`,
+        'BEGIN:VALARM',
+        'TRIGGER:-PT5M',
+        'ACTION:DISPLAY',
+        `DESCRIPTION:墨鍵道場晨練時刻（Day ${lesson.day}）`,
+        'END:VALARM',
+        'END:VEVENT'
+      );
+    }
 
     // Evening 15-minute core + pre-sleep consolidation alarm
     const eStart = formatIcsDateTimeLocal(dateKey, config.eveningTime);

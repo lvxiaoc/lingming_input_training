@@ -1633,16 +1633,20 @@ export default function App() {
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-sm font-bold whitespace-nowrap">
-                    <span>{t('新手 14 天速成學院 · 魔鬼督訓鬧鐘')}</span>
+                    <span>{t('新手 14 天速成學院 · 彈性節律督訓')}</span>
                     <span className="text-[11px] font-mono-tabular font-normal text-[var(--dojo-ochre)]">
                       Day {homeScheduleSummary.evalState.currentPlanDay}/14
                     </span>
                   </div>
                   <div className="text-[11px] text-[var(--dojo-text-sub)] mt-0.5 truncate font-mono-tabular">
                     {`${t('今日')} ${homeScheduleSummary.evalState.todayChars}/${homeScheduleSummary.evalState.todayQuota} ${t('字')} · ${t('掌握度')} ${homeScheduleSummary.evalState.readinessScore}% · ${
-                      homeScheduleSummary.cfg.notificationsEnabled
-                        ? `${t('鬧鐘')} ${homeScheduleSummary.cfg.morningTime} / ${homeScheduleSummary.cfg.eveningTime}`
-                        : t('鬧鐘已暫停')
+                      homeScheduleSummary.evalState.isRestDayToday
+                        ? t('今日調休靜音中')
+                        : homeScheduleSummary.evalState.todaySuppressed
+                          ? t('今日已達標靜音')
+                          : homeScheduleSummary.cfg.notificationsEnabled
+                            ? `${t('時窗')} ${homeScheduleSummary.slot.nextWindowRange}`
+                            : t('提醒已靜默')
                     }`}
                   </div>
                 </div>

@@ -6,8 +6,11 @@ import {
   BellRing,
   Brain,
   Calendar,
+  CalendarClock,
   CalendarPlus,
   Check,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Compass,
   Flame,
@@ -15,6 +18,7 @@ import {
   Play,
   RotateCcw,
   ShieldAlert,
+  Sparkles,
   Target,
 } from 'lucide-react';
 import { CampaignProgressStore } from '../data/campaign';
@@ -34,6 +38,7 @@ import { THEME_OPTIONS, ThemeMode } from '../data/theme';
 import { useUiText } from '../data/uiScript';
 import { getLocalDateKey, SchemeMasteryStore } from '../engine/mastery';
 import {
+  applyRhythmPreset,
   BrowserNotifyStatus,
   buildTrainingIcsContent,
   computeSlotCountdown,
@@ -43,7 +48,10 @@ import {
   getBrowserNotifyStatus,
   loadCompletedDaysList,
   loadTrainingSchedule,
+  ReminderDeliveryMode,
   requestBrowserNotifyPermission,
+  RHYTHM_PRESETS,
+  RhythmPresetId,
   saveCompletedDaysList,
   saveTrainingSchedule,
   TrainingScheduleConfig,
@@ -98,6 +106,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
     getBrowserNotifyStatus()
   );
   const [notifyFeedback, setNotifyFeedback] = useState<string | null>(null);
+  const [showAdvancedIcs, setShowAdvancedIcs] = useState(false);
   const [nowTick, setNowTick] = useState<number>(() => Date.now());
 
   // Free-Writing Isolation Bridge state (Tab 5)
@@ -221,45 +230,105 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
     const res = await requestBrowserNotifyPermission();
     setNotifyStatus(res);
     if (res === 'granted') {
-      updateScheduleConfig({ notificationsEnabled: true });
+      updateScheduleConfig({ notificationsEnabled: true, deliveryMode: 'browser_push' });
       fireBrowserNotification(
-        t('墨鍵道場 · 魔鬼督訓鬧鐘已啟用'),
-        t(`每日 ${scheduleConfig.morningTime} 與 ${scheduleConfig.eveningTime} 將準時督促練功。`)
+        t('墨鍵道場 · 彈性時窗推播已啟用'),
+        t(
+          `將在「${scheduleConfig.eveningAnchorCue}」(${scheduleConfig.eveningTime}–${scheduleConfig.eveningWindowEnd}) 輕量提醒；達標後自動全天靜音。`
+        )
       );
-      setNotifyFeedback('瀏覽器系統通知已啟用並發送測試提示；若關閉本頁建議同時匯出 .ics 行事曆。');
+      setNotifyFeedback('瀏覽器系統通知已啟用（達標自動靜音）；若擔心系統推播太多，可隨時切回「僅站內靜默微標」。');
     } else if (res === 'denied') {
-      setNotifyFeedback('瀏覽器通知權限被拒（或於內嵌視窗受限），站內鬧鐘鈴聲仍可用，建議下載 .ics 行事曆鬧鐘。');
+      updateScheduleConfig({ deliveryMode: 'quiet_banner' });
+      setNotifyFeedback('瀏覽器通知權限受限，已自動切為零打擾的「站內靜默微標」，不影響道場內提示。');
     } else if (res === 'unsupported') {
-      setNotifyFeedback('當前瀏覽器環境不支援原生通知，已啟用站內鈴聲與提醒，並可匯出 .ics 行事曆。');
+      updateScheduleConfig({ deliveryMode: 'quiet_banner' });
+      setNotifyFeedback('當前環境不支援原生推播，已保持站內靜默節律提示（零打擾）。');
     }
   };
 
   const handleTestReminder = () => {
-    synth.playMilestone();
-    const fired = fireBrowserNotification(
-      t(`墨鍵道場 · Day ${evaluation.currentPlanDay} 練功提醒`),
-      t(`今日目標 ${evaluation.todayChars}/${evaluation.todayQuota} 字 · ${evaluation.adaptiveTasks[0]?.title || ''}`)
-    );
+    if (scheduleConfig.deliveryMode !== 'quiet_banner') {
+      synth.playMilestone();
+    } else {
+      synth.playClick();
+    }
+    const fired =
+      scheduleConfig.deliveryMode === 'browser_push'
+        ? fireBrowserNotification(
+            t(`墨鍵道場 · Day ${evaluation.currentPlanDay} 練習時窗`),
+            t(
+              `錨點：${slotInfo.nextAnchorCue} · 今日 ${evaluation.todayChars}/${evaluation.todayQuota} 字`
+            )
+          )
+        : false;
     setNotifyFeedback(
       fired
-        ? '已觸發鬧鐘鈴聲與系統彈窗通知！'
-        : '已觸發站內鬧鐘鈴聲！若需離開網頁後依然準時響鈴，請點右側「匯出 14 天行事曆」。'
+        ? '已依目前級別發出測試提示與系統推播！今日達標後系統將自動靜音。'
+        : scheduleConfig.deliveryMode === 'quiet_banner'
+          ? '目前為「僅站內靜默微標」模式：無刺耳鈴聲，僅在彈性時窗打開道場時浮出安靜微提示。'
+          : '已發出輕音提醒！若需離線提醒，可展開下方「進階：可選行事曆匯出」。'
     );
   };
 
-  const handleExportIcs = () => {
+  const handleApplyPreset = (presetId: Exclude<RhythmPresetId, 'custom'>) => {
     synth.playClick();
-    const content = buildTrainingIcsContent(scheduleConfig);
+    setScheduleConfig((prev) => {
+      const next = applyRhythmPreset(prev, presetId);
+      saveTrainingSchedule(next);
+      return next;
+    });
+    onScheduleChanged?.();
+  };
+
+  const handleToggleTodayLowDose = () => {
+    synth.playClick();
+    const todayKey = getLocalDateKey(nowDate);
+    setScheduleConfig((prev) => {
+      const active = prev.lowDoseDates.includes(todayKey);
+      const lowDoseDates = active
+        ? prev.lowDoseDates.filter((d) => d !== todayKey)
+        : [...prev.lowDoseDates, todayKey];
+      const restDates = active ? prev.restDates : prev.restDates.filter((d) => d !== todayKey);
+      const next = { ...prev, lowDoseDates, restDates };
+      saveTrainingSchedule(next);
+      return next;
+    });
+    onScheduleChanged?.();
+  };
+
+  const handleToggleTodayRest = () => {
+    synth.playClick();
+    const todayKey = getLocalDateKey(nowDate);
+    setScheduleConfig((prev) => {
+      const active = prev.restDates.includes(todayKey);
+      const restDates = active
+        ? prev.restDates.filter((d) => d !== todayKey)
+        : [...prev.restDates, todayKey];
+      const next = { ...prev, restDates };
+      saveTrainingSchedule(next);
+      return next;
+    });
+    onScheduleChanged?.();
+  };
+
+  const handleExportIcs = (maxDays: number) => {
+    synth.playClick();
+    const content = buildTrainingIcsContent(scheduleConfig, maxDays);
     const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `lingming-14day-devil-plan-${scheduleConfig.startDate}.ics`;
+    a.download = `lingming-${maxDays}day-rhythm-${scheduleConfig.startDate}.ics`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    setNotifyFeedback('已下載 14 天早晚共 28 場訓練 .ics 行事曆檔案，雙擊即可匯入手機或電腦日曆自動響鈴。');
+    setNotifyFeedback(
+      maxDays <= 3
+        ? '已下載未來 3 天輕量試跑 .ics 檔，僅置入短期試跑事件，避免長期塞爆您的主行事曆。'
+        : '已下載 14 天完整節律 .ics 檔，匯入日曆即可在設定窗口前提醒。'
+    );
   };
 
   // Parse unique Chinese characters entered in the Stuck-Char Diagnostics box
@@ -348,7 +417,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
           >
             {(
               [
-                { id: 'coach', label: '01 督訓評估與鬧鐘' },
+                { id: 'coach', label: '01 彈性節律與督訓' },
                 { id: 'laws', label: '02 記憶規律' },
                 { id: 'barriers', label: '03 七大難點' },
                 { id: 'path', label: '04 14天路徑' },
@@ -454,7 +523,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
         <div className="lg:hidden px-4 pb-2.5 flex items-center gap-1.5 overflow-x-auto">
           {(
             [
-              { id: 'coach', label: '01 督訓評估與鬧鐘' },
+              { id: 'coach', label: '01 彈性節律與督訓' },
               { id: 'laws', label: '02 記憶規律' },
               { id: 'barriers', label: '03 七大難點破壁' },
               { id: 'path', label: '04 14 天速成路徑' },
@@ -582,7 +651,9 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
             <div className="flex items-center gap-3 text-[11px] text-[var(--dojo-text-muted)]">
               <span className="font-mono-tabular">
                 {t('今日完成')} {evaluation.todayChars}/{evaluation.todayQuota} {t('字')} ·{' '}
-                {t('下次鬧鐘')} {slotInfo.nextSlotTime}
+                {evaluation.todaySuppressed
+                  ? t('今日提醒已靜音')
+                  : `${t('下個時窗')} ${slotInfo.nextWindowRange}`}
               </span>
               {completedDays.length > 0 && (
                 <button
@@ -639,7 +710,11 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                     </span>
                     <span aria-hidden="true">·</span>
                     <span>
-                      {t('下次鬧鐘')} {slotInfo.nextSlotTime}（{t(formatMinutesUntil(slotInfo.minutesUntilNext))}）
+                      {evaluation.todaySuppressed
+                        ? t('今日已達標或調休，全天自動靜音')
+                        : `${t('下個彈性窗')} ${slotInfo.nextWindowRange}（${t(
+                            formatMinutesUntil(slotInfo.minutesUntilNext)
+                          )}）`}
                     </span>
                   </div>
                   <h2 className="font-display text-xl font-bold">{t(evaluation.statusTitle)}</h2>
@@ -863,57 +938,265 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                 </div>
               </section>
 
-              {/* Right 5 cols: Training Alarm Schedule, Browser Notifications & .ics Export */}
+              {/* Right 5 cols: Flexible Habit-Anchor Rhythm Planner (Low-Intrusiveness Alternative to Google Calendar) */}
               <section className={`lg:col-span-5 rounded-xl border p-5 space-y-4 ${surfaceCardClass}`}>
                 <div>
                   <h3 className="font-display text-lg font-bold flex items-center gap-2">
                     <BellRing className="w-5 h-5 text-[var(--dojo-ochre)]" />
-                    <span>{t('14 天訓練時段鬧鐘與行事曆督促')}</span>
+                    <span>{t('輕擾動彈性節律規劃（不塞爆主日曆）')}</span>
                   </h3>
-                  <p className="text-xs text-[var(--dojo-text-sub)] mt-0.5">
-                    {t('符合睡眠離線鞏固規律：早喚醒 10 分鐘 ＋ 睡前固化 15 分鐘。到點自動響鈴彈出。')}
+                  <p className="text-xs text-[var(--dojo-text-sub)] mt-1 leading-relaxed">
+                    {t(
+                      '固定日曆鬧鐘太死板且容易令人煩躁。這裡改用「生活習慣錨點 ＋ 彈性時窗 ＋ 達標即靜音」：在你的自然空檔輕提醒，練夠今日字數就自動閉嘴。'
+                    )}
                   </p>
                 </div>
 
-                {/* Schedule Config Controls */}
+                {/* Live Flex Escape Valves for Today */}
+                <div
+                  className={`rounded-xl border p-3.5 space-y-2.5 text-xs ${
+                    evaluation.isRestDayToday
+                      ? isWash
+                        ? 'bg-[#EDF5F1] border-[#2EA87E]/40'
+                        : 'bg-[#12201C] border-[#2EA87E]/45'
+                      : subtlePanelClass
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-[var(--dojo-text-bright)]">
+                      {t('今日臨時彈性調度')}
+                    </span>
+                    <span className="text-[11px] font-mono-tabular text-[var(--dojo-pine-text)]">
+                      {evaluation.todaySuppressed
+                        ? t('全天靜音保護中')
+                        : `${t('尚差')} ${Math.max(0, evaluation.todayQuota - evaluation.todayChars)} ${t('字')}`}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleToggleTodayLowDose}
+                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                        evaluation.isLowDoseToday
+                          ? 'bg-[var(--dojo-pine)] border-[var(--dojo-pine)] text-white'
+                          : isWash
+                            ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/15 text-[#141413]'
+                            : 'bg-[#161E2E] hover:bg-[#1E2940] border-[#F2EEE6]/12 text-[#E6E2DA]'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        {t(evaluation.isLowDoseToday ? '已切為半量保溫 (取消)' : '今天太忙 · 改半量保溫')}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleTodayRest}
+                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                        evaluation.isRestDayToday
+                          ? 'bg-[var(--dojo-ochre)] border-[var(--dojo-ochre)] text-[#0B0E14] font-semibold'
+                          : isWash
+                            ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/15 text-[#141413]'
+                            : 'bg-[#161E2E] hover:bg-[#1E2940] border-[#F2EEE6]/12 text-[#E6E2DA]'
+                      }`}
+                    >
+                      <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        {t(evaluation.isRestDayToday ? '今日已調休順延 (恢復)' : '今日調休 · 順延 1 天')}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3 Rhythm Templates (1-Click Habit Stacking Setup) */}
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-[var(--dojo-text-sub)]">
+                    {t('1. 選擇最貼近你作息的生活節律模板')}
+                  </div>
+                  <div className="space-y-1.5">
+                    {RHYTHM_PRESETS.map((preset) => {
+                      const selected = scheduleConfig.rhythmPreset === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleApplyPreset(preset.id)}
+                          className={`w-full text-left rounded-xl border px-3.5 py-2.5 transition-colors cursor-pointer ${
+                            selected
+                              ? isWash
+                                ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
+                                : 'bg-[#1C2638] border-[#D89B3C] text-[#F7F3EC]'
+                              : isWash
+                                ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/14 text-[#141413]'
+                                : 'bg-[#0E131D] hover:bg-[#161E2E] border-[#F2EEE6]/10 text-[#DCE3F0]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 text-xs font-bold">
+                            <span>{t(preset.title)}</span>
+                            <span className="font-mono-tabular text-[11px] opacity-80 shrink-0">
+                              {preset.morningEnabled
+                                ? `${preset.morningTime} / ${preset.eveningTime}`
+                                : `${preset.eveningTime}–${preset.eveningWindowEnd}`}
+                            </span>
+                          </div>
+                          <div className="text-[11px] opacity-80 mt-0.5 leading-relaxed">
+                            {t(preset.subtitle)}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Flexible Window & Habit Cues Editor */}
                 <div className={`rounded-xl border p-4 space-y-3 text-xs ${subtlePanelClass}`}>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="space-y-1">
-                      <span className="block text-[11px] text-[var(--dojo-text-sub)]">
-                        {t('晨間黃金喚醒時間')}
-                      </span>
-                      <input
-                        type="time"
-                        value={scheduleConfig.morningTime}
-                        onChange={(e) => updateScheduleConfig({ morningTime: e.target.value })}
-                        className={`w-full px-2.5 py-1.5 rounded-lg border font-mono-tabular text-xs outline-none ${
-                          isWash
-                            ? 'bg-white border-[#141413]/18 text-[#141413]'
-                            : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
-                        }`}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="block text-[11px] text-[var(--dojo-text-sub)]">
-                        {t('晚間睡前固化時間')}
-                      </span>
-                      <input
-                        type="time"
-                        value={scheduleConfig.eveningTime}
-                        onChange={(e) => updateScheduleConfig({ eveningTime: e.target.value })}
-                        className={`w-full px-2.5 py-1.5 rounded-lg border font-mono-tabular text-xs outline-none ${
-                          isWash
-                            ? 'bg-white border-[#141413]/18 text-[#141413]'
-                            : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
-                        }`}
-                      />
-                    </label>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-[var(--dojo-text-sub)]">
+                      {t('2. 習慣觸發錨點與彈性時間窗')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        synth.playClick();
+                        updateScheduleConfig({
+                          rhythmPreset: 'custom',
+                          morningEnabled: !scheduleConfig.morningEnabled,
+                        });
+                      }}
+                      className={`px-2.5 py-1 rounded-md border text-[11px] transition-colors cursor-pointer ${
+                        scheduleConfig.morningEnabled
+                          ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/40 text-[var(--dojo-pine-text)]'
+                          : isWash
+                            ? 'bg-white border-[#141413]/14 text-[#666]'
+                            : 'bg-[#121824] border-[#F2EEE6]/10 text-[#888]'
+                      }`}
+                    >
+                      {t(scheduleConfig.morningEnabled ? '早／午段：啟用' : '早／午段：關閉（僅夜訓）')}
+                    </button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  {scheduleConfig.morningEnabled && (
+                    <div className="space-y-1.5 pb-2.5 border-b border-[var(--dojo-border)]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-[var(--dojo-text-muted)]">
+                          {t('白日彈性窗（起 – 迄）')}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="time"
+                            value={scheduleConfig.morningTime}
+                            onChange={(e) =>
+                              updateScheduleConfig({
+                                rhythmPreset: 'custom',
+                                morningTime: e.target.value,
+                              })
+                            }
+                            className={`px-2 py-1 rounded-md border font-mono-tabular text-[11px] outline-none ${
+                              isWash
+                                ? 'bg-white border-[#141413]/18 text-[#141413]'
+                                : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
+                            }`}
+                          />
+                          <span className="text-[var(--dojo-text-muted)]">–</span>
+                          <input
+                            type="time"
+                            value={scheduleConfig.morningWindowEnd}
+                            onChange={(e) =>
+                              updateScheduleConfig({
+                                rhythmPreset: 'custom',
+                                morningWindowEnd: e.target.value,
+                              })
+                            }
+                            className={`px-2 py-1 rounded-md border font-mono-tabular text-[11px] outline-none ${
+                              isWash
+                                ? 'bg-white border-[#141413]/18 text-[#141413]'
+                                : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
+                            }`}
+                          />
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        value={scheduleConfig.morningAnchorCue}
+                        onChange={(e) =>
+                          updateScheduleConfig({
+                            rhythmPreset: 'custom',
+                            morningAnchorCue: e.target.value,
+                          })
+                        }
+                        placeholder={t('例如：早起喝完水／咖啡後 10 分鐘')}
+                        className={`w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none ${
+                          isWash
+                            ? 'bg-white border-[#141413]/16 text-[#141413]'
+                            : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
+                        }`}
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-[var(--dojo-text-muted)]">
+                        {t('晚間固化窗（起 – 迄）')}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="time"
+                          value={scheduleConfig.eveningTime}
+                          onChange={(e) =>
+                            updateScheduleConfig({
+                              rhythmPreset: 'custom',
+                              eveningTime: e.target.value,
+                            })
+                          }
+                          className={`px-2 py-1 rounded-md border font-mono-tabular text-[11px] outline-none ${
+                            isWash
+                              ? 'bg-white border-[#141413]/18 text-[#141413]'
+                              : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
+                          }`}
+                        />
+                        <span className="text-[var(--dojo-text-muted)]">–</span>
+                        <input
+                          type="time"
+                          value={scheduleConfig.eveningWindowEnd}
+                          onChange={(e) =>
+                            updateScheduleConfig({
+                              rhythmPreset: 'custom',
+                              eveningWindowEnd: e.target.value,
+                            })
+                          }
+                          className={`px-2 py-1 rounded-md border font-mono-tabular text-[11px] outline-none ${
+                            isWash
+                              ? 'bg-white border-[#141413]/18 text-[#141413]'
+                              : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                    <input
+                      type="text"
+                      value={scheduleConfig.eveningAnchorCue}
+                      onChange={(e) =>
+                        updateScheduleConfig({
+                          rhythmPreset: 'custom',
+                          eveningAnchorCue: e.target.value,
+                        })
+                      }
+                      placeholder={t('例如：洗漱後／睡前放下手機前 15 分鐘')}
+                      className={`w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none ${
+                        isWash
+                          ? 'bg-white border-[#141413]/16 text-[#141413]'
+                          : 'bg-[#121824] border-[#F2EEE6]/14 text-[#F2EEE6]'
+                      }`}
+                    />
+                  </div>
+
+                  {/* Base Daily Quota & Strictness */}
+                  <div className="pt-2.5 border-t border-[var(--dojo-border)] grid grid-cols-2 gap-3">
                     <label className="space-y-1">
                       <span className="block text-[11px] text-[var(--dojo-text-sub)]">
-                        {t('14 天計劃起跑日')}
+                        {t('計劃起跑日')}
                       </span>
                       <input
                         type="date"
@@ -928,7 +1211,7 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                     </label>
                     <div className="space-y-1">
                       <span className="block text-[11px] text-[var(--dojo-text-sub)]">
-                        {t('每日最低字數紅線')}
+                        {t('每日基準字數')}
                       </span>
                       <div className="flex items-center gap-1">
                         {[60, 80, 120, 200].map((quota) => (
@@ -956,14 +1239,75 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                     </div>
                   </div>
 
-                  {/* Strictness & In-App Alarm Switches */}
+                  {/* Delivery Mode (Non-Intrusive Grading) */}
+                  <div className="pt-2.5 border-t border-[var(--dojo-border)] space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-[var(--dojo-text-sub)]">
+                        {t('3. 提醒打擾分級（達標即自動靜音）')}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          synth.playClick();
+                          updateScheduleConfig({
+                            notificationsEnabled: !scheduleConfig.notificationsEnabled,
+                          });
+                        }}
+                        className={`px-2 py-0.5 rounded border text-[11px] cursor-pointer ${
+                          scheduleConfig.notificationsEnabled
+                            ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/40 text-[var(--dojo-pine-text)]'
+                            : 'border-[var(--dojo-border)] text-[var(--dojo-text-muted)]'
+                        }`}
+                      >
+                        {t(scheduleConfig.notificationsEnabled ? '提醒開啟中' : '完全靜默')}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(
+                        [
+                          { id: 'quiet_banner', label: '靜默微標', hint: '零聲音' },
+                          { id: 'soft_chime', label: '輕音提示', hint: '開頁輕響' },
+                          { id: 'browser_push', label: '系統推播', hint: '跨分頁' },
+                        ] as Array<{ id: ReminderDeliveryMode; label: string; hint: string }>
+                      ).map((dm) => {
+                        const active = scheduleConfig.deliveryMode === dm.id;
+                        return (
+                          <button
+                            key={dm.id}
+                            type="button"
+                            onClick={() => {
+                              synth.playClick();
+                              updateScheduleConfig({
+                                deliveryMode: dm.id,
+                                notificationsEnabled: true,
+                              });
+                            }}
+                            className={`px-2 py-1.5 rounded-lg border text-center transition-colors cursor-pointer ${
+                              active
+                                ? isWash
+                                  ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
+                                  : 'bg-[#1F293D] border-[#D89B3C] text-[#F7F3EC]'
+                                : isWash
+                                  ? 'bg-white border-[#141413]/14 text-[#52524C]'
+                                  : 'bg-[#121824] border-[#F2EEE6]/10 text-[#9BA5B6]'
+                            }`}
+                          >
+                            <div className="text-[11px] font-semibold">{t(dm.label)}</div>
+                            <div className="text-[10px] opacity-75">{t(dm.hint)}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Strictness Switch */}
                   <div className="pt-2 border-t border-[var(--dojo-border)] flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[var(--dojo-text-sub)]">{t('督訓強度')}</span>
+                    <span className="text-[var(--dojo-text-sub)]">{t('補訓演算法')}</span>
                     <div className="inline-flex items-center gap-1">
                       {(
                         [
-                          { id: 'devil', label: '魔鬼嚴苛（自動懲罰補訓）' },
-                          { id: 'standard', label: '標準提醒' },
+                          { id: 'devil', label: '魔鬼防退行（自動插單補救）' },
+                          { id: 'standard', label: '標準柔和' },
                         ] as const
                       ).map((opt) => (
                         <button
@@ -990,84 +1334,104 @@ export const NoviceAcademy: React.FC<NoviceAcademyProps> = ({
                       ))}
                     </div>
                   </div>
+                </div>
 
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="text-[var(--dojo-text-sub)]">
-                      {t('開頁自動鬧鐘提醒與音效')}
-                    </span>
+                {/* Test Reminder + Collapsible Optional Calendar Export */}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {scheduleConfig.deliveryMode === 'browser_push' ? (
+                      <button
+                        type="button"
+                        onClick={handleEnableBrowserNotify}
+                        className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                          notifyStatus === 'granted'
+                            ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/40 text-[var(--dojo-pine-text)]'
+                            : isWash
+                              ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
+                              : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
+                        }`}
+                      >
+                        <Bell className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          {t(
+                            notifyStatus === 'granted'
+                              ? '系統通知已授權'
+                              : notifyStatus === 'denied'
+                                ? '權限受限（改靜默）'
+                                : '授權瀏覽器推播'
+                          )}
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleTestReminder}
+                        className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                          isWash
+                            ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
+                            : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
+                        }`}
+                      >
+                        <Clock className="w-3.5 h-3.5 shrink-0" />
+                        <span>{t('預覽目前級別提醒')}</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => {
                         synth.playClick();
-                        updateScheduleConfig({
-                          notificationsEnabled: !scheduleConfig.notificationsEnabled,
-                        });
+                        setShowAdvancedIcs((v) => !v);
                       }}
-                      className={`px-3 py-1 rounded-md border text-[11px] font-semibold transition-colors cursor-pointer ${
-                        scheduleConfig.notificationsEnabled
-                          ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/45 text-[var(--dojo-pine-text)]'
-                          : isWash
-                            ? 'bg-white border-[#141413]/14 text-[#666]'
-                            : 'bg-[#121824] border-[#F2EEE6]/10 text-[#888]'
-                      }`}
-                    >
-                      {t(scheduleConfig.notificationsEnabled ? '已開啟' : '已暫停')}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Browser Notification & .ics Calendar Actions */}
-                <div className="space-y-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={handleEnableBrowserNotify}
-                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
-                        notifyStatus === 'granted'
-                          ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/40 text-[var(--dojo-pine-text)]'
-                          : isWash
-                            ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
-                            : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
-                      }`}
-                    >
-                      <Bell className="w-3.5 h-3.5 shrink-0" />
-                      <span>
-                        {t(
-                          notifyStatus === 'granted'
-                            ? '系統通知已授權'
-                            : notifyStatus === 'denied'
-                              ? '通知權限受限'
-                              : '開啟系統彈窗通知'
-                        )}
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleTestReminder}
-                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
                         isWash
                           ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
                           : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
                       }`}
                     >
-                      <Clock className="w-3.5 h-3.5 shrink-0" />
-                      <span>{t('立即測試鬧鐘鈴聲')}</span>
+                      <CalendarPlus className="w-3.5 h-3.5 shrink-0" />
+                      <span>{t('進階：可選日曆匯出')}</span>
+                      {showAdvancedIcs ? (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      )}
                     </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleExportIcs}
-                    className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                      isWash
-                        ? 'bg-[#181817] hover:bg-[#2C2C2A] text-[#F8F7F3]'
-                        : 'bg-[#D89B3C] hover:brightness-110 text-[#0B0E14]'
-                    }`}
-                  >
-                    <CalendarPlus className="w-4 h-4 shrink-0" />
-                    <span>{t('匯出 14 天行事曆鬧鐘 (.ics · 關網頁也準時響)')}</span>
-                  </button>
+                  {showAdvancedIcs && (
+                    <div className={`rounded-xl border p-3.5 space-y-2.5 text-xs ${subtlePanelClass}`}>
+                      <p className="text-[11px] text-[var(--dojo-text-sub)] leading-relaxed">
+                        {t(
+                          '不想把 28 個死板事項塞滿 Google Calendar？建議先試用「未來 3 天輕量試跑」，只在需要外部提示的頭幾天使用。'
+                        )}
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleExportIcs(3)}
+                          className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                            isWash
+                              ? 'bg-[#181817] hover:bg-[#2C2C2A] text-[#F8F7F3]'
+                              : 'bg-[#D89B3C] hover:brightness-110 text-[#0B0E14]'
+                          }`}
+                        >
+                          {t('僅匯出未來 3 天 (.ics)')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleExportIcs(14)}
+                          className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                            isWash
+                              ? 'bg-white hover:bg-[#FAF9F5] border-[#141413]/16 text-[#141413]'
+                              : 'bg-[#192233] hover:bg-[#233048] border-[#F2EEE6]/14 text-[#E6E2DA]'
+                          }`}
+                        >
+                          {t('匯出完整 14 天 (.ics)')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {notifyFeedback && (
                     <div className="text-[11px] leading-relaxed text-[var(--dojo-pine-text)] px-1">

@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BellRing, Clock, Flame, Play, ShieldAlert, X } from 'lucide-react';
+import { BellRing, CalendarClock, Clock, Flame, Play, ShieldAlert, Sparkles, X } from 'lucide-react';
 import { CampaignProgressStore } from '../data/campaign';
 import { NovicePracticeAction } from '../data/noviceCurriculum';
 import { ScriptMode } from '../data/scriptFilter';
 import { useThemeMode } from '../data/theme';
 import { useUiText } from '../data/uiScript';
-import { SchemeMasteryStore } from '../engine/mastery';
+import { getLocalDateKey, SchemeMasteryStore } from '../engine/mastery';
 import {
   computeSlotCountdown,
   evaluateTrainingState,
@@ -50,7 +50,7 @@ export const TrainingReminderBanner: React.FC<TrainingReminderBannerProps> = ({
     setConfig(loadTrainingSchedule());
   }, [scheduleVersion]);
 
-  // 20-second clock ticker to catch scheduled training windows
+  // 20-second clock ticker to catch flexible training windows
   useEffect(() => {
     const id = window.setInterval(() => {
       setNowTick(Date.now());
@@ -60,6 +60,7 @@ export const TrainingReminderBanner: React.FC<TrainingReminderBannerProps> = ({
   }, []);
 
   const now = useMemo(() => new Date(nowTick), [nowTick]);
+  const todayKey = useMemo(() => getLocalDateKey(now), [now]);
   const completedDays = useMemo(() => loadCompletedDaysList(), [scheduleVersion, nowTick]);
 
   const slotInfo = useMemo(() => computeSlotCountdown(config, now), [config, now]);
@@ -77,16 +78,17 @@ export const TrainingReminderBanner: React.FC<TrainingReminderBannerProps> = ({
     [mastery, campaignProgress, completedDays, scriptMode, config, now]
   );
 
+  // Smart Quota-Aware Suppression: never fire if quota already hit OR today is postponed
   const isDueSlot = Boolean(
     config.notificationsEnabled &&
+      !evalResult.todaySuppressed &&
       slotInfo.activeSlotNow &&
       slotInfo.activeSlotKey &&
-      evalResult.todayChars < evalResult.todayQuota &&
       nowTick >= config.snoozedUntilMs &&
       config.lastNotifiedSlotKey !== `${slotInfo.activeSlotKey}_dismissed`
   );
 
-  // Fire Web Audio chime + Browser OS Notification once per active training slot
+  // Trigger optional audio / browser notification once per flexible window (respecting deliveryMode)
   useEffect(() => {
     if (!isDueSlot || !slotInfo.activeSlotKey) return;
     if (
@@ -103,19 +105,24 @@ export const TrainingReminderBanner: React.FC<TrainingReminderBannerProps> = ({
     setConfig(nextCfg);
     onScheduleChanged();
 
-    synth.playMilestone();
-    const slotTitle =
-      slotInfo.activeSlotNow === 'morning' ? '晨間 10 分鐘黃金喚醒' : '晚間 15 分鐘睡前固化';
-    fireBrowserNotification(
-      t(`墨鍵道場 · ${slotTitle}`),
-      t(
-        `Day ${evalResult.currentPlanDay} 今日進度 ${evalResult.todayChars}/${evalResult.todayQuota} 字（${evalResult.adaptiveTasks[0]?.title || evalResult.recommendedLesson.title}）`
-      )
-    );
+    if (config.deliveryMode === 'soft_chime' || config.deliveryMode === 'browser_push') {
+      synth.playMilestone();
+    }
+    if (config.deliveryMode === 'browser_push') {
+      const slotTitle =
+        slotInfo.activeSlotNow === 'morning' ? '彈性醒腦時窗' : '睡前固化時窗';
+      fireBrowserNotification(
+        t(`墨鍵道場 · ${slotTitle}`),
+        t(
+          `習慣錨點「${slotInfo.activeAnchorCue || ''}」：Day ${evalResult.currentPlanDay} 今日 ${evalResult.todayChars}/${evalResult.todayQuota} 字`
+        )
+      );
+    }
   }, [
     isDueSlot,
     slotInfo.activeSlotKey,
     slotInfo.activeSlotNow,
+    slotInfo.activeAnchorCue,
     config,
     evalResult,
     onScheduleChanged,
@@ -132,6 +139,34 @@ export const TrainingReminderBanner: React.FC<TrainingReminderBannerProps> = ({
     const nextCfg: TrainingScheduleConfig = {
       ...config,
       snoozedUntilMs: Date.now() + 15 * 60 * 1000,
+    };
+    saveTrainingSchedule(nextCfg);
+    setConfig(nextCfg);
+    onScheduleChanged();
+  };
+
+  const handleLowDoseToday = () => {
+    synth.playClick();
+    const nextLowDose = config.lowDoseDates.includes(todayKey)
+      ? config.lowDoseDates
+      : [...config.lowDoseDates, todayKey];
+    const nextCfg: TrainingScheduleConfig = {
+      ...config,
+      lowDoseDates: nextLowDose,
+    };
+    saveTrainingSchedule(nextCfg);
+    setConfig(nextCfg);
+    onScheduleChanged();
+  };
+
+  const handlePostponeToday = () => {
+    synth.playClick();
+    const nextRest = config.restDates.includes(todayKey)
+      ? config.restDates
+      : [...config.restDates, todayKey];
+    const nextCfg: TrainingScheduleConfig = {
+      ...config,
+      restDates: nextRest,
     };
     saveTrainingSchedule(nextCfg);
     setConfig(nextCfg);
@@ -165,33 +200,44 @@ export const TrainingReminderBanner: React.FC<TrainingReminderBannerProps> = ({
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs font-semibold">
+        <div className="flex items-center gap-2 text-xs font-semibold min-w-0">
           {isCritical ? (
             <ShieldAlert className="w-4 h-4 text-[var(--dojo-crimson)] shrink-0" />
           ) : (
             <BellRing className="w-4 h-4 text-[var(--dojo-ochre)] shrink-0" />
           )}
-          <span className={isCritical ? 'text-[var(--dojo-crimson)]' : 'text-[var(--dojo-ochre)]'}>
+          <span
+            className={`truncate ${
+              isCritical ? 'text-[var(--dojo-crimson)]' : 'text-[var(--dojo-ochre)]'
+            }`}
+          >
             {t(
               slotInfo.activeSlotNow === 'morning'
-                ? `晨練鬧鐘已到點（${config.morningTime}）`
-                : `睡前固化鬧鐘已到點（${config.eveningTime}）`
+                ? `彈性早練窗 (${slotInfo.activeWindowRange})`
+                : `睡前固化窗 (${slotInfo.activeWindowRange})`
             )}
           </span>
         </div>
         <button
           type="button"
           onClick={handleDismissSlot}
-          aria-label={t('關閉本次訓練提醒')}
-          className="text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text-bright)] transition-colors cursor-pointer"
+          aria-label={t('關閉本次訓練提示')}
+          className="text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text-bright)] transition-colors cursor-pointer shrink-0"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="mt-2 space-y-1">
+      {slotInfo.activeAnchorCue && (
+        <div className="mt-1.5 text-[11px] text-[var(--dojo-pine-text)] font-medium">
+          {t('習慣錨點')}：{t(slotInfo.activeAnchorCue)}
+        </div>
+      )}
+
+      <div className="mt-1.5 space-y-1">
         <div className="text-sm font-bold font-display">
-          Day {evalResult.currentPlanDay} · {t(topTask ? topTask.title : evalResult.recommendedLesson.title)}
+          Day {evalResult.currentPlanDay} ·{' '}
+          {t(topTask ? topTask.title : evalResult.recommendedLesson.title)}
         </div>
         <p className="text-xs text-[var(--dojo-text-sub)] leading-relaxed">
           {t(topTask ? topTask.reason : evalResult.statusSummary)}
@@ -201,6 +247,7 @@ export const TrainingReminderBanner: React.FC<TrainingReminderBannerProps> = ({
       <div className="mt-2.5 flex items-center justify-between text-[11px] font-mono-tabular text-[var(--dojo-text-muted)]">
         <span>
           {t('今日完成')} {evalResult.todayChars}/{evalResult.todayQuota} {t('字')}
+          {evalResult.isLowDoseToday ? ` (${t('保溫半量')})` : ''}
         </span>
         <span>
           {t('慢字池')} {evalResult.slowPoolCount} · {t('連練')} {evalResult.streakDays} {t('天')}
@@ -252,7 +299,31 @@ export const TrainingReminderBanner: React.FC<TrainingReminderBannerProps> = ({
           }`}
         >
           <Flame className="w-3.5 h-3.5 text-[var(--dojo-ochre)]" />
-          <span>{t('督訓詳情')}</span>
+          <span>{t('節律設定')}</span>
+        </button>
+      </div>
+
+      {/* Low-friction escape valves so real life never turns into alert fatigue */}
+      <div className="mt-2.5 pt-2 border-t border-[var(--dojo-border)] flex items-center justify-between gap-2 text-[11px]">
+        {!evalResult.isLowDoseToday ? (
+          <button
+            type="button"
+            onClick={handleLowDoseToday}
+            className="inline-flex items-center gap-1 text-[var(--dojo-pine-text)] hover:underline cursor-pointer"
+          >
+            <Sparkles className="w-3 h-3" />
+            <span>{t('今天太忙？改半量 5 分鐘保溫')}</span>
+          </button>
+        ) : (
+          <span className="text-[var(--dojo-pine-text)]">{t('已切為 5 分鐘保溫線')}</span>
+        )}
+        <button
+          type="button"
+          onClick={handlePostponeToday}
+          className="inline-flex items-center gap-1 text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text-bright)] cursor-pointer whitespace-nowrap"
+        >
+          <CalendarClock className="w-3 h-3" />
+          <span>{t('今日調休順延')}</span>
         </button>
       </div>
     </aside>
