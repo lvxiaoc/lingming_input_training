@@ -22,6 +22,7 @@ import {
   Zap,
   ScrollText,
   ScanSearch,
+  GraduationCap,
 } from 'lucide-react';
 import {
   BUILTIN_SCHEMES,
@@ -95,10 +96,12 @@ import { BlurredKeyboardBackdrop } from './components/BlurredKeyboardBackdrop';
 import { StrokeCloudStage } from './components/StrokeCloudStage';
 import { MemoryPalaceCloud } from './components/MemoryPalaceCloud';
 import { CampaignMapView } from './components/CampaignMapView';
-import { ExtremeDrillStudio } from './components/ExtremeDrillStudio';
-import { ShortCodeDojo } from './components/ShortCodeDojo';
-import { HuangtingDojo } from './components/HuangtingDojo';
+import { DrillTab, ExtremeDrillStudio } from './components/ExtremeDrillStudio';
+import { ShortCodeDojo, ShortCodeTier } from './components/ShortCodeDojo';
+import { FadeMode, HuangtingDojo } from './components/HuangtingDojo';
 import { HomeTutorialModal, TutorialTabId } from './components/HomeTutorialModal';
+import { NoviceAcademy } from './components/NoviceAcademy';
+import { NovicePracticeAction } from './data/noviceCurriculum';
 import { WeakKeyRadarCard } from './components/WeakKeyRadarCard';
 import { CorrectionReportCard } from './components/CorrectionReportCard';
 import { GrowthAnalyticsPanel } from './components/GrowthAnalyticsPanel';
@@ -110,6 +113,7 @@ import { speech } from './audio/speech';
 
 type GameState =
   | 'TITLE_MENU'
+  | 'NOVICE_ACADEMY'
   | 'CAMPAIGN_MAP'
   | 'PALACE_CLOUD'
   | 'DRILL_STUDIO'
@@ -156,8 +160,22 @@ const SCAFFOLD_LABELS: Record<ScaffoldMode, string> = {
 export default function App() {
   const [gameState, setGameState] = useState<GameState>('TITLE_MENU');
   const [returnStateFromPalace, setReturnStateFromPalace] = useState<
-    'TITLE_MENU' | 'CAMPAIGN_MAP' | 'PLAYING'
+    'TITLE_MENU' | 'CAMPAIGN_MAP' | 'PLAYING' | 'NOVICE_ACADEMY'
   >('TITLE_MENU');
+  const [subDojoReturnTo, setSubDojoReturnTo] = useState<'TITLE_MENU' | 'NOVICE_ACADEMY'>('TITLE_MENU');
+  const [playReturnTo, setPlayReturnTo] = useState<'TITLE_MENU' | 'NOVICE_ACADEMY'>('TITLE_MENU');
+  const [campaignInitialChapter, setCampaignInitialChapter] = useState<1 | 2 | 3 | 4 | 5 | undefined>(
+    undefined
+  );
+  const [drillLaunchPreset, setDrillLaunchPreset] = useState<{
+    tab?: DrillTab;
+    customText?: string;
+    openPaste?: boolean;
+  }>({});
+  const [shortCodeInitialTier, setShortCodeInitialTier] = useState<ShortCodeTier | undefined>(
+    undefined
+  );
+  const [huangtingInitialFade, setHuangtingInitialFade] = useState<FadeMode | undefined>(undefined);
   const [mode, setMode] = useState<GameMode>('reflex');
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('depth');
   const [trainingScope, setTrainingScope] = useState<TrainingScope>('root');
@@ -235,7 +253,9 @@ export default function App() {
   } | null>(null);
 
   const [focusKeys, setFocusKeys] = useState<string[] | null>(null);
-  const [chamberReturnTo, setChamberReturnTo] = useState<'CAMPAIGN_MAP' | 'PALACE_CLOUD'>('PALACE_CLOUD');
+  const [chamberReturnTo, setChamberReturnTo] = useState<
+    'CAMPAIGN_MAP' | 'PALACE_CLOUD' | 'NOVICE_ACADEMY'
+  >('PALACE_CLOUD');
   const [chamberXrayMode, setChamberXrayMode] = useState<{
     active: boolean;
     key: string | null;
@@ -592,14 +612,17 @@ export default function App() {
     setLayoutMode((prev) => (prev === 'depth' ? 'split' : 'depth'));
   };
 
-  const openPalaceCloud = (from: 'TITLE_MENU' | 'CAMPAIGN_MAP' | 'PLAYING') => {
-    synth.playClick();
-    if (!activeScheme.isLingming) {
-      switchScheme(BUILTIN_SCHEMES[0]);
-    }
-    setReturnStateFromPalace(from);
-    setGameState('PALACE_CLOUD');
-  };
+  const openPalaceCloud = useCallback(
+    (from: 'TITLE_MENU' | 'CAMPAIGN_MAP' | 'PLAYING' | 'NOVICE_ACADEMY') => {
+      synth.playClick();
+      if (!activeScheme.isLingming) {
+        switchScheme(BUILTIN_SCHEMES[0]);
+      }
+      setReturnStateFromPalace(from);
+      setGameState('PALACE_CLOUD');
+    },
+    [activeScheme.isLingming, switchScheme]
+  );
 
   const toggleAutoAdvance = () => {
     setAutoAdvanceEnabled((prev) => {
@@ -623,7 +646,7 @@ export default function App() {
       chamberKey: string | null,
       scope: 'da' | 'root',
       blind = false,
-      from: 'CAMPAIGN_MAP' | 'PALACE_CLOUD' = 'PALACE_CLOUD'
+      from: 'CAMPAIGN_MAP' | 'PALACE_CLOUD' | 'NOVICE_ACADEMY' = 'PALACE_CLOUD'
     ) => {
       if (!activeScheme.isLingming) {
         switchScheme(BUILTIN_SCHEMES[0]);
@@ -636,6 +659,7 @@ export default function App() {
         scope,
         blind ? 'blind' : 'adaptive'
       );
+      setPlayReturnTo(from === 'NOVICE_ACADEMY' ? 'NOVICE_ACADEMY' : 'TITLE_MENU');
     },
     [activeScheme.isLingming, startPlay, switchScheme]
   );
@@ -644,7 +668,7 @@ export default function App() {
     (
       chamberKey: string | null,
       blind = false,
-      from: 'CAMPAIGN_MAP' | 'PALACE_CLOUD' = 'CAMPAIGN_MAP'
+      from: 'CAMPAIGN_MAP' | 'PALACE_CLOUD' | 'NOVICE_ACADEMY' = 'CAMPAIGN_MAP'
     ) => {
       synth.playClick();
       if (!activeScheme.isLingming) {
@@ -671,6 +695,70 @@ export default function App() {
       setGameState('PLAYING');
     },
     [activeScheme.isLingming, scriptMode, switchScheme]
+  );
+
+  const handleNoviceAction = useCallback(
+    (action: NovicePracticeAction) => {
+      synth.playClick();
+      switch (action.kind) {
+        case 'stage': {
+          const st = CAMPAIGN_STAGE_BY_ID[action.stageId];
+          if (st) {
+            setSubDojoReturnTo('NOVICE_ACADEMY');
+            setPlayReturnTo('NOVICE_ACADEMY');
+            launchCampaignStage(st);
+          }
+          break;
+        }
+        case 'campaign_chapter': {
+          setSubDojoReturnTo('NOVICE_ACADEMY');
+          setCampaignInitialChapter(action.chapterId);
+          setGameState('CAMPAIGN_MAP');
+          break;
+        }
+        case 'palace_cloud': {
+          openPalaceCloud('NOVICE_ACADEMY');
+          break;
+        }
+        case 'chamber_drill': {
+          handleLaunchChamberDrill(
+            action.chamberKey,
+            'root',
+            Boolean(action.blind),
+            'NOVICE_ACADEMY'
+          );
+          break;
+        }
+        case 'free_play': {
+          startPlay(action.mode, null, action.scope, action.scaffold);
+          setPlayReturnTo('NOVICE_ACADEMY');
+          break;
+        }
+        case 'drill_studio': {
+          setSubDojoReturnTo('NOVICE_ACADEMY');
+          setDrillLaunchPreset({
+            tab: action.tab,
+            customText: action.customText,
+            openPaste: action.openPaste,
+          });
+          setGameState('DRILL_STUDIO');
+          break;
+        }
+        case 'short_code': {
+          setSubDojoReturnTo('NOVICE_ACADEMY');
+          setShortCodeInitialTier(action.tier);
+          setGameState('SHORT_CODE_DOJO');
+          break;
+        }
+        case 'huangting': {
+          setSubDojoReturnTo('NOVICE_ACADEMY');
+          setHuangtingInitialFade(action.fadeMode);
+          setGameState('HUANGTING_DOJO');
+          break;
+        }
+      }
+    },
+    [handleLaunchChamberDrill, launchCampaignStage, openPalaceCloud, startPlay]
   );
 
   const singleChamberKey =
@@ -1371,6 +1459,8 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   synth.playClick();
+                  setSubDojoReturnTo('TITLE_MENU');
+                  setCampaignInitialChapter(undefined);
                   setGameState('CAMPAIGN_MAP');
                 }}
                 className="flex flex-col items-start justify-center gap-1 px-5 py-4 bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] active:scale-[0.99] text-white rounded-xl shadow-lg transition-all cursor-pointer text-left"
@@ -1386,7 +1476,10 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={() => startPlay(mode)}
+                onClick={() => {
+                  setPlayReturnTo('TITLE_MENU');
+                  startPlay(mode);
+                }}
                 className={`flex flex-col items-start justify-center gap-1 px-5 py-4 active:scale-[0.99] border rounded-xl transition-all cursor-pointer text-left ${
                   isWash
                     ? 'bg-[#F9F8F5]/95 hover:bg-[#FFFFFF] border-[#141413]/18 text-[#141413] shadow-sm'
@@ -1406,6 +1499,8 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   synth.playClick();
+                  setSubDojoReturnTo('TITLE_MENU');
+                  setDrillLaunchPreset({});
                   setGameState('DRILL_STUDIO');
                 }}
                 className={`flex flex-col items-start justify-center gap-1 px-5 py-4 active:scale-[0.99] border rounded-xl transition-all cursor-pointer text-left ${
@@ -1432,6 +1527,8 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   synth.playClick();
+                  setSubDojoReturnTo('TITLE_MENU');
+                  setShortCodeInitialTier(undefined);
                   setGameState('SHORT_CODE_DOJO');
                 }}
                 className={`flex items-center justify-between gap-3 px-4 py-3 active:scale-[0.99] border rounded-xl transition-all cursor-pointer text-left ${
@@ -1456,6 +1553,8 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   synth.playClick();
+                  setSubDojoReturnTo('TITLE_MENU');
+                  setHuangtingInitialFade(undefined);
                   setGameState('HUANGTING_DOJO');
                 }}
                 className={`flex items-center justify-between gap-3 px-4 py-3 active:scale-[0.99] border rounded-xl transition-all cursor-pointer text-left ${
@@ -1477,9 +1576,47 @@ export default function App() {
               </button>
             </div>
 
+            {/* Dedicated 14-Day Novice Cognitive & Motor-Memory Academy Entry */}
+            <button
+              type="button"
+              onClick={() => {
+                synth.playClick();
+                setGameState('NOVICE_ACADEMY');
+              }}
+              className={`mt-2.5 w-full max-w-2xl flex items-center justify-between gap-3 px-4 py-3 active:scale-[0.995] border rounded-xl transition-all cursor-pointer text-left wash-enter-soft ${
+                isWash
+                  ? 'bg-[#F9F8F5]/94 hover:bg-[#FFFFFF] border-[#141413]/24 text-[#141413] shadow-xs'
+                  : 'bg-gradient-to-r from-[#172133]/92 via-[#151D2B]/92 to-[#1D2434]/92 hover:border-[#D89B3C]/55 border-[#D89B3C]/34 text-[#F2EEE6]'
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${
+                    isWash
+                      ? 'bg-[#181817] border-[#181817] text-[#F8F7F3]'
+                      : 'bg-[#D89B3C]/14 border-[#D89B3C]/35 text-[#E8C57B]'
+                  }`}
+                >
+                  <GraduationCap className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-bold whitespace-nowrap">
+                    <span>{t('新手 14 天速成學院（從零到自由書寫）')}</span>
+                  </div>
+                  <div className="text-[11px] text-[var(--dojo-text-sub)] mt-0.5 truncate">
+                    {t('記憶規律 · 肌肉記憶心理特徵 · 7 大難點破壁 · 每日自練模組直達')}
+                  </div>
+                </div>
+              </div>
+              <div className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--dojo-ochre)] shrink-0 whitespace-nowrap">
+                <span>{t('進入課程')}</span>
+                <ArrowRight className="w-4 h-4" />
+              </div>
+            </button>
+
             {/* Homepage Tutorial & Interactive Memory Palace Example Strip */}
             <div
-              className={`mt-4 max-w-2xl rounded-xl border px-4 py-3 backdrop-blur-sm wash-enter-soft ${
+              className={`mt-3 max-w-2xl rounded-xl border px-4 py-3 backdrop-blur-sm wash-enter-soft ${
                 isWash
                   ? 'bg-[#F9F8F5]/88 border-[#141413]/14 text-[#141413]'
                   : 'bg-[#121824]/86 border-[#F2EEE6]/12 text-[#F2EEE6]'
@@ -1612,21 +1749,44 @@ export default function App() {
               onClose={() => setTutorialModal((prev) => ({ ...prev, open: false }))}
               onOpenCampaign={() => {
                 synth.playClick();
+                setSubDojoReturnTo('TITLE_MENU');
+                setCampaignInitialChapter(undefined);
                 setGameState('CAMPAIGN_MAP');
               }}
-              onStartFreePlay={() => startPlay(mode)}
+              onStartFreePlay={() => {
+                setPlayReturnTo('TITLE_MENU');
+                startPlay(mode);
+              }}
               onOpenDrillStudio={() => {
                 synth.playClick();
+                setSubDojoReturnTo('TITLE_MENU');
+                setDrillLaunchPreset({});
                 setGameState('DRILL_STUDIO');
               }}
               onOpenPalaceCloud={() => openPalaceCloud('TITLE_MENU')}
               onLaunchChamberDrill={(key) =>
                 handleLaunchChamberDrill(key, 'root', false, 'PALACE_CLOUD')
               }
+              onOpenNoviceAcademy={() => {
+                synth.playClick();
+                setGameState('NOVICE_ACADEMY');
+              }}
             />
           )}
           </div>
         </div>
+      )}
+
+      {/* ==================== 14-DAY NOVICE SPEED-MASTERY ACADEMY ==================== */}
+      {gameState === 'NOVICE_ACADEMY' && (
+        <NoviceAcademy
+          scriptMode={scriptMode}
+          onChangeScriptMode={(next) => handleChangeScriptMode(next)}
+          themeMode={themeMode}
+          onChangeThemeMode={handleChangeThemeMode}
+          onBack={() => setGameState('TITLE_MENU')}
+          onLaunchAction={handleNoviceAction}
+        />
       )}
 
       {/* ==================== 5-CHAPTER CAMPAIGN SCROLL MAP ==================== */}
@@ -1635,14 +1795,21 @@ export default function App() {
           progress={campaignProgress}
           scriptMode={scriptMode}
           initialChapterId={
+            campaignInitialChapter ??
             activeStage?.chapterId ??
             (chamberReturnTo === 'CAMPAIGN_MAP' && singleChamberKey ? 3 : undefined)
           }
           onChangeScriptMode={(next) => handleChangeScriptMode(next)}
           onChangeThemeMode={handleChangeThemeMode}
-          onBackToTitle={() => setGameState('TITLE_MENU')}
+          onBackToTitle={() => {
+            setCampaignInitialChapter(undefined);
+            setGameState(subDojoReturnTo);
+          }}
           onOpenPalaceCloud={() => openPalaceCloud('CAMPAIGN_MAP')}
-          onLaunchStage={launchCampaignStage}
+          onLaunchStage={(st) => {
+            setPlayReturnTo('TITLE_MENU');
+            launchCampaignStage(st);
+          }}
           onLaunchChamberDrill={(key, scope, blind) =>
             handleLaunchChamberDrill(key, scope, blind, 'CAMPAIGN_MAP')
           }
@@ -1683,7 +1850,10 @@ export default function App() {
           onChangeThemeMode={handleChangeThemeMode}
           muted={muted}
           onToggleMute={toggleMute}
-          onBack={() => setGameState('TITLE_MENU')}
+          onBack={() => setGameState(subDojoReturnTo)}
+          initialTab={drillLaunchPreset.tab}
+          initialCustomText={drillLaunchPreset.customText}
+          initialOpenPaste={drillLaunchPreset.openPaste}
         />
       )}
 
@@ -1697,7 +1867,8 @@ export default function App() {
           onChangeThemeMode={handleChangeThemeMode}
           muted={muted}
           onToggleMute={toggleMute}
-          onBack={() => setGameState('TITLE_MENU')}
+          onBack={() => setGameState(subDojoReturnTo)}
+          initialTier={shortCodeInitialTier}
         />
       )}
 
@@ -1710,12 +1881,14 @@ export default function App() {
           onChangeThemeMode={handleChangeThemeMode}
           muted={muted}
           onToggleMute={toggleMute}
-          onBack={() => setGameState('TITLE_MENU')}
+          onBack={() => setGameState(subDojoReturnTo)}
+          initialFadeMode={huangtingInitialFade}
         />
       )}
 
       {/* ==================== ACTIVE PLAY SHELL ==================== */}
       {gameState !== 'TITLE_MENU' &&
+        gameState !== 'NOVICE_ACADEMY' &&
         gameState !== 'CAMPAIGN_MAP' &&
         gameState !== 'PALACE_CLOUD' &&
         gameState !== 'DRILL_STUDIO' &&
@@ -2333,17 +2506,27 @@ export default function App() {
               {(activeStage || singleChamberKey || chamberXrayMode?.active) && (
                 <button
                   type="button"
-                  onClick={() => setGameState(activeStage ? 'CAMPAIGN_MAP' : chamberReturnTo)}
+                  onClick={() =>
+                    setGameState(
+                      playReturnTo === 'NOVICE_ACADEMY'
+                        ? 'NOVICE_ACADEMY'
+                        : activeStage
+                          ? 'CAMPAIGN_MAP'
+                          : chamberReturnTo
+                    )
+                  }
                   className="w-full py-2.5 text-xs font-medium bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] border border-[var(--dojo-border)] text-[var(--dojo-text-sub)] rounded-lg transition-colors cursor-pointer"
                 >
                   {t(
-                    activeStage
-                      ? '返回五重關卡卷軸'
-                      : chamberReturnTo === 'CAMPAIGN_MAP'
-                        ? chamberXrayMode?.active
-                          ? '返回五重關卡卷軸'
-                          : '返回第三關逐鍵巡禮'
-                        : '返回記憶宮殿雲圖'
+                    playReturnTo === 'NOVICE_ACADEMY'
+                      ? '返回新手速成學院'
+                      : activeStage
+                        ? '返回五重關卡卷軸'
+                        : chamberReturnTo === 'CAMPAIGN_MAP'
+                          ? chamberXrayMode?.active
+                            ? '返回五重關卡卷軸'
+                            : '返回第三關逐鍵巡禮'
+                          : '返回記憶宮殿雲圖'
                   )}
                 </button>
               )}
@@ -2384,10 +2567,10 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => setGameState('TITLE_MENU')}
+                onClick={() => setGameState(playReturnTo)}
                 className="w-full py-1.5 text-xs font-medium text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text-bright)] transition-colors cursor-pointer"
               >
-                {t('返回主畫面')}
+                {t(playReturnTo === 'NOVICE_ACADEMY' ? '返回速成學院' : '返回主畫面')}
               </button>
             </div>
           </div>
@@ -2638,10 +2821,12 @@ export default function App() {
 
                     <button
                       type="button"
-                      onClick={() => setGameState('CAMPAIGN_MAP')}
+                      onClick={() =>
+                        setGameState(playReturnTo === 'NOVICE_ACADEMY' ? 'NOVICE_ACADEMY' : 'CAMPAIGN_MAP')
+                      }
                       className="py-2.5 px-3 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors whitespace-nowrap cursor-pointer"
                     >
-                      {t('返回卷軸地圖')}
+                      {t(playReturnTo === 'NOVICE_ACADEMY' ? '返回速成學院' : '返回卷軸地圖')}
                     </button>
                   </div>
                 );
@@ -2771,7 +2956,13 @@ export default function App() {
                       onClick={() => setGameState(chamberReturnTo)}
                       className="py-2.5 px-3 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors whitespace-nowrap cursor-pointer"
                     >
-                      {t(chamberReturnTo === 'CAMPAIGN_MAP' ? '返回第三關逐鍵' : '返回雲圖')}
+                      {t(
+                        chamberReturnTo === 'CAMPAIGN_MAP'
+                          ? '返回第三關逐鍵'
+                          : chamberReturnTo === 'NOVICE_ACADEMY'
+                            ? '返回速成學院'
+                            : '返回雲圖'
+                      )}
                     </button>
                   </div>
                 );
@@ -2837,10 +3028,10 @@ export default function App() {
 
                     <button
                       type="button"
-                      onClick={() => setGameState('TITLE_MENU')}
+                      onClick={() => setGameState(playReturnTo)}
                       className="py-2.5 px-3 text-xs font-medium text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] transition-colors whitespace-nowrap cursor-pointer"
                     >
-                      {t('主畫面')}
+                      {t(playReturnTo === 'NOVICE_ACADEMY' ? '返回速成學院' : '主畫面')}
                     </button>
                   </div>
                 );

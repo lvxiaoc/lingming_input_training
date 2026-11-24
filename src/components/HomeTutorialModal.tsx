@@ -146,6 +146,7 @@ interface HomeTutorialModalProps {
   onOpenDrillStudio: () => void;
   onOpenPalaceCloud: () => void;
   onLaunchChamberDrill: (key: string) => void;
+  onOpenNoviceAcademy?: () => void;
 }
 
 export const HomeTutorialModal: React.FC<HomeTutorialModalProps> = ({
@@ -158,6 +159,7 @@ export const HomeTutorialModal: React.FC<HomeTutorialModalProps> = ({
   onOpenDrillStudio,
   onOpenPalaceCloud,
   onLaunchChamberDrill,
+  onOpenNoviceAcademy,
 }) => {
   const t = useUiText();
   const theme = useThemeMode();
@@ -756,6 +758,45 @@ export const HomeTutorialModal: React.FC<HomeTutorialModalProps> = ({
                   )}
                 </div>
               </div>
+
+              {onOpenNoviceAcademy && (
+                <div
+                  className={`rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    isWash
+                      ? 'bg-[#EFECE4]/75 border-[#141413]/14'
+                      : 'bg-[#151E2E] border-[#D89B3C]/28'
+                  }`}
+                >
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-bold flex items-center gap-2">
+                      <Compass className="w-4 h-4 text-[var(--dojo-ochre)] shrink-0" />
+                      <span>{t('新手 14 天速成學院（從零到自由書寫）')}</span>
+                    </div>
+                    <p
+                      className={`text-xs ${
+                        isWash ? 'text-[#4A4A46]' : 'text-[#AAB3C2]'
+                      }`}
+                    >
+                      {t('系統解析記憶強化規律、肌肉記憶形成、7 大難點破壁法與每日可一鍵跳轉的自練模組指引。')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenNoviceAcademy();
+                    }}
+                    className={`inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                      isWash
+                        ? 'bg-[#181817] hover:bg-[#2C2C2A] text-[#F8F7F3]'
+                        : 'bg-[#C93E2D] hover:bg-[#DC4B39] text-white'
+                    }`}
+                  >
+                    <span>{t('進入 14 天速成課')}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

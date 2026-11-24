@@ -42,7 +42,7 @@ import {
 import { ColorSplitGlyph, getRootColor, RadicalSymbol } from './ColorSplitGlyph';
 import { KeystrokeCloudToggle, KeystrokePalaceCloud } from './KeystrokePalaceCloud';
 
-type ShortCodeTier = 'one' | 'core50' | 'two' | 'three' | 'all';
+export type ShortCodeTier = 'one' | 'core50' | 'two' | 'three' | 'all';
 
 const TIER_OPTIONS: Array<{ id: ShortCodeTier; label: string; desc: string }> = [
   { id: 'one', label: '一碼直上 (5)', desc: 'A 了 · E 的 · I 是 · O 我 · U 不（最高頻 5 字一鍵上屏）' },
@@ -76,6 +76,7 @@ interface ShortCodeDojoProps {
   muted: boolean;
   onToggleMute: () => void;
   onBack: () => void;
+  initialTier?: ShortCodeTier;
 }
 
 export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
@@ -87,12 +88,13 @@ export const ShortCodeDojo: React.FC<ShortCodeDojoProps> = ({
   muted,
   onToggleMute,
   onBack,
+  initialTier,
 }) => {
   const t = useUiText();
   const themeMode = useThemeMode();
   const isWash = themeMode === 'wash';
 
-  const [tier, setTier] = useState<ShortCodeTier>('core50');
+  const [tier, setTier] = useState<ShortCodeTier>(initialTier ?? 'core50');
   const [rightTab, setRightTab] = useState<'inspect' | 'matrix'>('inspect');
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [hintMode, setHintMode] = useState<'adaptive' | 'always' | 'blind'>('adaptive');

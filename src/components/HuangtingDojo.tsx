@@ -51,7 +51,7 @@ import { CharOverrideModal } from './CharOverrideModal';
 import { KeystrokeCloudToggle, KeystrokePalaceCloud } from './KeystrokePalaceCloud';
 
 type ScriptureScript = 'trad' | 'simp';
-type FadeMode = 'adaptive' | 'always' | 'blind';
+export type FadeMode = 'adaptive' | 'always' | 'blind';
 type HuangtingViewMode = 'depth' | 'desk';
 
 interface HuangtingLogStore {
@@ -197,6 +197,7 @@ interface HuangtingDojoProps {
   muted: boolean;
   onToggleMute: () => void;
   onBack: () => void;
+  initialFadeMode?: FadeMode;
 }
 
 export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
@@ -207,6 +208,7 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
   muted,
   onToggleMute,
   onBack,
+  initialFadeMode,
 }) => {
   const t = useUiText();
   const themeMode = useThemeMode();
@@ -220,7 +222,7 @@ export const HuangtingDojo: React.FC<HuangtingDojoProps> = ({
   const [script, setScript] = useState<ScriptureScript>(defaultScript);
   const [viewMode, setViewMode] = useState<HuangtingViewMode>(() => loadViewMode());
   const [chapterDrawerOpen, setChapterDrawerOpen] = useState(false);
-  const [fadeMode, setFadeMode] = useState<FadeMode>('adaptive');
+  const [fadeMode, setFadeMode] = useState<FadeMode>(initialFadeMode ?? 'adaptive');
   const [hesitationSec, setHesitationSec] = useState<number>(() => loadHesitationSec());
   const [allowShortCode, setAllowShortCode] = useState<boolean>(true);
   const [weakDrillChars, setWeakDrillChars] = useState<string[] | null>(null);

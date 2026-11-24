@@ -47,7 +47,7 @@ import {
 } from '../data/keystrokeCloud';
 import { KeystrokeCloudToggle, KeystrokePalaceCloud } from './KeystrokePalaceCloud';
 
-type DrillTab = 'passage' | 'hardsplit' | 'slowhell' | 'bottleneck';
+export type DrillTab = 'passage' | 'hardsplit' | 'slowhell' | 'bottleneck';
 
 interface ExtremeDrillStudioProps {
   mastery: SchemeMasteryStore;
@@ -59,6 +59,9 @@ interface ExtremeDrillStudioProps {
   muted: boolean;
   onToggleMute: () => void;
   onBack: () => void;
+  initialTab?: DrillTab;
+  initialCustomText?: string;
+  initialOpenPaste?: boolean;
 }
 
 interface CompletedMarker {
@@ -82,19 +85,28 @@ export const ExtremeDrillStudio: React.FC<ExtremeDrillStudioProps> = ({
   muted,
   onToggleMute,
   onBack,
+  initialTab,
+  initialCustomText,
+  initialOpenPaste,
 }) => {
   const t = useUiText();
   const isWash = themeMode === 'wash';
   const rootColors = isWash ? WASH_ROOT_COLORS : NIGHT_ROOT_COLORS;
 
-  const [tab, setTab] = useState<DrillTab>('passage');
+  const [tab, setTab] = useState<DrillTab>(initialTab ?? 'passage');
   const [thresholdMs, setThresholdMs] = useState<number>(1500);
   const [passageIdx, setPassageIdx] = useState<number>(0);
-  const [customText, setCustomText] = useState<string>('');
-  const [usingCustomText, setUsingCustomText] = useState<boolean>(false);
-  const [pasteOpen, setPasteOpen] = useState<boolean>(false);
-  const [pasteDraft, setPasteDraft] = useState<string>('');
-  const [bottleneckKey, setBottleneckKey] = useState<string | null>(null);
+  const [customText, setCustomText] = useState<string>(initialCustomText ?? '');
+  const [usingCustomText, setUsingCustomText] = useState<boolean>(
+    Boolean(initialCustomText && initialCustomText.trim().length > 0)
+  );
+  const [pasteOpen, setPasteOpen] = useState<boolean>(Boolean(initialOpenPaste));
+  const [pasteDraft, setPasteDraft] = useState<string>(initialCustomText ?? '');
+  const [bottleneckKey, setBottleneckKey] = useState<string | null>(() =>
+    initialTab === 'bottleneck'
+      ? getWeakestKeys(LINGMING_SCHEME, mastery, 3, scriptMode)[0]?.key ?? 's'
+      : null
+  );
   const [deckVersion, setDeckVersion] = useState<number>(1);
 
   // Active typing state
