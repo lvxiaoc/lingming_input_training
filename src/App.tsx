@@ -83,6 +83,8 @@ import { MemoryPalaceCloud } from './components/MemoryPalaceCloud';
 import { DrillTab, ExtremeDrillStudio } from './components/ExtremeDrillStudio';
 import { HuangtingDojo } from './components/HuangtingDojo';
 import { DecompositionLab, DecompositionTab } from './components/DecompositionLab';
+import { PalaceCloudTrainer } from './components/PalaceCloudTrainer';
+import type { PalaceCloudTrainMode, PalaceWalkOrder } from './data/palaceCloudTraining';
 import { FirebaseErrorBoundary } from './components/FirebaseErrorBoundary';
 import { KeystrokeCloudToggle, KeystrokePalaceCloud } from './components/KeystrokePalaceCloud';
 import { RhythmMetronome } from './components/RhythmMetronome';
@@ -92,6 +94,7 @@ import { speech } from './audio/speech';
 type GameState =
   | 'TITLE_MENU'
   | 'PALACE_CLOUD'
+  | 'PALACE_TRAINER'
   | 'DECOMPOSITION_LAB'
   | 'DRILL_STUDIO'
   | 'HUANGTING_DOJO'
@@ -137,6 +140,13 @@ export default function App() {
     'TITLE_MENU'
   );
   const [decompositionTab, setDecompositionTab] = useState<DecompositionTab>('rules');
+  const [palaceMapInitialView, setPalaceMapInitialView] = useState<'keyboard' | 'atlas'>('keyboard');
+  const [palaceTrainerConfig, setPalaceTrainerConfig] = useState<{
+    key: string;
+    mode: PalaceCloudTrainMode;
+    order: PalaceWalkOrder;
+    returnTo: 'TITLE_MENU' | 'PALACE_CLOUD';
+  }>({ key: 'q', mode: 'template', order: 'sequential', returnTo: 'TITLE_MENU' });
   const [drillLaunchPreset, setDrillLaunchPreset] = useState<{
     tab?: DrillTab;
     customText?: string;
@@ -481,13 +491,31 @@ export default function App() {
   };
 
   const openPalaceCloud = useCallback(
-    (from: 'TITLE_MENU' | 'PLAYING') => {
+    (from: 'TITLE_MENU' | 'PLAYING', viewMode: 'keyboard' | 'atlas' = 'keyboard') => {
       synth.playClick();
       if (!activeScheme.isLingming) {
         switchScheme(BUILTIN_SCHEMES[0]);
       }
+      setPalaceMapInitialView(viewMode);
       setReturnStateFromPalace(from);
       setGameState('PALACE_CLOUD');
+    },
+    [activeScheme.isLingming, switchScheme]
+  );
+
+  const openPalaceTrainer = useCallback(
+    (
+      chamberKey: string,
+      trainerMode: PalaceCloudTrainMode,
+      from: 'TITLE_MENU' | 'PALACE_CLOUD',
+      order: PalaceWalkOrder = 'sequential'
+    ) => {
+      synth.playClick();
+      if (!activeScheme.isLingming) {
+        switchScheme(BUILTIN_SCHEMES[0]);
+      }
+      setPalaceTrainerConfig({ key: chamberKey, mode: trainerMode, order, returnTo: from });
+      setGameState('PALACE_TRAINER');
     },
     [activeScheme.isLingming, switchScheme]
   );
@@ -1214,7 +1242,37 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => openPalaceCloud('TITLE_MENU')}
+                        onClick={() => openPalaceTrainer('q', 'template', 'TITLE_MENU', 'sequential')}
+                        title={t('沿字根雲圖結構逐根移動焦點打字，確立各字根相對於主根的大致方位')}
+                        className="inline-flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-ochre)]/45 bg-[var(--dojo-ochre-wash)] hover:opacity-90 text-[var(--dojo-ochre)] transition-opacity whitespace-nowrap cursor-pointer"
+                      >
+                        <Compass className="w-3.5 h-3.5 shrink-0" />
+                        <span>{t('雲圖循序打字')}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openPalaceTrainer('q', 'variant_cloud', 'TITLE_MENU', 'sequential')}
+                        title={t('維持原雲圖空間排布，隨機替換包含分支字根與變形根的漢字並高亮筆畫')}
+                        className="inline-flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-pine)]/45 bg-[var(--dojo-pine-wash)] hover:opacity-90 text-[var(--dojo-pine-text)] transition-opacity whitespace-nowrap cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                        <span>{t('萬象變根漢字雲圖')}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openPalaceTrainer('q', 'template', 'TITLE_MENU', 'cross_key_jump')}
+                        title={t('高難度進階：跨 20 個宮殿隨機跳躍打亂字根，切換對應宮殿雲圖測試方位直覺')}
+                        className="col-span-2 inline-flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-crimson)]/40 bg-[var(--dojo-crimson-wash)] hover:opacity-90 text-[var(--dojo-crimson-text)] transition-opacity whitespace-nowrap cursor-pointer"
+                      >
+                        <Target className="w-3.5 h-3.5 shrink-0" />
+                        <span>{t('跨鍵跳躍 · 隨機亂序雲圖測試')}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openPalaceCloud('TITLE_MENU', 'keyboard')}
                         className="inline-flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text)] transition-colors whitespace-nowrap cursor-pointer"
                       >
                         <Compass className="w-3.5 h-3.5 text-[var(--dojo-ochre)] shrink-0" />
@@ -1223,30 +1281,42 @@ export default function App() {
 
                       <button
                         type="button"
-                        onClick={() => handleLaunchChamberXrayDrill(null, false, 'TITLE_MENU')}
-                        className="inline-flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text)] transition-colors whitespace-nowrap cursor-pointer"
+                        onClick={() => openPalaceCloud('TITLE_MENU', 'atlas')}
+                        title={t('以十指上下姿勢鏈與動作感覺圖示記憶 26 鍵位置')}
+                        className="inline-flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-pine)]/40 bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text)] transition-colors whitespace-nowrap cursor-pointer"
                       >
-                        <ScanSearch className="w-3.5 h-3.5 text-[var(--dojo-pine)] shrink-0" />
-                        <span>{t('字中辨根')}</span>
+                        <Sparkles className="w-3.5 h-3.5 text-[var(--dojo-pine)] shrink-0" />
+                        <span>{t('指尖動作圖示')}</span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => startPlay('weakkey', null, 'root')}
-                        className="inline-flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text)] transition-colors whitespace-nowrap cursor-pointer"
-                      >
-                        <Target className="w-3.5 h-3.5 text-[var(--dojo-crimson)] shrink-0" />
-                        <span>{t('弱點字根聚焦')}</span>
-                      </button>
+                      <div className="col-span-2 grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleLaunchChamberXrayDrill(null, false, 'TITLE_MENU')}
+                          className="inline-flex items-center justify-center gap-1.5 px-2.5 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text)] transition-colors whitespace-nowrap cursor-pointer"
+                        >
+                          <ScanSearch className="w-3.5 h-3.5 text-[var(--dojo-pine)] shrink-0" />
+                          <span>{t('字中辨根')}</span>
+                        </button>
 
-                      <button
-                        type="button"
-                        onClick={() => startPlay('reflex', null, 'char')}
-                        className="inline-flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text)] transition-colors whitespace-nowrap cursor-pointer"
-                      >
-                        <Layers className="w-3.5 h-3.5 text-[var(--dojo-text-sub)] shrink-0" />
-                        <span>{t('整字自分割練習')}</span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => startPlay('weakkey', null, 'root')}
+                          className="inline-flex items-center justify-center gap-1.5 px-2.5 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text)] transition-colors whitespace-nowrap cursor-pointer"
+                        >
+                          <Target className="w-3.5 h-3.5 text-[var(--dojo-crimson)] shrink-0" />
+                          <span>{t('弱點字根聚焦')}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => startPlay('reflex', null, 'char')}
+                          className="inline-flex items-center justify-center gap-1.5 px-2.5 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text)] transition-colors whitespace-nowrap cursor-pointer"
+                        >
+                          <Layers className="w-3.5 h-3.5 text-[var(--dojo-text-sub)] shrink-0" />
+                          <span>{t('整字自分割練習')}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -1405,6 +1475,7 @@ export default function App() {
           onChangeThemeMode={handleChangeThemeMode}
           speechEnabled={speechEnabled}
           onToggleSpeech={toggleSpeech}
+          initialMapView={palaceMapInitialView}
           onBack={() => setGameState(returnStateFromPalace)}
           onLaunchChamberDrill={(key, scope, blind) =>
             handleLaunchChamberDrill(key, scope, blind, 'PALACE_CLOUD')
@@ -1412,6 +1483,27 @@ export default function App() {
           onLaunchChamberXrayDrill={(key, blind) =>
             handleLaunchChamberXrayDrill(key, blind, 'PALACE_CLOUD')
           }
+          onLaunchCloudTrainer={(key, trainerMode) =>
+            openPalaceTrainer(key, trainerMode, 'PALACE_CLOUD')
+          }
+        />
+      )}
+
+      {/* ==================== VISUAL FOCUS CLOUD TRAINER (TEMPLATE & VARIANT-HANZI CLOUD) ==================== */}
+      {gameState === 'PALACE_TRAINER' && (
+        <PalaceCloudTrainer
+          initialKey={palaceTrainerConfig.key}
+          initialMode={palaceTrainerConfig.mode}
+          initialOrder={palaceTrainerConfig.order}
+          scriptMode={scriptMode}
+          onChangeScriptMode={(next) => handleChangeScriptMode(next)}
+          themeMode={themeMode}
+          onChangeThemeMode={handleChangeThemeMode}
+          muted={muted}
+          onToggleMute={toggleMute}
+          speechEnabled={speechEnabled}
+          onToggleSpeech={toggleSpeech}
+          onBack={() => setGameState(palaceTrainerConfig.returnTo)}
         />
       )}
 
@@ -1450,6 +1542,7 @@ export default function App() {
       {gameState !== 'TITLE_MENU' &&
         gameState !== 'DECOMPOSITION_LAB' &&
         gameState !== 'PALACE_CLOUD' &&
+        gameState !== 'PALACE_TRAINER' &&
         gameState !== 'DRILL_STUDIO' &&
         gameState !== 'HUANGTING_DOJO' && (
         <div className="relative z-10 w-full h-full flex flex-col">

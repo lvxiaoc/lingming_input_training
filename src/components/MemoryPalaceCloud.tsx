@@ -13,6 +13,8 @@ import {
   X,
   Route,
   ScanSearch,
+  Compass,
+  Sparkles,
 } from 'lucide-react';
 import {
   getLingmingRadicalScript,
@@ -61,6 +63,8 @@ import {
 } from '../data/scriptFilter';
 import { uiMnemonic, useUiScript, useUiText } from '../data/uiScript';
 import { THEME_OPTIONS, ThemeMode, useThemeMode } from '../data/theme';
+import type { PalaceCloudTrainMode } from '../data/palaceCloudTraining';
+import { EmbodiedActionAtlas } from './EmbodiedActionAtlas';
 
 interface MemoryPalaceCloudProps {
   mastery: SchemeMasteryStore;
@@ -77,6 +81,8 @@ interface MemoryPalaceCloudProps {
     blind?: boolean
   ) => void;
   onLaunchChamberXrayDrill?: (chamberKey: string | null, blind?: boolean) => void;
+  onLaunchCloudTrainer?: (chamberKey: string, mode: PalaceCloudTrainMode) => void;
+  initialMapView?: 'keyboard' | 'atlas';
 }
 
 const VOWEL_POSTER_META: Record<string, { shortWord: string; note: string }> = {
@@ -137,6 +143,8 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
   onBack,
   onLaunchChamberDrill,
   onLaunchChamberXrayDrill,
+  onLaunchCloudTrainer,
+  initialMapView,
 }) => {
   const t = useUiText();
   const uiScript = useUiScript();
@@ -144,6 +152,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
   const isWash = themeMode === 'wash';
   const freqPalette = isWash ? WASH_FREQUENCY_TIER_COLORS : FREQUENCY_TIER_COLORS;
   const pdfPalette = isWash ? WASH_PDF_TIER_COLORS : PDF_TIER_COLORS;
+  const [mapView, setMapView] = useState<'keyboard' | 'atlas'>(initialMapView ?? 'keyboard');
   const [selectedKey, setSelectedKey] = useState<string>('q');
   const [selectedNode, setSelectedNode] = useState<StrokeCloudSelection | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -388,29 +397,77 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
           if (hoveredKeyInfo) setHoveredKeyInfo(null);
         }}
       >
-        {/* Section 1: Spatial 25-Key Memory Palace Map */}
+        {/* Section 1: Spatial 25-Key Memory Palace Map OR 10-Finger Embodied Action Atlas */}
         <section aria-label={t('靈明25鍵空間記憶宮殿')}>
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2 text-xs text-[var(--dojo-text-sub)]">
-            <div className="flex flex-wrap items-center gap-4">
-              <span className="inline-flex items-center gap-1.5">
-                <span className={`w-2.5 h-1 rounded-sm ${isWash ? 'bg-[#181817]' : 'bg-[#38A885]'}`} />
-                <span>{t('A區左手大碼')}</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className={`w-2.5 h-1 rounded-sm ${isWash ? 'bg-[#5A5A56]' : 'bg-[#4F86C6]'}`} />
-                <span>{t('A區右手大碼')}</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-2.5 h-1 rounded-sm bg-[var(--dojo-ochre)]" />
-                <span>{t('B區元音韻腹（E的 U不 I是 O我 A了）')}</span>
-              </span>
-              <span className="text-[var(--dojo-text-muted)]">{t('Z 鍵不用（z/zh→V · q→K · 零聲母→J）')}</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 text-xs text-[var(--dojo-text-sub)]">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Segmented Map Switcher */}
+              <div className="inline-flex items-center p-0.5 rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    synth.playClick();
+                    setMapView('keyboard');
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                    mapView === 'keyboard'
+                      ? 'bg-[var(--dojo-surface)] text-[var(--dojo-text-bright)] shadow-xs'
+                      : 'text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text)]'
+                  }`}
+                >
+                  <Compass className="w-3.5 h-3.5 text-[var(--dojo-ochre)]" />
+                  <span>{t('25 鍵宮殿陣列')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    synth.playClick();
+                    setHoveredKeyInfo(null);
+                    setMapView('atlas');
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                    mapView === 'atlas'
+                      ? 'bg-[var(--dojo-surface)] text-[var(--dojo-text-bright)] shadow-xs'
+                      : 'text-[var(--dojo-text-muted)] hover:text-[var(--dojo-text)]'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-[var(--dojo-pine)]" />
+                  <span>{t('指尖動作圖示')}</span>
+                </button>
+              </div>
+
+              {mapView === 'keyboard' && (
+                <>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className={`w-2.5 h-1 rounded-sm ${isWash ? 'bg-[#181817]' : 'bg-[#38A885]'}`} />
+                    <span>{t('A區左手大碼')}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className={`w-2.5 h-1 rounded-sm ${isWash ? 'bg-[#5A5A56]' : 'bg-[#4F86C6]'}`} />
+                    <span>{t('A區右手大碼')}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-2.5 h-1 rounded-sm bg-[var(--dojo-ochre)]" />
+                    <span>{t('B區元音韻腹（E的 U不 I是 O我 A了）')}</span>
+                  </span>
+                  <span className="text-[var(--dojo-text-muted)]">{t('Z 鍵不用（z/zh→V · q→K · 零聲母→J）')}</span>
+                </>
+              )}
             </div>
             <span className="font-mono-tabular text-[var(--dojo-text-muted)]">
-              {t('懸停鍵位預覽筆畫路徑 · 敲擊實體鍵切換宮殿')}
+              {mapView === 'atlas'
+                ? t('點擊任意指腹鍵位或動作鏈條，下方宮殿隨即聯動')
+                : t('懸停鍵位預覽筆畫路徑 · 敲擊實體鍵切換宮殿')}
             </span>
           </div>
 
+          {mapView === 'atlas' ? (
+            <EmbodiedActionAtlas
+              selectedKey={selectedKey}
+              onSelectKey={(k) => setSelectedKey(k)}
+              onLaunchCloudTrainer={onLaunchCloudTrainer}
+            />
+          ) : (
           <div className="flex flex-col gap-1.5">
             {KEYBOARD_ROWS.map((row, rIdx) => (
               <div
@@ -621,6 +678,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
               </div>
             ))}
           </div>
+          )}
         </section>
 
         {/* Section 2: Frequency-Ordered Stroke-Aligned Mural Palace */}
@@ -1106,6 +1164,38 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                {onLaunchCloudTrainer && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        synth.playClick();
+                        onLaunchCloudTrainer(activeChamber.key, 'template');
+                      }}
+                      title={t('沿著此鍵記憶宮殿雲圖逐根移動視覺焦點打字，鞏固相對於主根的空間方位')}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[var(--dojo-ochre-wash)] hover:opacity-90 border border-[var(--dojo-ochre)]/50 text-[var(--dojo-ochre)] rounded-lg transition-opacity whitespace-nowrap cursor-pointer"
+                    >
+                      <Compass className="w-3.5 h-3.5" />
+                      <span>
+                        {t('雲圖循序打字')} {activeChamber.key.toUpperCase()}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        synth.playClick();
+                        onLaunchCloudTrainer(activeChamber.key, 'variant_cloud');
+                      }}
+                      title={t('保留同樣雲圖座標形狀，將分支節點換成隨機包含該字根與變形根的漢字並高亮其筆畫')}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[var(--dojo-pine)] hover:opacity-90 text-white rounded-lg transition-opacity whitespace-nowrap cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>
+                        {t('萬象變根雲圖')} {activeChamber.key.toUpperCase()}
+                      </span>
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={() => onLaunchChamberDrill(activeChamber.key, 'root', false)}
@@ -1127,7 +1217,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                         onLaunchChamberXrayDrill(activeChamber.key, false);
                       }}
                       title={t('每次隨機從漢字庫抽取不同承載漢字，僅點亮本宮殿字根真實筆畫以強化實戰形感')}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[var(--dojo-pine)] hover:opacity-90 text-white rounded-lg transition-opacity whitespace-nowrap cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[var(--dojo-surface-2)] hover:opacity-90 border border-[var(--dojo-pine)]/45 text-[var(--dojo-pine-text)] rounded-lg transition-opacity whitespace-nowrap cursor-pointer"
                     >
                       <ScanSearch className="w-3.5 h-3.5" />
                       <span>
