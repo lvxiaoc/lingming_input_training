@@ -14,6 +14,7 @@ import {
   Route,
   ScanSearch,
   Compass,
+  Crosshair,
   Sparkles,
 } from 'lucide-react';
 import {
@@ -156,6 +157,7 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
   const [selectedKey, setSelectedKey] = useState<string>('q');
   const [selectedNode, setSelectedNode] = useState<StrokeCloudSelection | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [centerFocus, setCenterFocus] = useState(true);
   const [showStrokeFlow, setShowStrokeFlow] = useState(false);
   const [overrides, setOverrides] = useState<PalaceOverridesMap>(() => loadPalaceOverrides());
   const [jsonPanelOpen, setJsonPanelOpen] = useState(false);
@@ -708,6 +710,23 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
                     type="button"
                     onClick={() => {
                       synth.playClick();
+                      setCenterFocus((v) => !v);
+                    }}
+                    disabled={editMode}
+                    title={t(centerFocus ? '選中字根時自動保持居中並開啟呼吸節奏（點擊切回全景）' : '點擊開啟選中字根居中呼吸節奏')}
+                    className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border transition-colors whitespace-nowrap cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                      centerFocus && !editMode
+                        ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/55 text-[var(--dojo-pine-text)]'
+                        : 'bg-[var(--dojo-surface)] hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
+                    }`}
+                  >
+                    <Crosshair className="w-3 h-3" />
+                    <span>{t('居中呼吸')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      synth.playClick();
                       setShowStrokeFlow((v) => !v);
                     }}
                     title={t('顯示或隱藏主根筆畫關聯路徑')}
@@ -785,13 +804,16 @@ export const MemoryPalaceCloud: React.FC<MemoryPalaceCloudProps> = ({
 
             <div
               key={activeChamber.key}
-              className="flex-1 min-h-[240px] flex items-center justify-center my-1 wash-enter"
+              className={`flex-1 min-h-[240px] flex items-center justify-center my-1 wash-enter ${
+                centerFocus && !editMode && selectedNode ? 'overflow-hidden rounded-lg' : ''
+              }`}
             >
               <StrokeCloudStage
                 chamberKey={activeChamber.key}
                 variant="palace"
                 scriptMode={scriptMode}
                 showStrokeFlow={showStrokeFlow}
+                centerSelected={centerFocus && !editMode}
                 selectedChar={selectedNode?.char || null}
                 selectedNodeId={selectedNode?.id || null}
                 overrides={overrides}

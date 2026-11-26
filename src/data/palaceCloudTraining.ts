@@ -210,15 +210,83 @@ function computeAzimuthLabel(
   return '右上方';
 }
 
+export interface ResolvedPdfRadicalInfo {
+  ma: string;
+  effectiveParentChar: string;
+  hasValidParent: boolean;
+  directCanonical: ReturnType<typeof LINGMING_ROOT_MAP.get>;
+}
+
+/**
+ * Authoritatively resolves a PDF radical node's Lingming code and parent radical:
+ * 1. Non-PUA standard radicals always prefer LINGMING_ROOT_MAP (fixing 11 PDF nodes
+ *    whose empty-pinyin extraction accidentally inherited the previous node's code).
+ * 2. PUA nodes explicitly marked "無讀音取o" resolve to `<chamberKey>o`.
+ * 3. PUA nodes only keep `parentChar` when `parentChar`'s official code genuinely matches
+ *    the node's code and the node isn't an independent PUA radical with its own reading
+ *    (preventing e.g. s_1  [ska] from falsely inheriting parentChar "也" [se] and showing "她").
+ */
+export function resolvePdfRadicalInfo(
+  n: PdfRadicalGlyph,
+  chamberKey: string,
+  fallbackMa = ''
+): ResolvedPdfRadicalInfo {
+  const key = chamberKey.toLowerCase();
+  const directCanonical = !n.isPua ? LINGMING_ROOT_MAP.get(n.displayChar) : undefined;
+  const rawParentCanonical = n.parentChar ? LINGMING_ROOT_MAP.get(n.parentChar) : undefined;
+
+  let ma: string;
+  if (directCanonical?.ma) {
+    ma = directCanonical.ma;
+  } else if (n.pinyin.includes('無讀音取o')) {
+    ma = `${key}o`;
+  } else {
+    ma = n.ma || rawParentCanonical?.ma || fallbackMa;
+  }
+
+  if (!n.isPua) {
+    return {
+      ma,
+      effectiveParentChar: n.parentChar,
+      hasValidParent: Boolean(n.parentChar),
+      directCanonical,
+    };
+  }
+
+  const parentMatchesCode = Boolean(rawParentCanonical && rawParentCanonical.ma === ma);
+  const isNoSoundRule = n.pinyin.includes('無讀音取o');
+  const isMergedOrVariant =
+    n.isVariant ||
+    n.pinyin === '' ||
+    n.pinyin.includes('歸併') ||
+    n.pinyin.includes('繁體') ||
+    n.pinyin.includes('簡體');
+
+  const hasValidParent =
+    parentMatchesCode &&
+    isMergedOrVariant &&
+    (!isNoSoundRule || (n.isVariant && rawParentCanonical?.ma === `${key}o`));
+
+  return {
+    ma,
+    effectiveParentChar: hasValidParent ? n.parentChar : '',
+    hasValidParent,
+    directCanonical: undefined,
+  };
+}
+
 function resolveNodeScript(
   displayChar: string,
-  parentChar: string,
+  effectiveParentChar: string,
   chamberKey: string,
   ma: string
 ): CharScript {
   const ds = getLingmingRadicalScript(displayChar, chamberKey, ma);
   if (ds !== 'common') return ds;
-  return getLingmingRadicalScript(parentChar, chamberKey, ma);
+  if (effectiveParentChar) {
+    return getLingmingRadicalScript(effectiveParentChar, chamberKey, ma);
+  }
+  return 'common';
 }
 
 export function buildCloudWalkSequence(
@@ -237,7 +305,7 @@ export function buildCloudWalkSequence(
   const anchorCx = mon.cx + (mOv?.dx ?? 0);
   const anchorCy = mon.cy + (mOv?.dy ?? 0);
   const monCanonical = LINGMING_ROOT_MAP.get(mon.displayChar);
-  const monMa = mon.ma || monCanonical?.ma || `${key}o`;
+  const monMa = monCanonical?.ma || mon.ma || `${key}o`;
 
   const steps: CloudWalkStep[] = [];
   if (includeMonument) {
@@ -271,9 +339,13 @@ export function buildCloudWalkSequence(
     const effCx = n.cx + (ov?.dx ?? 0);
     const effCy = n.cy + (ov?.dy ?? 0);
     const effR = n.r * (ov?.scale ?? 1);
-    const canonical = LINGMING_ROOT_MAP.get(n.displayChar) || LINGMING_ROOT_MAP.get(n.parentChar);
-    const ma = n.ma || canonical?.ma || monMa;
-    const radScript = resolveNodeScript(n.displayChar, n.parentChar, key, ma);
+    const resolved = resolvePdfRadicalInfo(n, key, monMa);
+    const ma = resolved.ma;
+    const effectiveParentChar = resolved.effectiveParentChar;
+    const canonical =
+      resolved.directCanonical ||
+      (effectiveParentChar ? LINGMING_ROOT_MAP.get(effectiveParentChar) : undefined);
+    const radScript = resolveNodeScript(n.displayChar, effectiveParentChar, key, ma);
     const inScript = matchesScript(radScript, scriptMode);
 
     nodeSteps.push({
@@ -283,7 +355,7 @@ export function buildCloudWalkSequence(
       isMonument: false,
       char: n.displayChar,
       rawChar: n.rawChar,
-      parentChar: n.parentChar,
+      parentChar: effectiveParentChar,
       ma,
       isXiao: ma.length === 2,
       tier: n.tier,
@@ -295,8 +367,8 @@ export function buildCloudWalkSequence(
       r: effR,
       pinyin: n.pinyin,
       note:
-        n.isVariant && n.parentChar !== n.displayChar
-          ? `「${n.parentChar}」變形根`
+        n.isVariant && effectiveParentChar && effectiveParentChar !== n.displayChar
+          ? `「${effectiveParentChar}」變形根`
           : canonical?.note || (ma.length === 2 ? '小根 2 碼' : '大根 3 碼'),
       inScript,
       azimuthLabel: computeAzimuthLabel(effCx, effCy, anchorCx, anchorCy, false),
@@ -509,7 +581,8 @@ function getCarrierIndex(): CarrierBucket {
   for (const d of ALL_DRILL_CHARS) {
     const xray = XRAY_HANZI_BY_CHAR.get(d.char);
     const ht = resolveHuangtingCharInfo(d.char, userOverrides);
-    const script = d.script ?? getLingmingCharScript(d.char);
+    const detectedScript = getLingmingCharScript(d.char);
+    const script = detectedScript !== 'common' ? detectedScript : (d.script ?? 'common');
     for (const rad of d.parts) {
       const xrayTarget = xray?.targets.find((t) => t.radical === rad);
       let htHighlights: number[] = [];
@@ -583,8 +656,18 @@ export function getCarriersForCloudStep(
     }
   }
 
-  // Priority 3: If still sparse, bridge to sibling radicals sharing the exact same Lingming code on this key
-  if (collected.length < 3) {
+  // Priority 3: Only bridge to same-code sibling radicals for standard radicals or
+  // genuine variant/cross-script PUA nodes — NEVER for independent PUA glyphs with
+  // their own distinct shape/reading (so e.g. s_5  [se] doesn't show "也" carriers
+  // and w_16  [wo] doesn't show "辶" carriers).
+  const allowSiblingCodeBridge =
+    !step.isPua ||
+    Boolean(step.parentChar) ||
+    step.pinyin.includes('歸併') ||
+    step.pinyin.includes('對應繁體') ||
+    step.pinyin.includes('對應簡體');
+  const inScriptSoFar = collected.filter((c) => matchesScript(c.script, scriptMode)).length;
+  if (allowSiblingCodeBridge && inScriptSoFar < 3) {
     const chamber = LINGMING_CHAMBER_BY_KEY[chamberKey.toLowerCase()];
     if (chamber) {
       for (const cl of chamber.clusters) {
@@ -601,9 +684,9 @@ export function getCarriersForCloudStep(
     }
   }
 
-  // Filter by scriptMode; fall back if empty
+  // Strictly enforce scriptMode: never leak Traditional-only Hanzi into 'simp' mode or Simplified-only Hanzi into 'trad' mode
   const scriptFiltered = collected.filter((c) => matchesScript(c.script, scriptMode));
-  const pool = scriptFiltered.length > 0 ? scriptFiltered : collected;
+  const pool = scriptMode === 'both' ? collected : scriptFiltered;
 
   // Prefer multi-stroke compound Hanzi with full MakeMeAHanzi X-Ray highlightIndices
   return [...pool].sort((a, b) => {

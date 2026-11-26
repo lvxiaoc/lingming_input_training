@@ -408,6 +408,91 @@
   animation: palaceStrokeDraw 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Meditative breathing rhythm for centered Memory Palace target radicals */
+@keyframes palaceRadicalBreathe {
+  0%, 100% {
+    transform: scale(1);
+  }
+  44% {
+    transform: scale(1.095);
+  }
+  52% {
+    transform: scale(1.095);
+  }
+  94% {
+    transform: scale(1);
+  }
+}
+
+@keyframes palaceMonumentBreathe {
+  0%, 100% {
+    transform: scale(1);
+  }
+  44% {
+    transform: scale(1.032);
+  }
+  52% {
+    transform: scale(1.032);
+  }
+  94% {
+    transform: scale(1);
+  }
+}
+
+@keyframes palaceCushionBreathe {
+  0%, 100% {
+    transform: scale(0.94);
+    opacity: 0.76;
+  }
+  44%, 52% {
+    transform: scale(1.16);
+    opacity: 1;
+  }
+  94% {
+    transform: scale(0.94);
+    opacity: 0.76;
+  }
+}
+
+@keyframes palaceBreathRing {
+  0%, 100% {
+    transform: scale(0.92);
+    opacity: 0.14;
+  }
+  44%, 52% {
+    transform: scale(1.15);
+    opacity: 0.38;
+  }
+  94% {
+    transform: scale(0.92);
+    opacity: 0.14;
+  }
+}
+
+.palace-radical-breathe {
+  transform-origin: 0px 0px;
+  animation: palaceRadicalBreathe 4.4s cubic-bezier(0.37, 0, 0.63, 1) 200ms infinite;
+  will-change: transform;
+}
+
+.palace-monument-breathe {
+  transform-origin: 0px 0px;
+  animation: palaceMonumentBreathe 4.4s cubic-bezier(0.37, 0, 0.63, 1) 200ms infinite;
+  will-change: transform;
+}
+
+.palace-cushion-breathe {
+  transform-origin: 0px 0px;
+  animation: palaceCushionBreathe 4.4s cubic-bezier(0.37, 0, 0.63, 1) 200ms infinite;
+  will-change: transform, opacity;
+}
+
+.palace-breath-ring {
+  transform-origin: 0px 0px;
+  animation: palaceBreathRing 4.4s cubic-bezier(0.37, 0, 0.63, 1) 200ms infinite;
+  will-change: transform, opacity;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .keycap-surface {
     transition: none;
@@ -420,9 +505,14 @@
   .ink-droplet-fall,
   .ink-tendril-spread,
   .palace-tooltip-enter,
-  .palace-stroke-draw {
+  .palace-stroke-draw,
+  .palace-radical-breathe,
+  .palace-monument-breathe,
+  .palace-cushion-breathe,
+  .palace-breath-ring {
     animation: none !important;
     transition: none !important;
   }
 }
+
 

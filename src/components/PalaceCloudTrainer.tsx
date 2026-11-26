@@ -516,6 +516,13 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
         setMissesCount((m) => m + 1);
         setErrorFlash(true);
         synth.playKeyMiss();
+        // Reset stale prefix cache on error so re-typing from key 1 works cleanly;
+        // if the user already pressed key 1 of a non-doubled code to restart, accept it immediately.
+        const shouldRestartFromFirst =
+          typedCode.length > 0 &&
+          ch === targetCode[0] &&
+          targetCode[1] !== targetCode[0];
+        setTypedCode(shouldRestartFromFirst ? ch : '');
         if (errorTimerRef.current) window.clearTimeout(errorTimerRef.current);
         errorTimerRef.current = window.setTimeout(() => setErrorFlash(false), 360);
       }
@@ -554,6 +561,10 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
   // so (activeStep.cx, activeStep.cy) lands dead-center at (50%, 50%) of the viewport!
   const shiftPctX = centerFocus && activeStep && !roundDone ? 50 - activeStep.cx : 0;
   const shiftPctY = centerFocus && activeStep && !roundDone ? 50 - activeStep.cy : 0;
+  const shouldBreatheCentered = centerFocus && !roundDone && !errorFlash;
+  const monCx = monument.cx + (monOv?.dx ?? 0);
+  const monCy = monument.cy + (monOv?.dy ?? 0);
+  const monScale = monOv?.scale ?? 1;
 
   const progressRatio =
     queueSteps.length > 0 ? Math.min(1, completedIds.size / queueSteps.length) : 0;
@@ -715,7 +726,7 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
               synth.playClick();
               setCenterFocus((v) => !v);
             }}
-            title={t(centerFocus ? '已開啟雲圖移動、目標居中（點擊切換固定雲圖）' : '已固定雲圖（點擊開啟雲圖跟隨居中）')}
+            title={t(centerFocus ? '已開啟雲圖移動、目標居中與呼吸節奏（點擊切換固定雲圖）' : '已固定雲圖（點擊開啟雲圖跟隨居中與呼吸節奏）')}
             className={`hidden md:inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg border transition-colors whitespace-nowrap cursor-pointer backdrop-blur-xs ${
               centerFocus
                 ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/40 text-[var(--dojo-pine-text)]'
@@ -723,7 +734,7 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
             }`}
           >
             <Crosshair className="w-3.5 h-3.5" />
-            <span>{t(centerFocus ? '居中跟隨' : '固定雲圖')}</span>
+            <span>{t(centerFocus ? '居中呼吸' : '固定雲圖')}</span>
           </button>
 
           <button
@@ -961,6 +972,7 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
 
             {/* #1 Monumental Main Radical (又 / 白 / etc.) — Anchors spatial orientation */}
             <g
+              transform={`translate(${monCx.toFixed(2)} ${monCy.toFixed(2)})`}
               onClick={() => {
                 const mIdx = queueSteps.findIndex(
                   (s) => s.chamberKey === renderKey && s.isMonument
@@ -969,32 +981,33 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
               }}
               className={includeMonument ? 'cursor-pointer' : undefined}
             >
-              <path
-                d={monument.path}
-                fill={
-                  isMonumentActive
-                    ? activeGlowColor
-                    : isWash
-                      ? '#2E3633'
-                      : '#466163'
-                }
-                fillOpacity={
-                  roundDone
-                    ? isWash ? 0.42 : 0.36
-                    : isMonumentActive
-                      ? isWash ? 0.85 : 0.72
+              <g
+                key={isMonumentActive && shouldBreatheCentered ? `mon_breathe_${monument.id}` : monument.id}
+                className={isMonumentActive && shouldBreatheCentered ? 'palace-monument-breathe' : undefined}
+              >
+                <path
+                  d={monument.path}
+                  fill={
+                    isMonumentActive
+                      ? activeGlowColor
                       : isWash
-                        ? 0.72
-                        : 0.34
-                }
-                transform={
-                  monOv && (monOv.dx || monOv.dy || monOv.scale !== 1)
-                    ? `translate(${(monument.cx + monOv.dx).toFixed(2)} ${(monument.cy + monOv.dy).toFixed(2)}) scale(${monOv.scale.toFixed(3)}) translate(${(-monument.cx).toFixed(2)} ${(-monument.cy).toFixed(2)})`
-                    : undefined
-                }
-                style={{ transition: 'fill 260ms ease, fill-opacity 260ms ease' }}
-                shapeRendering="geometricPrecision"
-              />
+                        ? '#2E3633'
+                        : '#466163'
+                  }
+                  fillOpacity={
+                    roundDone
+                      ? isWash ? 0.42 : 0.36
+                      : isMonumentActive
+                        ? isWash ? 0.85 : 0.72
+                        : isWash
+                          ? 0.72
+                          : 0.34
+                  }
+                  transform={`scale(${monScale.toFixed(3)}) translate(${(-monument.cx).toFixed(2)} ${(-monument.cy).toFixed(2)})`}
+                  style={{ transition: 'fill 260ms ease, fill-opacity 260ms ease' }}
+                  shapeRendering="geometricPrecision"
+                />
+              </g>
             </g>
 
             {/* Optional Calligraphic Stroke Flow Path */}
@@ -1045,39 +1058,59 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
                       ? isWash ? 0.44 : 0.36
                       : isWash ? 0.68 : 0.46;
 
+                const nodeBreathes = isActive && shouldBreatheCentered;
+
                 return (
                   <g
                     key={step.nodeId}
+                    transform={`translate(${step.cx.toFixed(2)} ${step.cy.toFixed(2)})`}
                     onClick={handleNodeClick}
                     className="cursor-pointer"
                   >
                     <circle
-                      cx={step.cx}
-                      cy={step.cy}
+                      cx={0}
+                      cy={0}
                       r={Math.max(4.8, step.r * 1.4)}
                       fill="transparent"
                     />
                     {isActive && (
                       <circle
-                        cx={step.cx}
-                        cy={step.cy}
+                        key={nodeBreathes ? `cush_${step.nodeId}` : `cush_static_${step.nodeId}`}
+                        cx={0}
+                        cy={0}
                         r={Math.max(6.8, step.r * 2.15)}
                         fill="url(#zenTargetCushion)"
+                        className={nodeBreathes ? 'palace-cushion-breathe' : undefined}
+                      />
+                    )}
+                    {nodeBreathes && (
+                      <circle
+                        key={`ring_${step.nodeId}`}
+                        cx={0}
+                        cy={0}
+                        r={Math.max(5.4, step.r * 1.68)}
+                        fill="none"
+                        stroke={activeGlowColor}
+                        strokeWidth="0.32"
+                        className="palace-breath-ring pointer-events-none"
                       />
                     )}
                     <g
-                      transform={`translate(${step.cx.toFixed(2)} ${step.cy.toFixed(2)}) scale(${(
-                        baseScale * scaleBoost
-                      ).toFixed(3)}) translate(${(-origCx).toFixed(2)} ${(-origCy).toFixed(2)})`}
-                      filter={isActive ? 'url(#zenActiveGlow)' : undefined}
-                      style={{ transition: 'opacity 220ms ease' }}
+                      key={nodeBreathes ? `breathe_${step.nodeId}` : `still_${step.nodeId}`}
+                      className={nodeBreathes ? 'palace-radical-breathe' : undefined}
                     >
-                      <path
-                        d={step.path}
-                        fill={fill}
-                        fillOpacity={opacity}
-                        shapeRendering="geometricPrecision"
-                      />
+                      <g
+                        transform={`scale(${(baseScale * scaleBoost).toFixed(3)}) translate(${(-origCx).toFixed(2)} ${(-origCy).toFixed(2)})`}
+                        filter={isActive ? 'url(#zenActiveGlow)' : undefined}
+                        style={{ transition: 'opacity 220ms ease' }}
+                      >
+                        <path
+                          d={step.path}
+                          fill={fill}
+                          fillOpacity={opacity}
+                          shapeRendering="geometricPrecision"
+                        />
+                      </g>
                     </g>
                   </g>
                 );
@@ -1111,77 +1144,108 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
                   : isDone
                     ? isWash ? 0.14 : 0.12
                     : isWash ? 0.24 : 0.18;
+              const variantBreathes = isActive && shouldBreatheCentered;
 
               return (
                 <g
                   key={step.nodeId}
+                  transform={`translate(${step.cx.toFixed(2)} ${step.cy.toFixed(2)})`}
                   onClick={handleNodeClick}
                   className="cursor-pointer"
                 >
                   <circle
-                    cx={step.cx}
-                    cy={step.cy}
+                    cx={0}
+                    cy={0}
                     r={Math.max(5.2, half * 1.15)}
                     fill="transparent"
                   />
                   {isActive && (
                     <circle
-                      cx={step.cx}
-                      cy={step.cy}
+                      key={variantBreathes ? `vcush_${step.nodeId}` : `vcush_static_${step.nodeId}`}
+                      cx={0}
+                      cy={0}
                       r={half * 1.65}
                       fill="url(#zenTargetCushion)"
+                      className={variantBreathes ? 'palace-cushion-breathe' : undefined}
+                    />
+                  )}
+                  {variantBreathes && (
+                    <circle
+                      key={`vring_${step.nodeId}`}
+                      cx={0}
+                      cy={0}
+                      r={half * 1.24}
+                      fill="none"
+                      stroke={activeGlowColor}
+                      strokeWidth="0.32"
+                      className="palace-breath-ring pointer-events-none"
                     />
                   )}
 
-                  {hasVectorCarrier && carrier?.strokes ? (
-                    <g
-                      transform={`translate(${(step.cx - half).toFixed(2)} ${(
-                        step.cy - half
-                      ).toFixed(2)}) scale(${(boxSize / 1024).toFixed(5)}) translate(0 900) scale(1 -1)`}
-                      filter={isActive ? 'url(#zenActiveGlow)' : undefined}
-                    >
-                      {carrier.strokes.map((d, sIdx) => {
-                        const isTarget = highlightSet.size === 0 || highlightSet.has(sIdx);
-                        if (isTarget) return null;
-                        return (
-                          <path
-                            key={`ctx_${sIdx}`}
-                            d={d}
-                            fill={contextStrokeColor}
-                            fillOpacity={contextOpacity}
-                            shapeRendering="geometricPrecision"
-                          />
-                        );
-                      })}
-                      {carrier.strokes.map((d, sIdx) => {
-                        const isTarget = highlightSet.size === 0 || highlightSet.has(sIdx);
-                        if (!isTarget) return null;
-                        return (
-                          <path
-                            key={`hit_${sIdx}`}
-                            d={d}
-                            fill={targetStrokeColor}
-                            fillOpacity={targetOpacity}
-                            shapeRendering="geometricPrecision"
-                          />
-                        );
-                      })}
-                    </g>
-                  ) : (
-                    <text
-                      x={step.cx}
-                      y={step.cy + boxSize * 0.32}
-                      textAnchor="middle"
-                      fontSize={boxSize * 0.86}
-                      fontWeight={isActive ? '700' : '600'}
-                      fontFamily="'Noto Serif TC', serif"
-                      fill={targetStrokeColor}
-                      fillOpacity={targetOpacity}
-                      filter={isActive ? 'url(#zenActiveGlow)' : undefined}
-                    >
-                      {carrier?.char || (step.isPua ? step.parentChar : step.char)}
-                    </text>
-                  )}
+                  <g
+                    key={variantBreathes ? `vbreathe_${step.nodeId}` : `vstill_${step.nodeId}`}
+                    className={variantBreathes ? 'palace-radical-breathe' : undefined}
+                  >
+                    {hasVectorCarrier && carrier?.strokes ? (
+                      <g
+                        transform={`translate(${(-half).toFixed(2)} ${(-half).toFixed(2)}) scale(${(boxSize / 1024).toFixed(5)}) translate(0 900) scale(1 -1)`}
+                        filter={isActive ? 'url(#zenActiveGlow)' : undefined}
+                      >
+                        {carrier.strokes.map((d, sIdx) => {
+                          const isTarget = highlightSet.size === 0 || highlightSet.has(sIdx);
+                          if (isTarget) return null;
+                          return (
+                            <path
+                              key={`ctx_${sIdx}`}
+                              d={d}
+                              fill={contextStrokeColor}
+                              fillOpacity={contextOpacity}
+                              shapeRendering="geometricPrecision"
+                            />
+                          );
+                        })}
+                        {carrier.strokes.map((d, sIdx) => {
+                          const isTarget = highlightSet.size === 0 || highlightSet.has(sIdx);
+                          if (!isTarget) return null;
+                          return (
+                            <path
+                              key={`hit_${sIdx}`}
+                              d={d}
+                              fill={targetStrokeColor}
+                              fillOpacity={targetOpacity}
+                              shapeRendering="geometricPrecision"
+                            />
+                          );
+                        })}
+                      </g>
+                    ) : carrier?.char ? (
+                      <text
+                        x={0}
+                        y={boxSize * 0.32}
+                        textAnchor="middle"
+                        fontSize={boxSize * 0.86}
+                        fontWeight={isActive ? '700' : '600'}
+                        fontFamily="'Noto Serif TC', serif"
+                        fill={targetStrokeColor}
+                        fillOpacity={targetOpacity}
+                        filter={isActive ? 'url(#zenActiveGlow)' : undefined}
+                      >
+                        {carrier.char}
+                      </text>
+                    ) : (
+                      <g
+                        transform={`scale(${((overrides[step.nodeId]?.scale ?? 1) * (isActive ? 1.42 : 1)).toFixed(3)}) translate(${(-(step.cx - (overrides[step.nodeId]?.dx ?? 0))).toFixed(2)} ${(-(step.cy - (overrides[step.nodeId]?.dy ?? 0))).toFixed(2)})`}
+                        filter={isActive ? 'url(#zenActiveGlow)' : undefined}
+                      >
+                        <path
+                          d={step.path}
+                          fill={targetStrokeColor}
+                          fillOpacity={targetOpacity}
+                          shapeRendering="geometricPrecision"
+                        />
+                      </g>
+                    )}
+                  </g>
                 </g>
               );
             })}

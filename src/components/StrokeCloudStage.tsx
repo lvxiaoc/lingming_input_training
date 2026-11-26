@@ -15,6 +15,7 @@ import { getLingmingRadicalScript, LINGMING_ROOT_MAP } from '../data/lingming';
 import { FrequencyTier } from '../data/palaceStrokes';
 import { matchesScript, ScriptMode } from '../data/scriptFilter';
 import { buildChamberStrokeFlow, ChamberStrokeFlow } from '../data/palaceStrokePaths';
+import { resolvePdfRadicalInfo } from '../data/palaceCloudTraining';
 import { useUiText } from '../data/uiScript';
 import { useThemeMode } from '../data/theme';
 
@@ -59,6 +60,8 @@ interface StrokeCloudStageProps {
   onDragNode?: (id: string, patch: Partial<PalaceNodeOverride>) => void;
   /** Shift the entire palace cloud so activeChar lands at SVG (50,50), coinciding with foreground target */
   anchorOnActive?: boolean;
+  /** Smoothly center selectedNode/selectedChar at SVG (50,50) with a meditative breathing enlargement */
+  centerSelected?: boolean;
   /** Active Trad/Simp script mode; out-of-script radicals are visually dimmed rather than removed */
   scriptMode?: ScriptMode;
   /** Overlay the Memory Palace calligraphic stroke-association path tracing brush order */
@@ -221,19 +224,6 @@ export const PalaceStrokeFlowOverlay: React.FC<{
   );
 };
 
-function buildNodeTransform(
-  cx: number,
-  cy: number,
-  ov?: PalaceNodeOverride
-): string | undefined {
-  if (!ov) return undefined;
-  const { dx, dy, scale } = ov;
-  if (Math.abs(dx) <= 0.01 && Math.abs(dy) <= 0.01 && Math.abs(scale - 1) <= 0.01) {
-    return undefined;
-  }
-  return `translate(${(cx + dx).toFixed(2)} ${(cy + dy).toFixed(2)}) scale(${scale.toFixed(3)}) translate(${(-cx).toFixed(2)} ${(-cy).toFixed(2)})`;
-}
-
 export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
   chamberKey,
   activeChar,
@@ -247,6 +237,7 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
   editMode = false,
   onDragNode,
   anchorOnActive,
+  centerSelected = false,
   scriptMode = 'both',
   showStrokeFlow = false,
 }) => {
@@ -381,28 +372,76 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
   }, [selectedNodeId, selectedChar, monument.displayChar, monument.rawChar, monument.id, pdfChamber.nodes]);
 
   const shouldAnchor = anchorOnActive ?? isEcho;
+  const shouldAnchorSelected = Boolean(centerSelected && !editMode && !shouldAnchor);
   const anchorPoint = useMemo(() => {
-    if (!shouldAnchor) return { x: 50, y: 50, active: false };
-    if (isMonumentActive) {
-      return { x: monument.cx + mDx, y: monument.cy + mDy, active: true };
-    }
-    if (exactActiveNodeId) {
-      const targetNode = pdfChamber.nodes.find((n) => n.id === exactActiveNodeId);
-      if (targetNode) {
-        const ov = overrides[targetNode.id];
-        return {
-          x: targetNode.cx + (ov?.dx ?? 0),
-          y: targetNode.cy + (ov?.dy ?? 0),
-          active: true,
-        };
+    if (shouldAnchor) {
+      if (isMonumentActive) {
+        return { x: monument.cx + mDx, y: monument.cy + mDy, active: true, kind: 'active' as const };
+      }
+      if (exactActiveNodeId) {
+        const targetNode = pdfChamber.nodes.find((n) => n.id === exactActiveNodeId);
+        if (targetNode) {
+          const ov = overrides[targetNode.id];
+          return {
+            x: targetNode.cx + (ov?.dx ?? 0),
+            y: targetNode.cy + (ov?.dy ?? 0),
+            active: true,
+            kind: 'active' as const,
+          };
+        }
       }
     }
-    return { x: 50, y: 50, active: false };
-  }, [shouldAnchor, isMonumentActive, monument.cx, monument.cy, mDx, mDy, exactActiveNodeId, pdfChamber.nodes, overrides]);
+    if (shouldAnchorSelected) {
+      if (isMonumentSelected) {
+        return { x: monument.cx + mDx, y: monument.cy + mDy, active: true, kind: 'selected' as const };
+      }
+      if (exactSelectedNodeId) {
+        const targetNode = pdfChamber.nodes.find((n) => n.id === exactSelectedNodeId);
+        if (targetNode) {
+          const ov = overrides[targetNode.id];
+          return {
+            x: targetNode.cx + (ov?.dx ?? 0),
+            y: targetNode.cy + (ov?.dy ?? 0),
+            active: true,
+            kind: 'selected' as const,
+          };
+        }
+      }
+    }
+    return { x: 50, y: 50, active: false, kind: 'none' as const };
+  }, [
+    shouldAnchor,
+    shouldAnchorSelected,
+    isMonumentActive,
+    isMonumentSelected,
+    monument.cx,
+    monument.cy,
+    mDx,
+    mDy,
+    exactActiveNodeId,
+    exactSelectedNodeId,
+    pdfChamber.nodes,
+    overrides,
+  ]);
 
-  const cameraTransform = anchorPoint.active
-    ? `translate(${(50 - anchorPoint.x).toFixed(2)} ${(50 - anchorPoint.y).toFixed(2)})`
-    : undefined;
+  const cameraDx = anchorPoint.active ? 50 - anchorPoint.x : 0;
+  const cameraDy = anchorPoint.active ? 50 - anchorPoint.y : 0;
+  const cameraTransform =
+    anchorPoint.active && anchorPoint.kind === 'active'
+      ? `translate(${cameraDx.toFixed(2)} ${cameraDy.toFixed(2)})`
+      : undefined;
+  const smoothCameraStyle =
+    shouldAnchorSelected
+      ? {
+          transform: `translate(${cameraDx.toFixed(2)}px, ${cameraDy.toFixed(2)}px)`,
+          transition: 'transform 420ms cubic-bezier(0.16, 1, 0.3, 1)',
+          willChange: 'transform',
+        }
+      : undefined;
+  const isMonumentCentered =
+    anchorPoint.active &&
+    ((anchorPoint.kind === 'active' && isMonumentActive) ||
+      (anchorPoint.kind === 'selected' && isMonumentSelected));
 
   const layerOpacity = isEcho
     ? 1
@@ -477,13 +516,17 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
   };
 
   const makeNodeSelection = (n: PdfRadicalGlyph): StrokeCloudSelection => {
-    const canonical = LINGMING_ROOT_MAP.get(n.displayChar) || LINGMING_ROOT_MAP.get(n.parentChar);
-    const ma = n.ma || canonical?.ma || '';
+    const resolved = resolvePdfRadicalInfo(n, chamberKey, '');
+    const ma = resolved.ma;
+    const effectiveParentChar = resolved.effectiveParentChar;
+    const canonical =
+      resolved.directCanonical ||
+      (effectiveParentChar ? LINGMING_ROOT_MAP.get(effectiveParentChar) : undefined);
     return {
       id: n.id,
       char: n.displayChar,
       rawChar: n.rawChar,
-      parentChar: n.parentChar,
+      parentChar: effectiveParentChar,
       ma,
       isXiao: ma.length === 2,
       rank: canonical?.rank ?? (n.tier.includes('2_5') ? 2 : n.tier.includes('6_9') ? 6 : 10),
@@ -496,8 +539,8 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
       r: n.r,
       pinyin: n.pinyin,
       note:
-        n.isVariant && n.parentChar !== n.displayChar
-          ? `「${n.parentChar}」${t('變體')}`
+        n.isVariant && effectiveParentChar && effectiveParentChar !== n.displayChar
+          ? `「${effectiveParentChar}」${t('變體')}`
           : canonical?.note
             ? t(canonical.note)
             : undefined,
@@ -602,7 +645,7 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
           )}
         </defs>
 
-        <g transform={cameraTransform}>
+        <g transform={cameraTransform} style={smoothCameraStyle}>
         <circle
           cx="50"
           cy="50"
@@ -635,7 +678,7 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
 
         {/* Monumental #1 Highest-Frequency 主根 Silhouette — Exact 1:1 PDF Vector Brush Path */}
         <g
-          transform={buildNodeTransform(monument.cx, monument.cy, monumentOverride)}
+          transform={`translate(${(monument.cx + mDx).toFixed(2)} ${(monument.cy + mDy).toFixed(2)})`}
           onClick={
             onSelectNode
               ? () => onSelectNode(makeMonumentSelection(monument))
@@ -652,46 +695,54 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
           {isEcho && isMonumentActive && (
             isWash ? (
               <circle
-                cx={monument.cx}
-                cy={monument.cy}
+                cx={0}
+                cy={0}
                 r={9.5}
                 fill={`url(#washNodePool_${chamberKey}_${variant})`}
+                className={isMonumentCentered ? 'palace-cushion-breathe' : undefined}
               />
             ) : (
               <circle
-                cx={monument.cx}
-                cy={monument.cy}
+                cx={0}
+                cy={0}
                 r={5.8}
                 fill="rgba(52, 211, 153, 0.07)"
                 stroke="rgba(141, 245, 208, 0.45)"
                 strokeWidth="0.28"
+                className={isMonumentCentered ? 'palace-cushion-breathe' : undefined}
               />
             )
           )}
           {editMode && isMonumentSelected && (
             <circle
-              cx={monument.cx}
-              cy={monument.cy}
-              r={Math.min(46, monument.r * 0.96)}
+              cx={0}
+              cy={0}
+              r={Math.min(46, monument.r * mScale * 0.96)}
               fill="none"
               stroke={isWash ? 'rgba(20, 20, 18, 0.45)' : 'rgba(247, 210, 134, 0.45)'}
               strokeWidth="0.55"
               strokeDasharray="1.8 1.5"
             />
           )}
-          <path
-            d={monument.path}
-            fill={monumentColor}
-            fillOpacity={monumentOpacity}
-            shapeRendering="geometricPrecision"
-            filter={
-              isEcho && isMonumentActive
-                ? `url(#echoNodeGlow_${chamberKey})`
-                : isWash
-                  ? `url(#washInkBleed_${chamberKey}_${variant})`
-                  : undefined
-            }
-          />
+          <g
+            key={isMonumentCentered ? `mon_centered_${monument.id}` : monument.id}
+            className={isMonumentCentered ? 'palace-monument-breathe' : undefined}
+          >
+            <path
+              d={monument.path}
+              fill={monumentColor}
+              fillOpacity={monumentOpacity}
+              transform={`scale(${mScale.toFixed(3)}) translate(${(-monument.cx).toFixed(2)} ${(-monument.cy).toFixed(2)})`}
+              shapeRendering="geometricPrecision"
+              filter={
+                isEcho && isMonumentActive
+                  ? `url(#echoNodeGlow_${chamberKey})`
+                  : isWash
+                    ? `url(#washInkBleed_${chamberKey}_${variant})`
+                    : undefined
+              }
+            />
+          </g>
         </g>
 
         {/* Optional Memory Palace calligraphic stroke-association path overlay */}
@@ -746,7 +797,12 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
                     ? '#F7D286'
                     : baseColor;
 
-          const inScript = isPdfGlyphInScript(node.displayChar, node.parentChar, node.ma);
+          const resolvedNode = resolvePdfRadicalInfo(node, chamberKey, '');
+          const inScript = isPdfGlyphInScript(
+            node.displayChar,
+            resolvedNode.effectiveParentChar,
+            resolvedNode.ma
+          );
 
           const baseOpacity = node.isVariant ? 0.88 : 0.97;
           const fillOpacity = !inScript
@@ -779,10 +835,15 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
             ? Math.max(5.2, node.r * scale * 1.48)
             : Math.max(4.4, node.r * scale * 1.42);
           const hitRadius = Math.max(4.8, node.r * scale * 1.45);
+          const isNodeCentered =
+            anchorPoint.active &&
+            ((anchorPoint.kind === 'active' && isCurrent) ||
+              (anchorPoint.kind === 'selected' && isSelected));
 
           return (
             <g
               key={node.id}
+              transform={`translate(${effCx.toFixed(2)} ${effCy.toFixed(2)})`}
               onClick={
                 onSelectNode
                   ? () => onSelectNode(makeNodeSelection(node))
@@ -803,15 +864,16 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
               {(isCurrent || isSelected) && (
                 isWash && !(editMode && isSelected) ? (
                   <circle
-                    cx={effCx}
-                    cy={effCy}
+                    cx={0}
+                    cy={0}
                     r={haloRadius * 1.45}
                     fill={`url(#washNodePool_${chamberKey}_${variant})`}
+                    className={isNodeCentered ? 'palace-cushion-breathe' : undefined}
                   />
                 ) : (
                   <circle
-                    cx={effCx}
-                    cy={effCy}
+                    cx={0}
+                    cy={0}
                     r={haloRadius}
                     fill={
                       isWash
@@ -833,29 +895,48 @@ export const StrokeCloudStage: React.FC<StrokeCloudStageProps> = ({
                     }
                     strokeWidth={isEcho ? '0.28' : editMode && isSelected ? '0.65' : '0.45'}
                     strokeDasharray={editMode && isSelected ? '1.6 1.1' : undefined}
+                    className={isNodeCentered ? 'palace-cushion-breathe' : undefined}
                   />
                 )
               )}
 
-              {/* Generous invisible hit circle so thin strokes like 一/丨/丿 are easy to click & drag */}
-              {!isBackgroundPlane && (
-                <circle cx={effCx} cy={effCy} r={hitRadius} fill="transparent" />
+              {isNodeCentered && !isEcho && (
+                <circle
+                  key={`stage_ring_${node.id}`}
+                  cx={0}
+                  cy={0}
+                  r={haloRadius * 1.28}
+                  fill="none"
+                  stroke={isWash ? '#181817' : '#F7D286'}
+                  strokeWidth="0.34"
+                  className="palace-breath-ring pointer-events-none"
+                />
               )}
 
-              <g transform={buildNodeTransform(node.cx, node.cy, ov)}>
-                <path
-                  d={node.path}
-                  fill={fillColor}
-                  fillOpacity={fillOpacity}
-                  shapeRendering="geometricPrecision"
-                  filter={
-                    isEcho && isCurrent
-                      ? `url(#echoNodeGlow_${chamberKey})`
-                      : isWash && (isCurrent || isSelected || isDone)
-                        ? `url(#washInkBleed_${chamberKey}_${variant})`
-                        : undefined
-                  }
-                />
+              {/* Generous invisible hit circle so thin strokes like 一/丨/丿 are easy to click & drag */}
+              {!isBackgroundPlane && (
+                <circle cx={0} cy={0} r={hitRadius} fill="transparent" />
+              )}
+
+              <g
+                key={isNodeCentered ? `node_breathe_${node.id}` : `node_still_${node.id}`}
+                className={isNodeCentered ? 'palace-radical-breathe' : undefined}
+              >
+                <g transform={`scale(${scale.toFixed(3)}) translate(${(-node.cx).toFixed(2)} ${(-node.cy).toFixed(2)})`}>
+                  <path
+                    d={node.path}
+                    fill={fillColor}
+                    fillOpacity={fillOpacity}
+                    shapeRendering="geometricPrecision"
+                    filter={
+                      isEcho && isCurrent
+                        ? `url(#echoNodeGlow_${chamberKey})`
+                        : isWash && (isCurrent || isSelected || isDone)
+                          ? `url(#washInkBleed_${chamberKey}_${variant})`
+                          : undefined
+                    }
+                  />
+                </g>
               </g>
             </g>
           );
