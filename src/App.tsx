@@ -19,6 +19,8 @@ import {
   ScanSearch,
   Search,
   BookOpen,
+  ArrowLeftRight,
+  Feather,
 } from 'lucide-react';
 import {
   BUILTIN_SCHEMES,
@@ -84,7 +86,14 @@ import { DrillTab, ExtremeDrillStudio } from './components/ExtremeDrillStudio';
 import { HuangtingDojo } from './components/HuangtingDojo';
 import { DecompositionLab, DecompositionTab } from './components/DecompositionLab';
 import { PalaceCloudTrainer } from './components/PalaceCloudTrainer';
+import { KineticVerificationLab } from './components/KineticVerificationLab';
+import { WriterSingleKeyStudio } from './components/WriterSingleKeyStudio';
+import { CalligraphyTopologyStudio } from './components/CalligraphyTopologyStudio';
+import { TwentyKeyTopologyTheater } from './components/TwentyKeyTopologyTheater';
+import { TopologyMuscleTrainer } from './components/TopologyMuscleTrainer';
+import { TopologicalJourneyPalace } from './components/TopologicalJourneyPalace';
 import type { PalaceCloudTrainMode, PalaceWalkOrder } from './data/palaceCloudTraining';
+import type { TopologyDrillOrder } from './data/topologyMuscleTraining';
 import { FirebaseErrorBoundary } from './components/FirebaseErrorBoundary';
 import { KeystrokeCloudToggle, KeystrokePalaceCloud } from './components/KeystrokePalaceCloud';
 import { RhythmMetronome } from './components/RhythmMetronome';
@@ -98,6 +107,12 @@ type GameState =
   | 'DECOMPOSITION_LAB'
   | 'DRILL_STUDIO'
   | 'HUANGTING_DOJO'
+  | 'KINETIC_LAB'
+  | 'WRITER_SINGLE_KEY'
+  | 'CALLIGRAPHY_TOPOLOGY'
+  | 'TWENTY_KEY_THEATER'
+  | 'TOPOLOGY_TRAINER'
+  | 'TOPOLOGICAL_PALACE'
   | 'PLAYING'
   | 'PAUSED'
   | 'ROUND_SUMMARY'
@@ -132,7 +147,9 @@ const SCAFFOLD_LABELS: Record<ScaffoldMode, string> = {
 };
 
 export default function App() {
-  const [gameState, setGameState] = useState<GameState>('TITLE_MENU');
+  const [gameState, setGameState] = useState<GameState>('TWENTY_KEY_THEATER');
+  const [topoFocusKey, setTopoFocusKey] = useState<string>('h');
+  const [topoTrainerOrder, setTopoTrainerOrder] = useState<TopologyDrillOrder>('sequential');
   const [returnStateFromPalace, setReturnStateFromPalace] = useState<'TITLE_MENU' | 'PLAYING'>(
     'TITLE_MENU'
   );
@@ -917,12 +934,12 @@ export default function App() {
     <KeystrokeCloudContext.Provider value={keystrokeCloudCtx}>
     <UiScriptContext.Provider value={uiScript}>
     <ThemeContext.Provider value={themeMode}>
-    <div className="relative w-screen h-screen overflow-hidden bg-[var(--dojo-canvas)] text-[var(--dojo-text)] flex flex-col">
+    <div className="dojo-app-shell relative w-screen h-screen overflow-hidden bg-[var(--dojo-canvas)] text-[var(--dojo-text)] flex flex-col">
       {/* Global Xuan-paper texture & ambient ink-wash clouds across ALL views in wash mode */}
       {isWash && (
         <div
           aria-hidden="true"
-          className="dojo-ink-paper-bg pointer-events-none fixed inset-0 z-0 overflow-hidden"
+          className="dojo-ink-paper-bg no-print pointer-events-none fixed inset-0 z-0 overflow-hidden"
         >
           <svg
             viewBox="0 0 1200 800"
@@ -1272,6 +1289,42 @@ export default function App() {
 
                       <button
                         type="button"
+                        onClick={() => {
+                          synth.playClick();
+                          setGameState('TOPOLOGICAL_PALACE');
+                        }}
+                        title={t('以書法拓撲筆勢作為記憶宮殿行進路線，將全部 249 個簡體字根按起勢與聲韻順序排布並支援實鍵閉環練習')}
+                        className="col-span-2 inline-flex items-center justify-between gap-3 px-4 py-3 text-xs font-semibold rounded-lg border border-[var(--dojo-crimson)]/50 bg-[var(--dojo-crimson-wash)] hover:opacity-92 text-[var(--dojo-crimson-text)] transition-opacity cursor-pointer"
+                      >
+                        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                          <Compass className="w-4 h-4 shrink-0" />
+                          <span>{t('筆勢行徑 · 新拓撲記憶宮殿')}</span>
+                        </span>
+                        <span className="text-[11px] font-mono-tabular opacity-85 whitespace-nowrap">
+                          {t('20 宮 249 根 · 起勢＋聲韻')}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          synth.playClick();
+                          setGameState('TWENTY_KEY_THEATER');
+                        }}
+                        title={t('完整收錄靈明 20 個輔音鍵的書法拓撲演變動畫與運指方向圖，支援實鍵試筆與臨帖行氣')}
+                        className="col-span-2 inline-flex items-center justify-between gap-3 px-4 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text)] transition-colors cursor-pointer"
+                      >
+                        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                          <Feather className="w-4 h-4 text-[var(--dojo-crimson)] shrink-0" />
+                          <span>{t('二十筆勢 · 書法拓撲演變劇場')}</span>
+                        </span>
+                        <span className="text-[11px] font-mono-tabular text-[var(--dojo-text-sub)] whitespace-nowrap">
+                          {t('20 鍵 82 根水墨動畫')}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => openPalaceCloud('TITLE_MENU', 'keyboard')}
                         className="inline-flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text)] transition-colors whitespace-nowrap cursor-pointer"
                       >
@@ -1427,6 +1480,52 @@ export default function App() {
                   </div>
                 </section>
               </div>
+
+              {/* Clean writer pure-shape single-key studio entry */}
+              <div className="mt-5 rounded-xl border border-[var(--dojo-border)] bg-[var(--dojo-surface)] wash:bg-[var(--dojo-surface)]/92 p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-mono-tabular text-[var(--dojo-ochre)]">
+                      {t('作家純形單鍵工坊')}
+                    </span>
+                    <span className="text-[var(--dojo-text-muted)]">·</span>
+                    <span className="text-[var(--dojo-text-sub)]">
+                      {t('25 鍵無 X · 零並擊零音托 · 四碼定長 100% 自分割')}
+                    </span>
+                  </div>
+                  <p className="text-sm text-[var(--dojo-text)]">
+                    {t('素形單鍵 · 臨紙試寫與自由起草台')}
+                    <span className="text-xs text-[var(--dojo-text-muted)] ml-2">
+                      {t('專為普通實體鍵盤設計，75% 左右交替，可直接試寫散文並反查 1,067 簡體字四碼')}
+                    </span>
+                  </p>
+                </div>
+                <div className="shrink-0 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      synth.playClick();
+                      setGameState('WRITER_SINGLE_KEY');
+                    }}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--dojo-crimson)] hover:bg-[var(--dojo-crimson-hover)] text-white text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer"
+                  >
+                    <Keyboard className="w-3.5 h-3.5 shrink-0" />
+                    <span>{t('進入素形單鍵試寫')}</span>
+                    <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      synth.playClick();
+                      setGameState('KINETIC_LAB');
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)] text-xs font-medium transition-colors whitespace-nowrap cursor-pointer"
+                  >
+                    <ArrowLeftRight className="w-3.5 h-3.5 shrink-0" />
+                    <span>{t('並擊對照實驗室')}</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Quiet writer philosophy footer */}
@@ -1538,13 +1637,111 @@ export default function App() {
         />
       )}
 
+      {/* ==================== KINETIC HOME-ROW ALTERNATION VERIFICATION LAB ==================== */}
+      {gameState === 'KINETIC_LAB' && (
+        <KineticVerificationLab
+          scriptMode={scriptMode}
+          onChangeScriptMode={(next) => handleChangeScriptMode(next)}
+          themeMode={themeMode}
+          onChangeThemeMode={handleChangeThemeMode}
+          muted={muted}
+          onToggleMute={toggleMute}
+          onBack={() => setGameState('TITLE_MENU')}
+        />
+      )}
+
+      {/* ==================== WRITER SINGLE-KEY PURE-SHAPE STUDIO ==================== */}
+      {gameState === 'WRITER_SINGLE_KEY' && (
+        <WriterSingleKeyStudio
+          themeMode={themeMode}
+          onChangeThemeMode={handleChangeThemeMode}
+          muted={muted}
+          onToggleMute={toggleMute}
+          onBack={() => setGameState('TITLE_MENU')}
+          onOpenChordLab={() => setGameState('KINETIC_LAB')}
+        />
+      )}
+
+      {/* ==================== NEW TOPOLOGICAL BRUSH-PATH MEMORY PALACE ==================== */}
+      {gameState === 'TOPOLOGICAL_PALACE' && (
+        <TopologicalJourneyPalace
+          themeMode={themeMode}
+          onChangeThemeMode={handleChangeThemeMode}
+          muted={muted}
+          onToggleMute={toggleMute}
+          initialKey={topoFocusKey}
+          onOpenMorphTheater={(k) => {
+            setTopoFocusKey(k);
+            setGameState('TWENTY_KEY_THEATER');
+          }}
+          onOpenLegacyPalace={() => openPalaceCloud('TITLE_MENU', 'keyboard')}
+          onBackToDojo={() => setGameState('TITLE_MENU')}
+        />
+      )}
+
+      {/* ==================== TWENTY-KEY CALLIGRAPHY TOPOLOGY EXHIBITION THEATER ==================== */}
+      {gameState === 'TWENTY_KEY_THEATER' && (
+        <TwentyKeyTopologyTheater
+          themeMode={themeMode}
+          onChangeThemeMode={handleChangeThemeMode}
+          muted={muted}
+          onToggleMute={toggleMute}
+          initialKey={topoFocusKey}
+          onOpenMuscleTrainer={(k, order = 'sequential') => {
+            setTopoFocusKey(k);
+            setTopoTrainerOrder(order);
+            setGameState('TOPOLOGY_TRAINER');
+          }}
+          onOpenTopologicalPalace={(k) => {
+            setTopoFocusKey(k);
+            setGameState('TOPOLOGICAL_PALACE');
+          }}
+          onOpenPracticeStudio={() => setGameState('CALLIGRAPHY_TOPOLOGY')}
+          onBackToDojo={() => setGameState('TITLE_MENU')}
+        />
+      )}
+
+      {/* ==================== TWENTY-KEY TOPOLOGY MUSCLE-MEMORY TRAINER ==================== */}
+      {gameState === 'TOPOLOGY_TRAINER' && (
+        <TopologyMuscleTrainer
+          initialKey={topoFocusKey}
+          initialOrder={topoTrainerOrder}
+          scriptMode={scriptMode}
+          themeMode={themeMode}
+          onChangeThemeMode={handleChangeThemeMode}
+          muted={muted}
+          onToggleMute={toggleMute}
+          onBackToTheater={(k) => {
+            setTopoFocusKey(k);
+            setGameState('TWENTY_KEY_THEATER');
+          }}
+        />
+      )}
+
+      {/* ==================== CALLIGRAPHY TOPOLOGY PRACTICE & FREE-BRUSH STUDIO ==================== */}
+      {gameState === 'CALLIGRAPHY_TOPOLOGY' && (
+        <CalligraphyTopologyStudio
+          themeMode={themeMode}
+          onChangeThemeMode={handleChangeThemeMode}
+          muted={muted}
+          onToggleMute={toggleMute}
+          onBack={() => setGameState('TWENTY_KEY_THEATER')}
+        />
+      )}
+
       {/* ==================== ACTIVE PLAY SHELL ==================== */}
       {gameState !== 'TITLE_MENU' &&
         gameState !== 'DECOMPOSITION_LAB' &&
         gameState !== 'PALACE_CLOUD' &&
         gameState !== 'PALACE_TRAINER' &&
         gameState !== 'DRILL_STUDIO' &&
-        gameState !== 'HUANGTING_DOJO' && (
+        gameState !== 'HUANGTING_DOJO' &&
+        gameState !== 'KINETIC_LAB' &&
+        gameState !== 'WRITER_SINGLE_KEY' &&
+        gameState !== 'CALLIGRAPHY_TOPOLOGY' &&
+        gameState !== 'TWENTY_KEY_THEATER' &&
+        gameState !== 'TOPOLOGY_TRAINER' &&
+        gameState !== 'TOPOLOGICAL_PALACE' && (
         <div className="relative z-10 w-full h-full flex flex-col">
           {/* Compact low-occlusion perimeter HUD */}
           <header className="shrink-0 h-12 px-4 sm:px-6 bg-[var(--dojo-header)] wash:bg-[var(--dojo-header)]/88 wash:backdrop-blur-sm border-b border-[var(--dojo-border)] flex items-center justify-between gap-3 z-30">

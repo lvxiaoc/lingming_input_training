@@ -14,6 +14,7 @@ import {
   ScanSearch,
   Shuffle,
   Sparkles,
+  Target,
   Volume2,
   VolumeX,
   X,
@@ -42,6 +43,11 @@ import { uiMnemonic, useUiScript, useUiText } from '../data/uiScript';
 import { synth } from '../audio/synth';
 import { speech } from '../audio/speech';
 import { PalaceStrokeFlowOverlay, PDF_TIER_COLORS } from './StrokeCloudStage';
+import {
+  computeHighlightedRadicalNormRect,
+  resolveCloudStepFocal,
+  TopologyFocalSvgOverlay,
+} from './TopologyFocalSvgOverlay';
 
 interface PalaceCloudTrainerProps {
   initialKey?: string;
@@ -102,6 +108,7 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
   const [walkOrder, setWalkOrder] = useState<PalaceWalkOrder>(initialOrder);
   const [keyScope, setKeyScope] = useState<KeyScope>('full');
   const [centerFocus, setCenterFocus] = useState<boolean>(true);
+  const [showTopoFocus, setShowTopoFocus] = useState<boolean>(false);
   const [showStrokeFlow, setShowStrokeFlow] = useState<boolean>(false);
   const [includeMonument, setIncludeMonument] = useState<boolean>(false);
   const [chamberPickerOpen, setChamberPickerOpen] = useState<boolean>(false);
@@ -457,6 +464,13 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
         return;
       }
 
+      if (e.key === '6') {
+        e.preventDefault();
+        synth.playClick();
+        setShowTopoFocus((v) => !v);
+        return;
+      }
+
       if (e.key === '0') {
         e.preventDefault();
         handleReshuffleOrReroll(true);
@@ -575,6 +589,11 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
     ? isWash ? '#B83B2A' : '#EE6B5A'
     : activeJade;
   const doneTint = isWash ? '#2E8B78' : '#32A884';
+  const topoFocalColor = isWash ? '#C43125' : '#FF6B57';
+  const topoHaloColor = isWash ? '#F2F6F4' : '#0A1019';
+  const monumentFocal = showTopoFocus
+    ? resolveCloudStepFocal(renderKey, monument.displayChar, monument.displayChar, monument.ma)
+    : null;
 
   return (
     <div
@@ -724,10 +743,27 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
             type="button"
             onClick={() => {
               synth.playClick();
+              setShowTopoFocus((v) => !v);
+            }}
+            title={t('開關顯示收斂後的拓撲共性焦點（小叉叉、小框框、小直角等，快捷鍵 6）')}
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer backdrop-blur-xs ${
+              showTopoFocus
+                ? 'bg-[var(--dojo-crimson-wash)] border-[var(--dojo-crimson)]/50 text-[var(--dojo-crimson-text)]'
+                : 'bg-[var(--dojo-surface)]/80 hover:bg-[var(--dojo-surface-2)] border-[var(--dojo-border)] text-[var(--dojo-text-sub)] hover:text-[var(--dojo-text-bright)]'
+            }`}
+          >
+            <Target className="w-3.5 h-3.5 shrink-0" />
+            <span>{t('拓撲焦點')}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              synth.playClick();
               setCenterFocus((v) => !v);
             }}
             title={t(centerFocus ? '已開啟雲圖移動、目標居中與呼吸節奏（點擊切換固定雲圖）' : '已固定雲圖（點擊開啟雲圖跟隨居中與呼吸節奏）')}
-            className={`hidden md:inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg border transition-colors whitespace-nowrap cursor-pointer backdrop-blur-xs ${
+            className={`hidden md:inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer backdrop-blur-xs ${
               centerFocus
                 ? 'bg-[var(--dojo-pine-wash)] border-[var(--dojo-pine)]/40 text-[var(--dojo-pine-text)]'
                 : 'bg-[var(--dojo-surface)]/80 border-[var(--dojo-border)] text-[var(--dojo-text-sub)]'
@@ -1007,6 +1043,21 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
                   style={{ transition: 'fill 260ms ease, fill-opacity 260ms ease' }}
                   shapeRendering="geometricPrecision"
                 />
+                {showTopoFocus && monumentFocal && (
+                  <TopologyFocalSvgOverlay
+                    focal={monumentFocal}
+                    targetRect={{
+                      x: -(monument.r * monScale * 0.82),
+                      y: -(monument.r * monScale * 0.82),
+                      w: monument.r * monScale * 1.64,
+                      h: monument.r * monScale * 1.64,
+                    }}
+                    strokeColor={topoFocalColor}
+                    haloColor={topoHaloColor}
+                    strokeWidth={isMonumentActive ? 1.45 : 1.05}
+                    opacity={isMonumentActive ? 0.92 : 0.36}
+                  />
+                )}
               </g>
             </g>
 
@@ -1059,6 +1110,10 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
                       : isWash ? 0.68 : 0.46;
 
                 const nodeBreathes = isActive && shouldBreatheCentered;
+                const stepFocal = showTopoFocus
+                  ? resolveCloudStepFocal(step.chamberKey || renderKey, step.char, step.parentChar, step.ma)
+                  : null;
+                const templateFocalHalf = Math.max(2.6, step.r * baseScale * scaleBoost * 0.96);
 
                 return (
                   <g
@@ -1090,7 +1145,7 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
                         cy={0}
                         r={Math.max(5.4, step.r * 1.68)}
                         fill="none"
-                        stroke={activeGlowColor}
+                        stroke={showTopoFocus ? topoFocalColor : activeGlowColor}
                         strokeWidth="0.32"
                         className="palace-breath-ring pointer-events-none"
                       />
@@ -1101,16 +1156,31 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
                     >
                       <g
                         transform={`scale(${(baseScale * scaleBoost).toFixed(3)}) translate(${(-origCx).toFixed(2)} ${(-origCy).toFixed(2)})`}
-                        filter={isActive ? 'url(#zenActiveGlow)' : undefined}
+                        filter={isActive && !showTopoFocus ? 'url(#zenActiveGlow)' : undefined}
                         style={{ transition: 'opacity 220ms ease' }}
                       >
                         <path
                           d={step.path}
                           fill={fill}
-                          fillOpacity={opacity}
+                          fillOpacity={showTopoFocus ? opacity * (isActive ? 0.56 : 0.62) : opacity}
                           shapeRendering="geometricPrecision"
                         />
                       </g>
+                      {showTopoFocus && stepFocal && (
+                        <TopologyFocalSvgOverlay
+                          focal={stepFocal}
+                          targetRect={{
+                            x: -templateFocalHalf,
+                            y: -templateFocalHalf,
+                            w: templateFocalHalf * 2,
+                            h: templateFocalHalf * 2,
+                          }}
+                          strokeColor={topoFocalColor}
+                          haloColor={topoHaloColor}
+                          strokeWidth={isActive ? 0.62 : 0.42}
+                          opacity={roundDone ? 0.9 : isActive ? 1 : isDone ? 0.48 : 0.84}
+                        />
+                      )}
                     </g>
                   </g>
                 );
@@ -1145,6 +1215,31 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
                     ? isWash ? 0.14 : 0.12
                     : isWash ? 0.24 : 0.18;
               const variantBreathes = isActive && shouldBreatheCentered;
+              const variantFocal = showTopoFocus
+                ? resolveCloudStepFocal(step.chamberKey || renderKey, step.char, step.parentChar, step.ma)
+                : null;
+              const variantFocalRect = (() => {
+                if (!showTopoFocus || !variantFocal) return null;
+                if (hasVectorCarrier && carrier?.strokes) {
+                  const nr = computeHighlightedRadicalNormRect(
+                    carrier.char,
+                    carrier.strokes,
+                    carrier.highlightIndices ?? []
+                  );
+                  return {
+                    x: -half + nr.x * boxSize,
+                    y: -half + nr.y * boxSize,
+                    w: nr.w * boxSize,
+                    h: nr.h * boxSize,
+                  };
+                }
+                return {
+                  x: -half * 0.78,
+                  y: -half * 0.78,
+                  w: boxSize * 0.78,
+                  h: boxSize * 0.78,
+                };
+              })();
 
               return (
                 <g
@@ -1176,7 +1271,7 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
                       cy={0}
                       r={half * 1.24}
                       fill="none"
-                      stroke={activeGlowColor}
+                      stroke={showTopoFocus ? topoFocalColor : activeGlowColor}
                       strokeWidth="0.32"
                       className="palace-breath-ring pointer-events-none"
                     />
@@ -1189,7 +1284,7 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
                     {hasVectorCarrier && carrier?.strokes ? (
                       <g
                         transform={`translate(${(-half).toFixed(2)} ${(-half).toFixed(2)}) scale(${(boxSize / 1024).toFixed(5)}) translate(0 900) scale(1 -1)`}
-                        filter={isActive ? 'url(#zenActiveGlow)' : undefined}
+                        filter={isActive && !showTopoFocus ? 'url(#zenActiveGlow)' : undefined}
                       >
                         {carrier.strokes.map((d, sIdx) => {
                           const isTarget = highlightSet.size === 0 || highlightSet.has(sIdx);
@@ -1199,7 +1294,7 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
                               key={`ctx_${sIdx}`}
                               d={d}
                               fill={contextStrokeColor}
-                              fillOpacity={contextOpacity}
+                              fillOpacity={showTopoFocus ? contextOpacity * 0.85 : contextOpacity}
                               shapeRendering="geometricPrecision"
                             />
                           );
@@ -1212,7 +1307,7 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
                               key={`hit_${sIdx}`}
                               d={d}
                               fill={targetStrokeColor}
-                              fillOpacity={targetOpacity}
+                              fillOpacity={showTopoFocus ? targetOpacity * (isActive ? 0.52 : 0.58) : targetOpacity}
                               shapeRendering="geometricPrecision"
                             />
                           );
@@ -1227,23 +1322,35 @@ export const PalaceCloudTrainer: React.FC<PalaceCloudTrainerProps> = ({
                         fontWeight={isActive ? '700' : '600'}
                         fontFamily="'Noto Serif TC', serif"
                         fill={targetStrokeColor}
-                        fillOpacity={targetOpacity}
-                        filter={isActive ? 'url(#zenActiveGlow)' : undefined}
+                        fillOpacity={showTopoFocus ? targetOpacity * 0.58 : targetOpacity}
+                        filter={isActive && !showTopoFocus ? 'url(#zenActiveGlow)' : undefined}
                       >
                         {carrier.char}
                       </text>
                     ) : (
                       <g
                         transform={`scale(${((overrides[step.nodeId]?.scale ?? 1) * (isActive ? 1.42 : 1)).toFixed(3)}) translate(${(-(step.cx - (overrides[step.nodeId]?.dx ?? 0))).toFixed(2)} ${(-(step.cy - (overrides[step.nodeId]?.dy ?? 0))).toFixed(2)})`}
-                        filter={isActive ? 'url(#zenActiveGlow)' : undefined}
+                        filter={isActive && !showTopoFocus ? 'url(#zenActiveGlow)' : undefined}
                       >
                         <path
                           d={step.path}
                           fill={targetStrokeColor}
-                          fillOpacity={targetOpacity}
+                          fillOpacity={showTopoFocus ? targetOpacity * 0.58 : targetOpacity}
                           shapeRendering="geometricPrecision"
                         />
                       </g>
+                    )}
+
+                    {/* Final converged topological common focal shape (tiny crisp ✕ / □ / ┌ / <) */}
+                    {showTopoFocus && variantFocal && variantFocalRect && (
+                      <TopologyFocalSvgOverlay
+                        focal={variantFocal}
+                        targetRect={variantFocalRect}
+                        strokeColor={topoFocalColor}
+                        haloColor={topoHaloColor}
+                        strokeWidth={isActive ? 0.58 : 0.42}
+                        opacity={roundDone ? 0.92 : isActive ? 1 : isDone ? 0.46 : 0.85}
+                      />
                     )}
                   </g>
                 </g>

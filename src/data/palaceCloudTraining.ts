@@ -746,3 +746,90 @@ export function sampleEnhancedCloudCarriers(
   }
   return result;
 }
+
+/**
+ * Lightweight carrier lookup by raw radical glyph (used by TopologyMuscleTrainer's
+ * 实字捕形 mode to embed any 20-key morph radical inside a real X-Ray compound Hanzi).
+ */
+export function getCarriersForRadical(
+  radical: string,
+  chamberKey: string,
+  ma: string,
+  scriptMode: ScriptMode = 'simp'
+): VariantHanziCarrier[] {
+  const bucket = getCarrierIndex();
+  const collected: VariantHanziCarrier[] = [];
+  const seenChars = new Set<string>();
+
+  const appendFromKey = (lookupKey: string, isVariantBridge: boolean) => {
+    const list = bucket.get(lookupKey);
+    if (!list) return;
+    for (const item of list) {
+      if (seenChars.has(item.char)) continue;
+      seenChars.add(item.char);
+      collected.push({
+        ...item,
+        isVariantMatch: item.isVariantMatch || isVariantBridge,
+      });
+    }
+  };
+
+  appendFromKey(radical, false);
+  const directAliases = VARIANT_RADICAL_ALIASES[radical];
+  if (directAliases) {
+    for (const a of directAliases) appendFromKey(a, true);
+  }
+
+  // Fallback to sibling radicals with the exact same Lingming code if fewer than 2 carriers found
+  const inScriptCount = collected.filter((c) => matchesScript(c.script, scriptMode)).length;
+  if (inScriptCount < 2) {
+    const chamber = LINGMING_CHAMBER_BY_KEY[chamberKey.toLowerCase()];
+    const cleanMa = ma.toLowerCase().replace(/\s+/g, '');
+    if (chamber && cleanMa) {
+      for (const cl of chamber.clusters) {
+        for (const r of cl.radicals) {
+          if (r.ma === cleanMa) {
+            appendFromKey(r.char, true);
+            const aliases = VARIANT_RADICAL_ALIASES[r.char];
+            if (aliases) {
+              for (const a of aliases) appendFromKey(a, true);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const scriptFiltered = collected.filter((c) => matchesScript(c.script, scriptMode));
+  const pool = scriptMode === 'both' ? collected : scriptFiltered.length > 0 ? scriptFiltered : collected;
+
+  return [...pool].sort((a, b) => {
+    const aCompound = a.char !== radical ? 1 : 0;
+    const bCompound = b.char !== radical ? 1 : 0;
+    if (aCompound !== bCompound) return bCompound - aCompound;
+
+    const aXray = a.strokes && a.highlightIndices.length > 0 ? 1 : 0;
+    const bXray = b.strokes && b.highlightIndices.length > 0 ? 1 : 0;
+    if (aXray !== bXray) return bXray - aXray;
+
+    const aHasStrokes = a.strokes && a.strokes.length > 0 ? 1 : 0;
+    const bHasStrokes = b.strokes && b.strokes.length > 0 ? 1 : 0;
+    return bHasStrokes - aHasStrokes;
+  });
+}
+
+export function pickRandomCarrierForRadical(
+  radical: string,
+  chamberKey: string,
+  ma: string,
+  avoidChar?: string,
+  scriptMode: ScriptMode = 'simp'
+): VariantHanziCarrier | null {
+  const candidates = getCarriersForRadical(radical, chamberKey, ma, scriptMode);
+  const avoid = new Set<string>();
+  if (avoidChar && candidates.length > 1) {
+    avoid.add(avoidChar);
+  }
+  return pickRandomFromTopPool(candidates, avoid);
+}
+

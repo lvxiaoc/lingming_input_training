@@ -173,6 +173,131 @@ class DojoSynth {
     osc.start(now);
     osc.stop(now + 0.045);
   }
+
+  // Warm C-major pentatonic + color tones mapped smoothly from Left bass to Right treble across all 26 keys
+  private static readonly PIANO_KEY_FREQ: Record<string, number> = {
+    // Left hand (warm bass & tenor, C3–A4)
+    q: 130.81, // C3
+    a: 146.83, // D3
+    z: 164.81, // E3
+    w: 196.0,  // G3
+    s: 174.61, // F3 (home ring)
+    x: 164.81, // E3
+    e: 220.0,  // A3
+    d: 196.0,  // G3 (home middle)
+    c: 196.0,  // G3
+    r: 261.63, // C4
+    f: 220.0,  // A3 (home index)
+    v: 246.94, // B3
+    t: 293.66, // D4
+    g: 261.63, // C4 (home inner)
+    b: 293.66, // D4
+    // Right hand (bright lyrical treble, D4–G5)
+    y: 329.63, // E4
+    h: 293.66, // D4 (home inner)
+    n: 329.63, // E4
+    u: 392.0,  // G4
+    j: 329.63, // E4 (home index)
+    m: 392.0,  // G4
+    i: 440.0,  // A4
+    k: 392.0,  // G4 (home middle)
+    o: 523.25, // C5
+    l: 440.0,  // A4 (home ring)
+    p: 587.33, // D5
+    ';': 523.25, // C5 (home pinky)
+    ',': 440.0,  // A4
+    '.': 523.25, // C5
+    '/': 587.33, // D5
+  };
+
+  // Gentle Rhodes-like felt-piano single key depression tone
+  public playPianoNote(key: string, forceSound = false): void {
+    const ctx = this.ensureContext(forceSound);
+    if (!ctx) return;
+    const hz = DojoSynth.PIANO_KEY_FREQ[key.toLowerCase()] ?? 261.63;
+    const now = ctx.currentTime;
+
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+
+    osc1.type = 'sine';
+    osc2.type = 'triangle';
+    osc1.frequency.setValueAtTime(hz, now);
+    osc2.frequency.setValueAtTime(hz * 2, now);
+
+    const harmGain = ctx.createGain();
+    harmGain.gain.setValueAtTime(0.18, now);
+    harmGain.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(Math.min(2600, hz * 5.2), now);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(480, hz * 2.1), now + 0.24);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.085, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0008, now + 0.32);
+
+    osc1.connect(filter);
+    osc2.connect(harmGain).connect(filter);
+    filter.connect(gain).connect(ctx.destination);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.34);
+    osc2.stop(now + 0.34);
+  }
+
+  // Expressive warm piano chord bloom when a simultaneous chord commits
+  public playPianoChord(keys: string[], isCharComplete = false, forceSound = false): void {
+    const ctx = this.ensureContext(forceSound);
+    if (!ctx || keys.length === 0) return;
+    const now = ctx.currentTime;
+    const uniqueKeys = Array.from(new Set(keys.map((k) => k.toLowerCase())));
+    const freqs = uniqueKeys
+      .map((k) => DojoSynth.PIANO_KEY_FREQ[k] ?? 261.63)
+      .sort((a, b) => a - b);
+
+    // On full character completion, add a luminous octave shimmer on the top voice
+    const notes = isCharComplete ? [...freqs, Math.min(1046.5, freqs[freqs.length - 1] * 2)] : freqs;
+    const perVoicePeak = Math.min(0.095, 0.22 / Math.max(1, notes.length));
+    const sustain = isCharComplete ? 0.68 : 0.44;
+
+    notes.forEach((hz, idx) => {
+      const start = now + idx * 0.012; // subtle harp-like micro-roll (12ms) for natural pianist bloom
+      const fundamental = ctx.createOscillator();
+      const overtone = ctx.createOscillator();
+      const overtoneGain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+
+      fundamental.type = 'sine';
+      overtone.type = 'triangle';
+      fundamental.frequency.setValueAtTime(hz, start);
+      overtone.frequency.setValueAtTime(hz * 2, start);
+
+      overtoneGain.gain.setValueAtTime(0.22, start);
+      overtoneGain.gain.exponentialRampToValueAtTime(0.008, start + sustain * 0.65);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(Math.min(3200, hz * 6), start);
+      filter.frequency.exponentialRampToValueAtTime(Math.max(520, hz * 2.2), start + sustain);
+
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(perVoicePeak, start + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0008, start + sustain);
+
+      fundamental.connect(filter);
+      overtone.connect(overtoneGain).connect(filter);
+      filter.connect(gain).connect(ctx.destination);
+
+      fundamental.start(start);
+      overtone.start(start);
+      fundamental.stop(start + sustain + 0.04);
+      overtone.stop(start + sustain + 0.04);
+    });
+  }
 }
 
 export const synth = new DojoSynth();
