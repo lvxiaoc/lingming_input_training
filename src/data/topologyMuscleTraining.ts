@@ -60,6 +60,7 @@ export const WRITING_STREAM_PRESETS: WritingStreamPreset[] = [
 ];
 
 export type TopologyGroupPresetId =
+  | 'all_20_sequential'
   | 'all_20_core'
   | 'left_hand'
   | 'right_hand'
@@ -72,7 +73,10 @@ export interface TopologyGroupPreset {
   brief: string;
   keys: string[];
   perKeyLimit?: number; // undefined = all radicals in each key
+  sequential?: boolean; // true = preserve exact key order & radical order without shuffling
 }
+
+const TOTAL_ALL_20_RADICALS = TWENTY_KEY_MORPHS.reduce((sum, s) => sum + s.nodes.length, 0);
 
 export const TOPOLOGY_GROUP_PRESETS: TopologyGroupPreset[] = [
   {
@@ -81,6 +85,13 @@ export const TOPOLOGY_GROUP_PRESETS: TopologyGroupPreset[] = [
     brief: '每键 1 枚核心母形，快速打通 20 键全盘反射（20 题）',
     keys: TWENTY_KEY_MORPHS.map((s) => s.key),
     perKeyLimit: 1,
+  },
+  {
+    id: 'all_20_sequential',
+    label: '全 20 键依次全练',
+    brief: `按 Q→M 键序依次吃透全部 20 键所有字根，不打乱不遗漏（共 ${TOTAL_ALL_20_RADICALS} 题）`,
+    keys: TWENTY_KEY_MORPHS.map((s) => s.key),
+    sequential: true,
   },
   {
     id: 'all_20_core',
@@ -231,7 +242,9 @@ export function buildGroupTopologyDeck(
   previousCarriers?: Record<string, string>
 ): TopologyDrillItem[] {
   const preset =
-    TOPOLOGY_GROUP_PRESETS.find((p) => p.id === presetId) ?? TOPOLOGY_GROUP_PRESETS[1];
+    TOPOLOGY_GROUP_PRESETS.find((p) => p.id === presetId) ??
+    TOPOLOGY_GROUP_PRESETS.find((p) => p.id === 'all_20_core') ??
+    TOPOLOGY_GROUP_PRESETS[0];
   const pool: TopologyDrillItem[] = [];
 
   for (const k of preset.keys) {
@@ -262,6 +275,10 @@ export function buildGroupTopologyDeck(
         )
       );
     }
+  }
+
+  if (preset.sequential) {
+    return pool;
   }
 
   return antiClusterByKey(fisherYates(pool));

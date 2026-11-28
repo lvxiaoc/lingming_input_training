@@ -18,6 +18,11 @@ import { uiText, useUiScript } from '../data/uiScript';
 import { useThemeMode } from '../data/theme';
 import type { CampaignStageKind } from '../data/campaign';
 import { InkWashParticleLayer } from './InkWashLayer';
+import {
+  CachedSeamlessRadical,
+  drawSeamlessCoreSpreadGlyph,
+  lookupSeamlessRadical,
+} from '../utils/topologyBrushRenderer';
 
 export type GameMode = 'reflex' | 'arcade' | 'weakkey';
 export type LayoutMode = 'depth' | 'split';
@@ -95,6 +100,9 @@ interface FallingTile {
   scale: number;
   flash: number;
   shake: number;
+  coreGlyph: CachedSeamlessRadical | null;
+  coreReveal: number;
+  spreadProgress: number;
 }
 
 interface Particle {
@@ -150,6 +158,9 @@ interface InkDissolveGlyph {
   glyphY: number;
   age: number;
   duration: number;
+  coreGlyph: CachedSeamlessRadical | null;
+  startSpread: number;
+  isSingleKey: boolean;
 }
 
 interface FloatText {
@@ -369,6 +380,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       glyphY: 0,
       age: 0,
       duration: 0.56,
+      coreGlyph: null,
+      startSpread: 0,
+      isSingleKey: false,
     })),
     floats: Array.from({ length: MAX_FLOATS }, (): FloatText => ({
       active: false,
@@ -489,9 +503,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     x: number,
     y: number,
     glyphSize: number,
-    glyphY: number
+    glyphY: number,
+    coreGlyph: CachedSeamlessRadical | null = null,
+    startSpread = 0,
+    isSingleKey = false
   ) => {
     const { dissolves } = simRef.current;
+    if (coreGlyph) {
+      for (let i = 0; i < dissolves.length; i++) {
+        const prev = dissolves[i];
+        if (prev.active && prev.coreGlyph && Math.abs(prev.x - x) < 12 && Math.abs(prev.y - y) < 12) {
+          prev.active = false;
+        }
+      }
+    }
     for (let i = 0; i < dissolves.length; i++) {
       const d = dissolves[i];
       if (!d.active) {
@@ -502,7 +527,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         d.glyphSize = glyphSize;
         d.glyphY = glyphY;
         d.age = 0;
-        d.duration = 0.58;
+        d.duration = coreGlyph ? (isSingleKey ? 0.54 : 0.48) : 0.58;
+        d.coreGlyph = coreGlyph;
+        d.startSpread = startSpread;
+        d.isSingleKey = isSingleKey;
         return;
       }
     }
@@ -746,6 +774,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     if (!entry) return;
 
     const isWash = propsRef.current.themeMode === 'wash';
+    const coreGlyph =
+      propsRef.current.scheme.isLingming && !entry.xray
+        ? lookupSeamlessRadical(entry.code[0], entry.char, entry.kind)
+        : null;
     const tile: FallingTile = {
       uid: s.uidSeq++,
       entry,
@@ -757,18 +789,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       consecutiveErrors: 0,
       spawnedAt: nowMs,
       lastKeyAt: nowMs,
-      scale:
-        entry.xray?.completedIndices && entry.xray.completedIndices.length > 0
+      scale: coreGlyph
+        ? 1
+        : entry.xray?.completedIndices && entry.xray.completedIndices.length > 0
           ? 1
           : isWash
             ? 1.035
             : 0.86,
-      flash: 0.45,
+      flash: coreGlyph ? 0 : 0.45,
       shake: 0,
+      coreGlyph,
+      coreReveal: 0,
+      spreadProgress: 0,
     };
     s.tiles = [tile];
     s.activeUid = tile.uid;
-    if (isWash) {
+    if (isWash && !coreGlyph) {
       const depthMetrics = getDepthFocusMetrics(s.width, s.height, propsRef.current.hideCodeHints);
       const ey = propsRef.current.layoutMode === 'depth' ? s.height * depthMetrics.centerYRatio : tile.y;
       emitInkPlumes(s.width * 0.5, ey, 2, 72, 0.14, false);
@@ -815,6 +851,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const baseSpeed = 30 + (s.wave - 1) * 7.5 + Math.min(26, s.cleared * 0.45);
     const lenFactor = entry.code.length >= 3 ? 0.84 : 1.0;
 
+    const coreGlyph =
+      sc.isLingming && !entry.xray
+        ? lookupSeamlessRadical(entry.code[0], entry.char, entry.kind)
+        : null;
     const tile: FallingTile = {
       uid: s.uidSeq++,
       entry,
@@ -826,9 +866,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       consecutiveErrors: 0,
       spawnedAt: nowMs,
       lastKeyAt: nowMs,
-      scale: 0.9,
-      flash: 0.3,
+      scale: coreGlyph ? 1 : 0.9,
+      flash: coreGlyph ? 0 : 0.3,
       shake: 0,
+      coreGlyph,
+      coreReveal: 0,
+      spreadProgress: 0,
     };
     s.tiles.push(tile);
     if (s.activeUid === null) {
@@ -1000,6 +1043,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
     }
 
+    if (propsRef.current.mode !== 'arcade' && active.typed.length === 0) {
+      for (const d of s.dissolves) {
+        if (d.active && d.coreGlyph) d.active = false;
+      }
+    }
+
     const expectedKey = active.entry.code[active.typed.length];
     const keyLatency = Math.max(80, nowMs - active.lastKeyAt);
     s.totalKeys++;
@@ -1012,8 +1061,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       active.typed += key;
       active.consecutiveErrors = 0;
       active.lastKeyAt = nowMs;
-      active.scale = isWashInput ? 1.01 : 1.03;
-      active.flash = 0.35;
+      if (!active.coreGlyph) {
+        active.scale = isWashInput ? 1.01 : 1.03;
+        active.flash = 0.35;
+      }
       s.lastErrorKey = null;
       s.lastStrikeKey = key;
       s.lastStrikeCorrect = true;
@@ -1121,7 +1172,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               ? depthMetricsNow.glyphSize
               : Math.max(48, Math.round(depthMetricsNow.glyphSize * 1.35))
             : propsRef.current.mode !== 'arcade'
-              ? 72
+              ? active.coreGlyph
+                ? 54
+                : 72
               : 40;
         const dissolveYOff =
           propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
@@ -1129,24 +1182,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             : propsRef.current.mode !== 'arcade'
               ? -16
               : -15;
-        emitDissolveGlyph(active.entry.char, px, py, dissolveSize, dissolveYOff);
+        emitDissolveGlyph(
+          active.entry.char,
+          px,
+          py,
+          dissolveSize,
+          dissolveYOff,
+          active.coreGlyph,
+          active.spreadProgress,
+          active.entry.code.length === 1
+        );
 
-        // Trigger dedicated WebGL/Canvas organic "暈入淡出" ink-wash splash from the completed radical's strokes
-        inkLayerRef.current?.emitGlyphSplash({
-          x: px,
-          y: py,
-          char: active.entry.char,
-          glyphSize: dissolveSize,
-          glyphYOffset: dissolveYOff,
-          themeMode: propsRef.current.themeMode,
-          accentHex: zoneColor,
-          intensity: s.combo % 10 === 0 ? 'milestone' : 'complete',
-          xrayStrokes: active.entry.xray?.strokes,
-          xrayActiveIndices: active.entry.xray?.activeIndices,
-        });
+        if (!active.coreGlyph) {
+          // Trigger dedicated WebGL/Canvas organic "暈入淡出" ink-wash splash from the completed radical's strokes
+          inkLayerRef.current?.emitGlyphSplash({
+            x: px,
+            y: py,
+            char: active.entry.char,
+            glyphSize: dissolveSize,
+            glyphYOffset: dissolveYOff,
+            themeMode: propsRef.current.themeMode,
+            accentHex: zoneColor,
+            intensity: s.combo % 10 === 0 ? 'milestone' : 'complete',
+            xrayStrokes: active.entry.xray?.strokes,
+            xrayActiveIndices: active.entry.xray?.activeIndices,
+          });
 
-        if (isWash) {
-          emitInkPlumes(px, py + dissolveYOff, s.combo % 10 === 0 ? 4 : 3, s.combo % 10 === 0 ? 94 : 74, 0.14, false);
+          if (isWash) {
+            emitInkPlumes(px, py + dissolveYOff, s.combo % 10 === 0 ? 4 : 3, s.combo % 10 === 0 ? 94 : 74, 0.14, false);
+          }
         }
 
         const floatStartY =
@@ -1262,44 +1326,46 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       } else {
         synth.playKeyHit(s.combo, false);
-        const isWash = propsRef.current.themeMode === 'wash';
-        const dm = getDepthFocusMetrics(s.width, s.height, propsRef.current.hideCodeHints);
-        const hitY =
-          propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
-            ? s.height * dm.centerYRatio
-            : active.y;
-        const hitGlyphSize =
-          propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
-            ? propsRef.current.scheme.isLingming
-              ? dm.glyphSize
-              : Math.max(48, Math.round(dm.glyphSize * 1.35))
-            : propsRef.current.mode !== 'arcade'
-              ? 72
-              : 40;
-        const hitGlyphYOff =
-          propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
-            ? dm.glyphYOffset
-            : propsRef.current.mode !== 'arcade'
-              ? -16
-              : -15;
-        const hitZoneId = propsRef.current.scheme.keyMap[expectedKey]?.zoneId;
-        const hitZoneColor =
-          propsRef.current.scheme.zones.find((z) => z.id === hitZoneId)?.color || '#D89B3C';
+        if (!active.coreGlyph) {
+          const isWash = propsRef.current.themeMode === 'wash';
+          const dm = getDepthFocusMetrics(s.width, s.height, propsRef.current.hideCodeHints);
+          const hitY =
+            propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
+              ? s.height * dm.centerYRatio
+              : active.y;
+          const hitGlyphSize =
+            propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
+              ? propsRef.current.scheme.isLingming
+                ? dm.glyphSize
+                : Math.max(48, Math.round(dm.glyphSize * 1.35))
+              : propsRef.current.mode !== 'arcade'
+                ? 72
+                : 40;
+          const hitGlyphYOff =
+            propsRef.current.mode !== 'arcade' && propsRef.current.layoutMode === 'depth'
+              ? dm.glyphYOffset
+              : propsRef.current.mode !== 'arcade'
+                ? -16
+                : -15;
+          const hitZoneId = propsRef.current.scheme.keyMap[expectedKey]?.zoneId;
+          const hitZoneColor =
+            propsRef.current.scheme.zones.find((z) => z.id === hitZoneId)?.color || '#D89B3C';
 
-        inkLayerRef.current?.emitGlyphSplash({
-          x: active.x * s.width,
-          y: hitY,
-          char: active.entry.char,
-          glyphSize: hitGlyphSize,
-          glyphYOffset: hitGlyphYOff,
-          themeMode: propsRef.current.themeMode,
-          accentHex: hitZoneColor,
-          intensity: 'key',
-          xrayStrokes: active.entry.xray?.strokes,
-          xrayActiveIndices: active.entry.xray?.activeIndices,
-        });
-        if (isWash) {
-          emitInkPlumes(active.x * s.width, hitY + hitGlyphYOff, 2, 54, 0.11, false);
+          inkLayerRef.current?.emitGlyphSplash({
+            x: active.x * s.width,
+            y: hitY,
+            char: active.entry.char,
+            glyphSize: hitGlyphSize,
+            glyphYOffset: hitGlyphYOff,
+            themeMode: propsRef.current.themeMode,
+            accentHex: hitZoneColor,
+            intensity: 'key',
+            xrayStrokes: active.entry.xray?.strokes,
+            xrayActiveIndices: active.entry.xray?.activeIndices,
+          });
+          if (isWash) {
+            emitInkPlumes(active.x * s.width, hitY + hitGlyphYOff, 2, 54, 0.11, false);
+          }
         }
         propsRef.current.onMasteryChange(masteryRef.current);
       }
@@ -1611,6 +1677,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             tile.scale += (1 - tile.scale) * Math.min(1, dt * 14);
             tile.flash = Math.max(0, tile.flash - dt * 3.4);
             tile.shake = Math.max(0, tile.shake - dt * 36);
+            if (tile.coreGlyph) {
+              const typedLen = tile.typed.length;
+              const codeLen = Math.max(1, tile.entry.code.length);
+              const targetCore = typedLen >= 1 ? 1 : 0;
+              const targetSpread =
+                typedLen <= 1 ? 0 : Math.min(1, (typedLen - 1) / Math.max(1, codeLen - 1));
+              tile.coreReveal += (targetCore - tile.coreReveal) * Math.min(1, dt * 24);
+              tile.spreadProgress += (targetSpread - tile.spreadProgress) * Math.min(1, dt * 16);
+              if (Math.abs(targetCore - tile.coreReveal) < 0.004) tile.coreReveal = targetCore;
+              if (Math.abs(targetSpread - tile.spreadProgress) < 0.004) {
+                tile.spreadProgress = targetSpread;
+              }
+            }
           }
 
           s.camShake = Math.max(0, s.camShake - dt * 22);
@@ -1915,7 +1994,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.save();
             ctx.translate(cx, cy);
             ctx.scale(tile.scale, tile.scale);
-            if (isWash) {
+            const activeCoreDissolve =
+              isFocusMode && tile.typed.length === 0 && !tile.hadError
+                ? s.dissolves.find((d) => d.active && d.coreGlyph !== null)
+                : undefined;
+            if (activeCoreDissolve) {
+              const delaySec = activeCoreDissolve.isSingleKey ? 0.27 : 0.19;
+              const spawnAge = Math.max(0, (nowMs - tile.spawnedAt) / 1000);
+              const enterAlpha = Math.max(0, Math.min(1, (spawnAge - delaySec) / 0.2));
+              ctx.globalAlpha *= enterAlpha;
+            } else if (isWash && tile.typed.length === 0 && !tile.hadError) {
               const spawnAge = Math.max(0, (nowMs - tile.spawnedAt) / 1000);
               const enterAlpha = Math.min(1, spawnAge / 0.24);
               ctx.globalAlpha *= enterAlpha;
@@ -2118,6 +2206,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 ctx.fill(p2d);
               }
               ctx.restore();
+            } else if (tile.coreGlyph) {
+              drawSeamlessCoreSpreadGlyph(
+                ctx,
+                tile.coreGlyph,
+                0,
+                glyphY,
+                Math.round(glyphSize * 1.48),
+                {
+                  coreReveal: tile.coreReveal,
+                  spreadProgress: tile.spreadProgress,
+                  isWash,
+                }
+              );
             } else if (tile.entry.char === '𠂇') {
               // Crisp Songti calligraphic two-stroke render for CJK Ext-B 「𠂇」 so it never shows as a missing-font box
               ctx.save();
@@ -2537,6 +2638,40 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Completed glyph ink-dissolve afterimages across both themes (水墨暈入淡出殘影)
           for (const d of s.dissolves) {
             if (!d.active) continue;
+            if (d.coreGlyph) {
+              const sweepStart = d.isSingleKey ? 0.07 : 0;
+              const sweepEnd = d.isSingleKey ? 0.27 : 0.19;
+              let curSpread = d.startSpread;
+              let fadeAlpha = 0.96;
+              if (d.age <= sweepStart) {
+                curSpread = 0;
+              } else if (d.age <= sweepEnd) {
+                const sweepT = Math.max(0, Math.min(1, (d.age - sweepStart) / Math.max(0.01, sweepEnd - sweepStart)));
+                const easedSweep = 1 - Math.pow(1 - sweepT, 2.3);
+                curSpread = d.startSpread + (1 - d.startSpread) * easedSweep;
+              } else {
+                curSpread = 1;
+                const fadeT = Math.max(0, Math.min(1, (d.age - sweepEnd) / Math.max(0.01, d.duration - sweepEnd)));
+                fadeAlpha = 0.96 * Math.pow(1 - fadeT, 1.55);
+              }
+              ctx.save();
+              ctx.translate(d.x, d.y);
+              drawSeamlessCoreSpreadGlyph(
+                ctx,
+                d.coreGlyph,
+                0,
+                d.glyphY,
+                Math.round(d.glyphSize * 1.48),
+                {
+                  coreReveal: 1,
+                  spreadProgress: curSpread,
+                  isWash,
+                  alpha: fadeAlpha,
+                }
+              );
+              ctx.restore();
+              continue;
+            }
             const tNorm = Math.min(1, d.age / d.duration);
             const ease = 1 - Math.pow(1 - tNorm, 2);
             const scale = 1 + ease * 0.16;
@@ -2550,7 +2685,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             const dGrad = ctx.createRadialGradient(0, d.glyphY, 0, 0, d.glyphY, haloR);
             if (isWash) {
               dGrad.addColorStop(0, `rgba(20, 20, 18, ${(fade * 0.15).toFixed(3)})`);
-              dGrad.addColorStop(0.55, `rgba(56, 56, 52, ${(fade * 0.06).toFixed(3)})`);
+              dGrad.addColorStop(0.55, `rgba(56, 56, 52, ${(fade * 0.065).toFixed(3)})`);
               dGrad.addColorStop(1, 'rgba(243, 241, 236, 0)');
             } else {
               dGrad.addColorStop(0, `rgba(124, 229, 188, ${(fade * 0.16).toFixed(3)})`);

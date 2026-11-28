@@ -20,14 +20,18 @@ export function useTopologyAtlasPrint(
   }, []);
 
   const triggerPrint = useCallback(
-    async (overrideOpts?: Partial<Omit<CloudPosterRenderOptions, 'scale'>>) => {
+    async (
+      overrideOpts?: Partial<Omit<CloudPosterRenderOptions, 'scale'>> & {
+        pages?: 'both' | 'page1' | 'page2' | 'alpha_all';
+      }
+    ) => {
       if (isPreparingPrint) return;
       setIsPreparingPrint(true);
       try {
         const urls = await buildA4LandscapePrintDataUrls({
           ...defaultOpts,
           ...overrideOpts,
-          pages: 'both',
+          pages: overrideOpts?.pages ?? 'both',
         });
         setPrintUrls(urls);
         // Ensure React commits the print-only <img> nodes before window.print() snapshots the DOM

@@ -50,7 +50,7 @@ import {
   Sampled,
   sampleCatmullRom,
 } from '../utils/topologyBrushRenderer';
-import { TopologyCloudPdfModal } from './TopologyCloudPdfModal';
+import { TopologyCloudPdfModal, TopologyPrintViewTab } from './TopologyCloudPdfModal';
 import { useTopologyAtlasPrint } from '../hooks/useTopologyAtlasPrint';
 import { PrintableTopologySheets } from './PrintableTopologySheets';
 
@@ -334,6 +334,8 @@ export const TwentyKeyTopologyTheater: React.FC<TwentyKeyTopologyTheaterProps> =
   const [convergePhase, setConvergePhase] = useState<'whole' | 'converge' | 'lock' | 'hold'>('whole');
   const [lastStruckKey, setLastStruckKey] = useState<string | null>(null);
   const [cloudPdfOpen, setCloudPdfOpen] = useState<boolean>(false);
+  const [cloudPdfInitialTab, setCloudPdfInitialTab] = useState<TopologyPrintViewTab>('alpha_all');
+  const [cloudPdfInitialGrayscale, setCloudPdfInitialGrayscale] = useState<boolean>(true);
 
   const { printUrls, isPreparingPrint, triggerPrint } = useTopologyAtlasPrint({
     showGhostGlyph: !skeletonOnly,
@@ -1681,18 +1683,16 @@ export const TwentyKeyTopologyTheater: React.FC<TwentyKeyTopologyTheaterProps> =
             disabled={isPreparingPrint}
             onClick={() => {
               synth.playClick();
-              void triggerPrint({
-                showGhostGlyph: !skeletonOnly,
-                showWatermark: false,
-                showFingerVector: true,
-              });
+              setCloudPdfInitialTab('alpha_all');
+              setCloudPdfInitialGrayscale(true);
+              setCloudPdfOpen(true);
             }}
-            title="使用 A4 横向排版直接打印当前 20 键书法拓扑图谱"
+            title="按 A–Z 字母序预览与打印全部 249 字根大字核心谱（灰度突出核心，A4 横向）"
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] disabled:opacity-60 text-xs font-semibold text-[var(--dojo-text)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
           >
             <Printer className="w-3.5 h-3.5 text-[var(--dojo-crimson)]" />
             <span>
-              {isPreparingPrint ? '生成打印版中...' : '打印当前 20 键书法拓扑图谱'}
+              {isPreparingPrint ? '生成打印版中...' : 'A–Z 全字根大字打印'}
             </span>
           </button>
 
@@ -1700,6 +1700,8 @@ export const TwentyKeyTopologyTheater: React.FC<TwentyKeyTopologyTheaterProps> =
             type="button"
             onClick={() => {
               synth.playClick();
+              setCloudPdfInitialTab('page1');
+              setCloudPdfInitialGrayscale(false);
               setCloudPdfOpen(true);
             }}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface-inset)] hover:bg-[var(--dojo-surface-2)] text-xs font-semibold text-[var(--dojo-text)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
@@ -2345,6 +2347,8 @@ export const TwentyKeyTopologyTheater: React.FC<TwentyKeyTopologyTheaterProps> =
       <TopologyCloudPdfModal
         open={cloudPdfOpen}
         activeKey={activeSpec.key}
+        initialTab={cloudPdfInitialTab}
+        initialGrayscale={cloudPdfInitialGrayscale}
         onClose={() => setCloudPdfOpen(false)}
         onRequestPrint={triggerPrint}
         isPrintingExternal={isPreparingPrint}

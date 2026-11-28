@@ -1,5 +1,9 @@
-import { CornerConvergenceData } from '../data/cornerConvergence';
-import { MorphPt } from '../data/twentyKeysMorph';
+import { buildCornerConvergenceData, CornerConvergenceData } from '../data/cornerConvergence';
+import {
+  MorphPt,
+  TWENTY_KEY_MORPH_BY_KEY,
+  TWENTY_KEY_MORPHS,
+} from '../data/twentyKeysMorph';
 
 export interface Sampled {
   x: number;
@@ -281,7 +285,39 @@ export function drawResonanceField(
   ctx.restore();
 }
 
-export function drawMiZiPaper(ctx: CanvasRenderingContext2D, size: number, isWash: boolean) {
+export function drawMiZiPaper(
+  ctx: CanvasRenderingContext2D,
+  size: number,
+  isWash: boolean,
+  grayscale = false
+) {
+  if (grayscale) {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, size, size);
+
+    const pad = Math.round(size * 0.085);
+    const bw = size - pad * 2;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(pad + 0.5, pad + 0.5, bw - 1, bw - 1);
+
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.075)';
+    ctx.setLineDash([4, 6]);
+    ctx.beginPath();
+    ctx.moveTo(pad + bw / 2, pad);
+    ctx.lineTo(pad + bw / 2, pad + bw);
+    ctx.moveTo(pad, pad + bw / 2);
+    ctx.lineTo(pad + bw, pad + bw / 2);
+    ctx.moveTo(pad, pad);
+    ctx.lineTo(pad + bw, pad + bw);
+    ctx.moveTo(pad + bw, pad);
+    ctx.lineTo(pad, pad + bw);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
   const bg = ctx.createRadialGradient(
     size * 0.5,
     size * 0.44,
@@ -918,7 +954,8 @@ export function drawCrystallizedCornerMark(
   lockT: number,
   isWash: boolean,
   staticMode = false,
-  cueFade = 1
+  cueFade = 1,
+  grayscale = false
 ) {
   const pad = size * 0.09;
   const inner = size - pad * 2;
@@ -1377,11 +1414,19 @@ export function drawCrystallizedCornerMark(
         : !staticMode && lockT > 1
           ? 0.14 * Math.sin((lockT - 1) * 4.2)
           : 0;
-    // Cool jade-teal for unified finger vector (F→T ↗) + clear cobalt blue for the starting segment of 撇/提
-    const fingerTealRgb = isWash ? '13, 148, 136' : '45, 212, 191';
-    const refBlueRgb = isWash ? '29, 118, 210' : '56, 189, 248';
+    // Cool jade-teal for unified finger vector + cobalt blue for starting edge (crisp neutral mid-gray in grayscale print mode)
+    const fingerTealRgb = grayscale
+      ? '86, 86, 86'
+      : isWash
+        ? '13, 148, 136'
+        : '45, 212, 191';
+    const refBlueRgb = grayscale
+      ? '148, 148, 148'
+      : isWash
+        ? '29, 118, 210'
+        : '56, 189, 248';
 
-    // 0) Clear cool-blue starting portion of 撇/提 ("hard to advance into the red resistance wall")
+    // 0) Clear starting portion ("hard to advance into the core resistance wall")
     if (rc.referenceStrokes && rc.referenceStrokes.length > 0) {
       rc.referenceStrokes.forEach((refStroke) => {
         const refSampled = sampleCatmullRom(refStroke.points, 28);
@@ -1391,7 +1436,7 @@ export function drawCrystallizedCornerMark(
           1,
           size,
           refBlueRgb,
-          0.92 * cueIntensity,
+          (grayscale ? 0.96 : 0.92) * cueIntensity,
           Boolean(refStroke.dunbiStart),
           Boolean(refStroke.flickEnd)
         );
@@ -1657,6 +1702,8 @@ export interface StaticStampOptions {
   showWatermark?: boolean;
   isWash?: boolean;
   ghostAlpha?: number;
+  /** High-contrast grayscale print mode: jet-black core strokes over light silver-gray outer strokes on pure white */
+  grayscaleCore?: boolean;
 }
 
 /**
@@ -1680,13 +1727,16 @@ export function renderStaticConvergenceStamp(
     showWatermark = false,
     isWash = true,
     ghostAlpha = 0.2,
+    grayscaleCore = false,
   } = opts;
 
   const logical = 410;
   const scale = targetSize / logical;
-  const coreRgb = isWash ? '176, 46, 36' : '232, 92, 68';
-  const amberRgb = isWash ? '194, 118, 24' : '244, 178, 72';
-  const inkRgb = isWash ? '26, 25, 23' : '242, 236, 226';
+  const coreRgb = grayscaleCore ? '12, 12, 12' : isWash ? '176, 46, 36' : '232, 92, 68';
+  const amberRgb = grayscaleCore ? '138, 138, 138' : isWash ? '194, 118, 24' : '244, 178, 72';
+  // In grayscale print mode, use uniform light silver-gray at high opacity so overlapping ellipses stay even & clean
+  const inkRgb = grayscaleCore ? '196, 196, 196' : isWash ? '26, 25, 23' : '242, 236, 226';
+  const effectiveGhostAlpha = grayscaleCore ? 0.88 : ghostAlpha;
 
   const cornerArmSampled = convergenceData.cornerArms.map((s) => sampleCatmullRom(s.points, 36));
 
@@ -1695,12 +1745,16 @@ export function renderStaticConvergenceStamp(
   ctx.scale(scale, scale);
 
   if (showPaper) {
-    drawMiZiPaper(ctx, logical, isWash);
+    drawMiZiPaper(ctx, logical, isWash, grayscaleCore);
   }
 
   if (showWatermark) {
     ctx.save();
-    const wmColor = isWash ? 'rgba(20, 20, 18, 0.045)' : 'rgba(244, 239, 230, 0.045)';
+    const wmColor = grayscaleCore
+      ? 'rgba(0, 0, 0, 0.045)'
+      : isWash
+        ? 'rgba(20, 20, 18, 0.045)'
+        : 'rgba(244, 239, 230, 0.045)';
     if (radicalChar === '𠂇') {
       ctx.strokeStyle = wmColor;
       ctx.lineWidth = 24;
@@ -1739,7 +1793,7 @@ export function renderStaticConvergenceStamp(
         1,
         isWash,
         false,
-        ghostAlpha
+        effectiveGhostAlpha
       );
     });
   }
@@ -1753,8 +1807,599 @@ export function renderStaticConvergenceStamp(
     amberRgb,
     1.4,
     isWash,
-    true
+    true,
+    1,
+    grayscaleCore
   );
+
+  ctx.restore();
+}
+
+export interface StyledCoreArm {
+  pts: Sampled[];
+  dunbi: boolean;
+  flick: boolean;
+}
+
+export interface CachedSeamlessRadical {
+  key: string;
+  radical: string;
+  conv: CornerConvergenceData;
+  styledArms: StyledCoreArm[];
+  refStrokeSampled: Array<{ pts: Sampled[]; dunbi: boolean; flick: boolean }>;
+}
+
+const seamlessRadicalCache = new Map<string, CachedSeamlessRadical | null>();
+
+function buildStyledCoreArms(conv: CornerConvergenceData): StyledCoreArm[] {
+  const style = conv.brushStyle ?? 'default';
+  return conv.cornerArms.map((origStroke) => {
+    const sampled = sampleCatmullRom(origStroke.points, 36);
+    const baseDunbi = Boolean(origStroke.dunbiStart);
+    const baseFlick = Boolean(origStroke.flickEnd);
+    if (style === 'default' || sampled.length < 2) {
+      return { pts: sampled, dunbi: baseDunbi, flick: baseFlick };
+    }
+    const n = sampled.length - 1;
+    if (style === 'v_xuanzhen') {
+      return {
+        dunbi: true,
+        flick: true,
+        pts: sampled.map((pt, i) => {
+          const t = i / n;
+          const mult =
+            t < 0.14
+              ? 1.32 - t * 0.6
+              : Math.max(0.18, 1.24 * Math.pow(1 - (t - 0.14) / 0.86, 0.72));
+          return { ...pt, p: Math.min(1.5, pt.p * mult) };
+        }),
+      };
+    }
+    if (style === 'm_heavy_na') {
+      return {
+        dunbi: false,
+        flick: true,
+        pts: sampled.map((pt, i) => {
+          const t = i / n;
+          let mult = 1;
+          if (t < 0.25) {
+            mult = 0.52 + (t / 0.25) * 0.28;
+          } else if (t < 0.78) {
+            mult = 0.8 + ((t - 0.25) / 0.53) * 0.72;
+          } else {
+            const tail = (t - 0.78) / 0.22;
+            mult = Math.max(0.2, 1.52 * (1 - tail * 0.84));
+          }
+          return { ...pt, p: Math.min(1.62, pt.p * mult) };
+        }),
+      };
+    }
+    if (style === 'c_round_cradle') {
+      const minY = Math.min(...sampled.map((pt) => pt.y));
+      const maxY = Math.max(...sampled.map((pt) => pt.y));
+      const spanY = Math.max(0.08, maxY - minY);
+      return {
+        dunbi: false,
+        flick: false,
+        pts: sampled.map((pt, i) => {
+          const t = i / n;
+          const lowFrac = Math.max(0, Math.min(1, (pt.y - minY) / spanY));
+          const belly = 0.84 + lowFrac * 0.36;
+          const liftTip = t > 0.86 ? 1 - ((t - 0.86) / 0.14) * 0.28 : 1;
+          return { ...pt, p: Math.min(1.38, pt.p * belly * liftTip) };
+        }),
+      };
+    }
+    if (style === 'w_silk_flick') {
+      return {
+        dunbi: false,
+        flick: true,
+        pts: sampled.map((pt, i) => {
+          const t = i / n;
+          const mult = t > 0.76 ? Math.max(0.22, 0.94 * (1 - ((t - 0.76) / 0.24) * 0.76)) : 0.92;
+          return { ...pt, p: pt.p * mult };
+        }),
+      };
+    }
+    if (style === 'x_square_dun') {
+      return {
+        dunbi: false,
+        flick: false,
+        pts: sampled.map((pt) => {
+          const dKnee = Math.hypot(pt.x - conv.cornerVertex.x, pt.y - conv.cornerVertex.y);
+          const kneeBoost = dKnee < 0.085 ? 1 + (1 - dKnee / 0.085) * 0.38 : 0.94;
+          return { ...pt, p: Math.min(1.48, pt.p * kneeBoost) };
+        }),
+      };
+    }
+    if (style === 't_resistance_block') {
+      return {
+        dunbi: true,
+        flick: false,
+        pts: sampled.map((pt, i) => {
+          const t = i / n;
+          const belly = 1.06 + Math.sin(t * Math.PI) * 0.24;
+          return { ...pt, p: Math.min(1.48, pt.p * belly) };
+        }),
+      };
+    }
+    return { pts: sampled, dunbi: baseDunbi, flick: baseFlick };
+  });
+}
+
+/**
+ * Looks up and caches the pre-sampled 20-key topological core data for a Lingming radical.
+ * Returns null for full composite Hanzi or unmapped characters so callers can fall back to font rendering.
+ */
+export function lookupSeamlessRadical(
+  primaryKeyHint: string | undefined,
+  char: string,
+  entryKind?: 'da' | 'root' | 'char'
+): CachedSeamlessRadical | null {
+  if (!char) return null;
+  const key = (primaryKeyHint ?? '').toLowerCase();
+  const cacheKey = `${key}::${char}::${entryKind ?? ''}`;
+  if (seamlessRadicalCache.has(cacheKey)) {
+    return seamlessRadicalCache.get(cacheKey) ?? null;
+  }
+
+  let matchedKey = '';
+  let matchedNode: (typeof TWENTY_KEY_MORPHS)[number]['nodes'][number] | undefined;
+
+  const primarySpec = TWENTY_KEY_MORPH_BY_KEY.get(key);
+  if (primarySpec) {
+    matchedNode = primarySpec.nodes.find((n) => n.radical === char);
+    if (matchedNode) matchedKey = primarySpec.key;
+  }
+
+  if (!matchedNode && entryKind !== 'char') {
+    for (const spec of TWENTY_KEY_MORPHS) {
+      const hit = spec.nodes.find((n) => n.radical === char);
+      if (hit) {
+        matchedNode = hit;
+        matchedKey = spec.key;
+        break;
+      }
+    }
+  }
+
+  if (!matchedNode || !matchedKey) {
+    seamlessRadicalCache.set(cacheKey, null);
+    return null;
+  }
+
+  const conv = buildCornerConvergenceData(matchedKey, matchedNode);
+  const styledArms = buildStyledCoreArms(conv);
+  const refStrokeSampled = (conv.resistanceCue?.referenceStrokes ?? []).map((rs) => ({
+    pts: sampleCatmullRom(rs.points, 28),
+    dunbi: Boolean(rs.dunbiStart),
+    flick: Boolean(rs.flickEnd),
+  }));
+
+  const entry: CachedSeamlessRadical = {
+    key: matchedKey,
+    radical: char,
+    conv,
+    styledArms,
+    refStrokeSampled,
+  };
+  seamlessRadicalCache.set(cacheKey, entry);
+  return entry;
+}
+
+export interface SeamlessCoreSpreadOptions {
+  /** 0 = calm pure ink before first correct keystroke; 0..1 = core highlight opacity */
+  coreReveal: number;
+  /** 0 = core only; 0..1 = smooth geodesic spread radiating from core to 100% of full radical */
+  spreadProgress: number;
+  isWash: boolean;
+  /** Overall opacity multiplier (e.g. calm fade-out on completion) */
+  alpha?: number;
+}
+
+function smoothstep01(edge0: number, edge1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - edge0) / Math.max(1e-5, edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Renders a radical cleanly in-place with ZERO extra animations, boxes, rings, or halos:
+ * - At coreReveal = 0: pure calm ink strokes matching the serene sanctuary aesthetic.
+ * - On 1st correct key (coreReveal -> 1, spreadProgress = 0): seamlessly illuminates the exact
+ *   topological/muscle-memory core directly inside the radical's strokes.
+ * - On subsequent correct keys (spreadProgress -> 1): smoothly sweeps the highlight outward
+ *   along geodesic stroke distance (`distNorm`) until 100% of the radical is highlighted.
+ */
+export function drawSeamlessCoreSpreadGlyph(
+  ctx: CanvasRenderingContext2D,
+  cached: CachedSeamlessRadical,
+  centerX: number,
+  centerY: number,
+  targetSize: number,
+  opts: SeamlessCoreSpreadOptions
+) {
+  const coreReveal = Math.max(0, Math.min(1, opts.coreReveal));
+  const spreadProgress = Math.max(0, Math.min(1, opts.spreadProgress));
+  const alphaMul = opts.alpha ?? 1;
+  if (alphaMul <= 0.004) return;
+
+  const { conv, styledArms, refStrokeSampled } = cached;
+  const isWash = opts.isWash;
+  const logical = 410;
+  const scale = targetSize / logical;
+  const pad = logical * 0.09;
+  const inner = logical - pad * 2;
+  const baseRadius = logical * 0.031;
+
+  const inkR = isWash ? 20 : 246;
+  const inkG = isWash ? 20 : 241;
+  const inkB = isWash ? 19 : 232;
+
+  const coreR = isWash ? 182 : 238;
+  const coreG = isWash ? 42 : 98;
+  const coreB = isWash ? 34 : 74;
+  const coreRgbStr = `${coreR}, ${coreG}, ${coreB}`;
+
+  const amberRgbStr = isWash ? '194, 118, 24' : '244, 178, 72';
+  const fingerTealRgb = isWash ? '13, 148, 136' : '45, 212, 191';
+  const refBlueRgb = isWash ? '29, 118, 210' : '56, 189, 248';
+
+  ctx.save();
+  ctx.translate(centerX - targetSize * 0.5, centerY - targetSize * 0.5);
+  ctx.scale(scale, scale);
+
+  // Pass 1: Full radical strokes with constant geometry (zero swelling/flash),
+  // seamlessly blending ink -> vermilion outward from geodesic core distance `distNorm`.
+  const spreadFront = spreadProgress * 1.18;
+  for (let sIdx = 0; sIdx < conv.sampledStrokes.length; sIdx++) {
+    const pts = conv.sampledStrokes[sIdx].points;
+    for (let i = 0; i < pts.length; i++) {
+      const pt = pts[i];
+      const px = pad + pt.x * inner;
+      const py = pad + pt.y * inner;
+
+      let hiT = 0;
+      if (spreadProgress >= 0.998) {
+        hiT = 1;
+      } else if (coreReveal > 0.002) {
+        const coreEdgeT =
+          pt.distNorm < 0.055 ? coreReveal * (1 - pt.distNorm / 0.055) : 0;
+        const waveT =
+          spreadProgress > 0.002
+            ? smoothstep01(-0.02, 0.16, spreadFront - pt.distNorm)
+            : 0;
+        hiT = Math.max(coreEdgeT, waveT);
+      }
+
+      const r = Math.round(inkR + (coreR - inkR) * hiT);
+      const g = Math.round(inkG + (coreG - inkG) * hiT);
+      const b = Math.round(inkB + (coreB - inkB) * hiT);
+
+      // Gently relax outer ink contrast only while core is isolated, returning to full opacity as spread covers it
+      const baseAlpha =
+        coreReveal > 0.002
+          ? (isWash ? 0.62 : 0.56) + ((isWash ? 0.32 : 0.38) * (1 - coreReveal * (1 - hiT)))
+          : 0.94;
+      const ptAlpha = baseAlpha * alphaMul;
+      if (ptAlpha <= 0.004) continue;
+
+      const rx = Math.max(1.1, baseRadius * pt.p * 1.08);
+      const ry = Math.max(0.9, baseRadius * pt.p * 0.7);
+      const tilt = pt.angle * 0.34 - 0.66;
+
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(tilt);
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${ptAlpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // Pass 2: Seamless in-glyph core highlight overlay (exact core arms + restrained core cues),
+  // yielding cleanly into the base strokes as spreadProgress approaches 100%.
+  if (coreReveal > 0.01) {
+    const armOverlayAlpha = coreReveal * Math.max(0, 1 - smoothstep01(0.42, 0.96, spreadProgress)) * alphaMul;
+    const cueAlpha = coreReveal * (1 - smoothstep01(0.14, 0.72, spreadProgress)) * alphaMul;
+    const style = conv.brushStyle ?? 'default';
+
+    if (armOverlayAlpha > 0.01) {
+      for (let i = 0; i < styledArms.length; i++) {
+        const arm = styledArms[i];
+        drawBrushSampled(
+          ctx,
+          arm.pts,
+          1,
+          logical,
+          coreRgbStr,
+          0.98 * armOverlayAlpha,
+          arm.dunbi,
+          arm.flick
+        );
+      }
+
+      if (style === 'x_square_dun' && cueAlpha > 0.02) {
+        const vx = pad + conv.cornerVertex.x * inner;
+        const vy = pad + conv.cornerVertex.y * inner;
+        ctx.save();
+        ctx.translate(vx, vy);
+        ctx.rotate(-0.56);
+        ctx.fillStyle = `rgba(${coreRgbStr}, ${(0.92 * cueAlpha).toFixed(3)})`;
+        ctx.fillRect(-7.2, -5.0, 14.4, 10.0);
+        ctx.restore();
+      }
+    }
+
+    if (cueAlpha > 0.02) {
+      // T & Y keys: cobalt-blue starting edge + restrained cool-teal finger vector & shield arc
+      if (conv.resistanceCue) {
+        const rc = conv.resistanceCue;
+        for (let i = 0; i < refStrokeSampled.length; i++) {
+          const rs = refStrokeSampled[i];
+          drawBrushSampled(
+            ctx,
+            rs.pts,
+            1,
+            logical,
+            refBlueRgb,
+            0.94 * cueAlpha,
+            rs.dunbi,
+            rs.flick
+          );
+        }
+
+        const tx1 = pad + rc.thrustFrom.x * inner;
+        const ty1 = pad + rc.thrustFrom.y * inner;
+        const tx2 = pad + rc.thrustTo.x * inner;
+        const ty2 = pad + rc.thrustTo.y * inner;
+        const ang = Math.atan2(ty2 - ty1, tx2 - tx1);
+
+        ctx.save();
+        ctx.strokeStyle = `rgba(${fingerTealRgb}, ${(0.88 * cueAlpha).toFixed(3)})`;
+        ctx.lineWidth = rc.hasOwnStroke ? 3.2 : 2.8;
+        ctx.lineCap = 'round';
+        ctx.setLineDash(rc.hasOwnStroke ? [10, 4] : [6, 5]);
+        ctx.beginPath();
+        ctx.moveTo(tx1, ty1);
+        ctx.lineTo(tx2, ty2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const head = 10;
+        ctx.fillStyle = `rgba(${fingerTealRgb}, ${(0.92 * cueAlpha).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.moveTo(tx2, ty2);
+        ctx.lineTo(tx2 - head * Math.cos(ang - 0.4), ty2 - head * Math.sin(ang - 0.4));
+        ctx.lineTo(tx2 - head * 0.5 * Math.cos(ang), ty2 - head * 0.5 * Math.sin(ang));
+        ctx.lineTo(tx2 - head * Math.cos(ang + 0.4), ty2 - head * Math.sin(ang + 0.4));
+        ctx.closePath();
+        ctx.fill();
+
+        const nLen = Math.hypot(rc.shieldNormal.x, rc.shieldNormal.y) || 1;
+        const normAng = Math.atan2(rc.shieldNormal.y / nLen, rc.shieldNormal.x / nLen);
+        const arcR = 13 + rc.strength * 4.5;
+        ctx.strokeStyle = `rgba(${coreRgbStr}, ${(0.9 * cueAlpha).toFixed(3)})`;
+        ctx.lineWidth = 2.6 + rc.strength * 0.6;
+        ctx.beginPath();
+        ctx.arc(tx2, ty2, arcR, normAng - 0.9, normAng + 0.9);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // B key: restrained negative-space corner frame
+      if (conv.negativeBox) {
+        const { x, y, w, h } = conv.negativeBox;
+        const bx = pad + x * inner;
+        const by = pad + y * inner;
+        const bw = w * inner;
+        const bh = h * inner;
+        ctx.save();
+        ctx.fillStyle = `rgba(${coreRgbStr}, ${(0.12 * cueAlpha).toFixed(3)})`;
+        ctx.fillRect(bx, by, bw, bh);
+
+        ctx.strokeStyle = `rgba(${coreRgbStr}, ${(0.92 * cueAlpha).toFixed(3)})`;
+        ctx.lineWidth = 4.0;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(bx, by + bh * 0.82);
+        ctx.lineTo(bx, by);
+        ctx.lineTo(bx + bw * 0.82, by);
+        ctx.stroke();
+
+        const tick = Math.min(15, Math.min(bw, bh) * 0.34);
+        ctx.strokeStyle = `rgba(${amberRgbStr}, ${(0.88 * cueAlpha).toFixed(3)})`;
+        ctx.lineWidth = 3.0;
+        ctx.beginPath();
+        ctx.moveTo(bx + bw, by + bh - tick);
+        ctx.lineTo(bx + bw, by + bh);
+        ctx.lineTo(bx + bw - tick, by + bh);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // V key: crisp accent water-drop beads
+      if (conv.accentBeads && conv.accentBeads.length > 0) {
+        const axisX = pad + conv.cornerVertex.x * inner;
+        ctx.save();
+        for (const bead of conv.accentBeads) {
+          const bx = pad + bead.x * inner;
+          const by = pad + bead.y * inner;
+          const tilt = bx < axisX - 6 ? 0.58 : bx > axisX + 6 ? -0.58 : 0.42;
+          ctx.save();
+          ctx.translate(bx, by);
+          ctx.rotate(tilt);
+          ctx.fillStyle = `rgba(${coreRgbStr}, ${(0.94 * cueAlpha).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.moveTo(0, -10.2);
+          ctx.quadraticCurveTo(6.2, 0.5, 0, 8.0);
+          ctx.quadraticCurveTo(-6.2, 0.5, 0, -10.2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+
+      // P key: clean embrace arc (zero glint/halo animation)
+      if (conv.embraceArc) {
+        const { start, ctrl, end } = conv.embraceArc;
+        const sx = pad + start.x * inner;
+        const sy = pad + start.y * inner;
+        const cx = pad + ctrl.x * inner;
+        const cy = pad + ctrl.y * inner;
+        const ex = pad + end.x * inner;
+        const ey = pad + end.y * inner;
+        ctx.save();
+        const steps = 28;
+        for (let s = 0; s <= steps; s++) {
+          const t = s / steps;
+          const omt = 1 - t;
+          const px = omt * omt * sx + 2 * omt * t * cx + t * t * ex;
+          const py = omt * omt * sy + 2 * omt * t * cy + t * t * ey;
+          const r =
+            t < 0.35
+              ? 2.4 + (t / 0.35) * 2.2
+              : Math.max(1.1, 4.6 * (1 - ((t - 0.35) / 0.65) * 0.78));
+          ctx.fillStyle = `rgba(${coreRgbStr}, ${((0.68 + t * 0.28) * cueAlpha).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(px, py, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        const tipAng = Math.atan2(ey - cy, ex - cx);
+        const head = 9.5;
+        ctx.fillStyle = `rgba(${coreRgbStr}, ${(0.92 * cueAlpha).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(ex - head * Math.cos(tipAng - 0.4), ey - head * Math.sin(tipAng - 0.4));
+        ctx.lineTo(ex - head * 0.52 * Math.cos(tipAng), ey - head * 0.52 * Math.sin(tipAng));
+        ctx.lineTo(ex - head * Math.cos(tipAng + 0.4), ey - head * Math.sin(tipAng + 0.4));
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // W / C / V / M virtual structural links (clean static strokes, no blurry halos)
+      if (conv.virtualLinks && conv.virtualLinks.length > 0) {
+        ctx.save();
+        for (const link of conv.virtualLinks) {
+          const x1 = pad + link.from.x * inner;
+          const y1 = pad + link.from.y * inner;
+          const x2 = pad + link.to.x * inner;
+          const y2 = pad + link.to.y * inner;
+          const dx = x2 - x1;
+          const dy = y2 - y1;
+          const len = Math.hypot(dx, dy) || 1;
+          const nx = -dy / len;
+          const ny = dx / len;
+
+          if (style === 'w_silk_flick') {
+            const c1x = x1 + dx * 0.32 + nx * 13;
+            const c1y = y1 + dy * 0.32 + ny * 13;
+            const c2x = x1 + dx * 0.68 - nx * 11;
+            const c2y = y1 + dy * 0.68 - ny * 11;
+            ctx.strokeStyle = `rgba(${coreRgbStr}, ${(0.88 * cueAlpha).toFixed(3)})`;
+            ctx.lineWidth = 2.4;
+            ctx.setLineDash([5, 4]);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.bezierCurveTo(c1x, c1y, c2x, c2y, x2, y2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          } else if (style === 'c_round_cradle') {
+            const isBottomFloor = Math.abs(dx) >= Math.abs(dy);
+            const mx = (x1 + x2) * 0.5 + (isBottomFloor ? 0 : nx * 8);
+            const my = (y1 + y2) * 0.5 + (isBottomFloor ? 13 : ny * 8);
+            const steps = 22;
+            for (let s = 0; s <= steps; s++) {
+              const t = s / steps;
+              const omt = 1 - t;
+              const px = omt * omt * x1 + 2 * omt * t * mx + t * t * x2;
+              const py = omt * omt * y1 + 2 * omt * t * my + t * t * y2;
+              const bellyR = 2.4 + Math.sin(t * Math.PI) * 3.4;
+              ctx.fillStyle = `rgba(${coreRgbStr}, ${(0.86 * cueAlpha).toFixed(3)})`;
+              ctx.beginPath();
+              ctx.arc(px, py, bellyR, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          } else if (style === 'v_xuanzhen') {
+            const steps = 20;
+            for (let s = 0; s <= steps; s++) {
+              const t = s / steps;
+              const px = x1 + dx * t;
+              const py = y1 + dy * t;
+              const r = Math.max(1.1, (1 - t * 0.84) * 5.8);
+              ctx.fillStyle = `rgba(${coreRgbStr}, ${(0.9 * cueAlpha).toFixed(3)})`;
+              ctx.beginPath();
+              ctx.arc(px, py, r, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          } else if (style === 'm_heavy_na') {
+            const steps = 22;
+            const ang = Math.atan2(dy, dx);
+            for (let s = 0; s <= steps; s++) {
+              const t = s / steps;
+              const wave = Math.sin(t * Math.PI) * 6.5;
+              const px = x1 + dx * t + nx * wave * 0.45;
+              const py = y1 + dy * t + ny * wave * 0.45;
+              const rx =
+                t < 0.76
+                  ? 2.0 + Math.pow(t / 0.76, 1.35) * 7.2
+                  : Math.max(1.2, 9.2 * (1 - ((t - 0.76) / 0.24) * 0.88));
+              ctx.save();
+              ctx.translate(px, py);
+              ctx.rotate(ang - 0.45);
+              ctx.fillStyle = `rgba(${coreRgbStr}, ${(0.88 * cueAlpha).toFixed(3)})`;
+              ctx.beginPath();
+              ctx.ellipse(0, 0, rx, rx * 0.66, 0, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            }
+          } else {
+            ctx.strokeStyle = `rgba(${coreRgbStr}, ${(0.86 * cueAlpha).toFixed(3)})`;
+            ctx.lineWidth = 3.8;
+            ctx.lineCap = 'round';
+            ctx.setLineDash([7, 6]);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        }
+        ctx.restore();
+      }
+
+      // W key: crisp flick tip
+      if (style === 'w_silk_flick' && conv.flickTip) {
+        const fx1 = pad + conv.flickTip.from.x * inner;
+        const fy1 = pad + conv.flickTip.from.y * inner;
+        const fx2 = pad + conv.flickTip.to.x * inner;
+        const fy2 = pad + conv.flickTip.to.y * inner;
+        const ang = Math.atan2(fy2 - fy1, fx2 - fx1);
+        ctx.save();
+        ctx.strokeStyle = `rgba(${coreRgbStr}, ${(0.88 * cueAlpha).toFixed(3)})`;
+        ctx.lineWidth = 2.6;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(fx1, fy1);
+        ctx.lineTo(fx2, fy2);
+        ctx.stroke();
+
+        const head = 9;
+        ctx.fillStyle = `rgba(${coreRgbStr}, ${(0.92 * cueAlpha).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.moveTo(fx2, fy2);
+        ctx.lineTo(fx2 - head * Math.cos(ang - 0.38), fy2 - head * Math.sin(ang - 0.38));
+        ctx.lineTo(fx2 - head * 0.55 * Math.cos(ang), fy2 - head * 0.55 * Math.sin(ang));
+        ctx.lineTo(fx2 - head * Math.cos(ang + 0.38), fy2 - head * Math.sin(ang + 0.38));
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
 
   ctx.restore();
 }

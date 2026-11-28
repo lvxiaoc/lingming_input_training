@@ -13,6 +13,7 @@ import {
   Maximize2,
   Minimize2,
   PenLine,
+  Printer,
   RefreshCw,
   RotateCcw,
   ScanSearch,
@@ -23,6 +24,7 @@ import {
   VolumeX,
   X,
 } from 'lucide-react';
+import { TopologyCloudPdfModal } from './TopologyCloudPdfModal';
 import { TWENTY_KEY_MORPH_BY_KEY, TWENTY_KEY_MORPHS } from '../data/twentyKeysMorph';
 import {
   buildCustomTextTopologyDeck,
@@ -205,6 +207,7 @@ export const TopologyMuscleTrainer: React.FC<TopologyMuscleTrainerProps> = ({
   const [showTactileDeck, setShowTactileDeck] = useState<boolean>(true);
   const [pickerOpen, setPickerOpen] = useState<boolean>(false);
   const [customModalOpen, setCustomModalOpen] = useState<boolean>(false);
+  const [printModalOpen, setPrintModalOpen] = useState<boolean>(false);
   const [customDraft, setCustomDraft] = useState<string>(WRITING_STREAM_PRESETS[0].text);
   const [customNotice, setCustomNotice] = useState<string | null>(null);
   const [customStreamLabel, setCustomStreamLabel] = useState<string | null>(null);
@@ -1124,6 +1127,8 @@ export const TopologyMuscleTrainer: React.FC<TopologyMuscleTrainerProps> = ({
         return;
       }
 
+      if (printModalOpen) return;
+
       if (e.key === 'Escape') {
         e.preventDefault();
         if (customModalOpen) {
@@ -1515,6 +1520,7 @@ export const TopologyMuscleTrainer: React.FC<TopologyMuscleTrainerProps> = ({
     onBackToTheater,
     paceLockedSlow,
     pickerOpen,
+    printModalOpen,
     roundDone,
     selectOrderMode,
     stageAnim,
@@ -1575,25 +1581,26 @@ export const TopologyMuscleTrainer: React.FC<TopologyMuscleTrainerProps> = ({
   }, [activeIdx, deck]);
 
   return (
-    <div
-      onMouseMove={() => {
-        if (chromeCalm) setChromeCalm(false);
-      }}
-      className="relative z-10 w-full h-full flex flex-col overflow-hidden select-none wash-enter"
-      style={{
-        background: isWash
-          ? 'radial-gradient(circle at 50% 46%, #F7F5EE 0%, #F1EFE7 58%, #EBE8DF 100%)'
-          : 'radial-gradient(circle at 50% 46%, #111622 0%, #0A0E16 62%, #070A10 100%)',
-      }}
-    >
-      {/* Auto-Hiding Distraction-Free Header */}
-      <header
-        className={`relative z-30 shrink-0 h-14 px-3 sm:px-5 flex items-center justify-between gap-2 transition-opacity duration-500 ${
-          chromeCalm && !pickerOpen && !customModalOpen
-            ? 'opacity-0 hover:opacity-95 focus-within:opacity-95'
-            : 'opacity-95'
-        }`}
+    <>
+      <div
+        onMouseMove={() => {
+          if (chromeCalm) setChromeCalm(false);
+        }}
+        className="no-print relative z-10 w-full h-full flex flex-col overflow-hidden select-none wash-enter"
+        style={{
+          background: isWash
+            ? 'radial-gradient(circle at 50% 46%, #F7F5EE 0%, #F1EFE7 58%, #EBE8DF 100%)'
+            : 'radial-gradient(circle at 50% 46%, #111622 0%, #0A0E16 62%, #070A10 100%)',
+        }}
       >
+        {/* Auto-Hiding Distraction-Free Header */}
+        <header
+          className={`relative z-30 shrink-0 h-14 px-3 sm:px-5 flex items-center justify-between gap-2 transition-opacity duration-500 ${
+            chromeCalm && !pickerOpen && !customModalOpen && !printModalOpen
+              ? 'opacity-0 hover:opacity-95 focus-within:opacity-95'
+              : 'opacity-95'
+          }`}
+        >
         {/* Left: Back to Theater & Scope Picker + Custom Radical Input */}
         <div className="flex items-center gap-1.5 min-w-0">
           <button
@@ -1637,6 +1644,19 @@ export const TopologyMuscleTrainer: React.FC<TopologyMuscleTrainerProps> = ({
           >
             <PenLine className="w-3.5 h-3.5 text-[var(--dojo-crimson)] shrink-0" />
             <span>自输字根</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              synth.playClick();
+              setPrintModalOpen(true);
+            }}
+            title="按 A–Z 字母序预览与打印全部 249 字根核心大字谱（灰度突出核心，适合纸上细看）"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[var(--dojo-border)] bg-[var(--dojo-surface)]/85 hover:bg-[var(--dojo-surface-2)] text-[var(--dojo-text)] transition-colors whitespace-nowrap shrink-0 cursor-pointer backdrop-blur-xs"
+          >
+            <Printer className="w-3.5 h-3.5 text-[var(--dojo-crimson)] shrink-0" />
+            <span>大字打印谱</span>
           </button>
         </div>
 
@@ -2751,5 +2771,18 @@ export const TopologyMuscleTrainer: React.FC<TopologyMuscleTrainerProps> = ({
         </div>
       </footer>
     </div>
+
+      <TopologyCloudPdfModal
+        open={printModalOpen}
+        activeKey={activeKey}
+        initialTab="alpha_all"
+        initialGrayscale={true}
+        onClose={() => setPrintModalOpen(false)}
+        onSelectKeyAndClose={(k) => {
+          setPrintModalOpen(false);
+          launchSingleKey(k, 'sequential');
+        }}
+      />
+    </>
   );
 };
